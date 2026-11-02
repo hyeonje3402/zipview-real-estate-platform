@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer-when-downgrade" />
+  <title>집뷰(ZipView) - 프리미엄 네이비 부동산 플랫폼 (실거래·3D룸·평면도)</title>
+  <!-- Pretendard Font -->
+  <link rel="stylesheet" as="style" crossorigin
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  <!-- Leaflet CSS for Interactive Map (Multi-CDN) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+  <!-- Remix Icon -->
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@4.2.0/fonts/remixicon.css" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <!-- 상단 네비게이션 헤더 -->
+  <header class="navbar">
+    <div class="nav-left">
+      <a href="#" class="logo" id="logoBtn">
+        <span class="logo-icon"><i class="ri-building-2-fill"></i></span>
+        <span class="logo-text">집뷰 <small>ZipView</small></span>
+      </a>
+      <span class="api-status-badge" id="apiStatusBadge" title="백엔드 REST API 서버 연동 상태">
+        <span class="status-dot"></span> <span id="apiStatusText">API 연결중...</span>
+      </span>
+      <nav class="main-nav">
+        <button class="nav-item" id="backToHomeNavBtn"><i class="ri-grid-fill"></i> 유형 선택 홈</button>
+        <button class="nav-item" data-category="아파트">아파트 <span class="badge-hot">실거래 그래프</span></button>
+        <button class="nav-item" data-category="오피스텔">오피스텔 <span class="badge-3d">3D·평면도</span></button>
+        <button class="nav-item" data-category="원룸/투룸">원룸·투룸</button>
+        <button class="nav-item" data-category="빌라/주택">빌라·주택</button>
+        <button class="nav-item" data-category="all">전체 보기</button>
+      </nav>
+    </div>
+
+    <div class="nav-right">
+      <button class="btn-inquiries" id="openMolitModalBtn" title="공공데이터포털 국토교통부 아파트 매매 실거래가 Open API 조회">
+        <i class="ri-government-line"></i>
+        <span>국토부 실거래 API</span>
+      </button>
+      <button class="btn-ai-nav" id="openAiModalBtn" title="Gemini AI 맞춤 매물 추천 및 부동산 상담">
+        <i class="ri-sparkling-2-fill"></i>
+        <span>Gemini AI 상담</span>
+      </button>
+      <button class="btn-favorites" id="favFilterBtn" title="찜한 매물 모아보기">
+        <i class="ri-heart-3-line"></i>
+        <span>관심매물</span>
+        <span class="fav-count" id="favCount">0</span>
+      </button>
+      <button class="btn-inquiries" id="openInquiriesBtn" title="중개사 방문 및 상담 예약 내역">
+        <i class="ri-calendar-check-line"></i>
+        <span>상담내역</span>
+        <span class="inq-count" id="inquiryCount">0</span>
+      </button>
+      <button class="btn-register" id="openRegisterBtn">
+        <i class="ri-add-line"></i> 방 내놓기
+      </button>
+      <!-- 로그인 / 사용자 프로필 영역 -->
+      <div id="authArea" class="auth-area">
+        <button class="btn-login" id="openLoginBtn">
+          <i class="ri-user-line"></i> 로그인 · 회원가입
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==================== 첫 화면: 매물 종류 선택 홈 랜딩 화면 ==================== -->
+  <section class="home-landing" id="homeLandingView">
+    <div class="landing-inner">
+      <div class="landing-hero">
+        <span class="landing-eyebrow"><i class="ri-shield-check-fill"></i> 국토부 실거래가 · 2D 평면도 · 3D 방구조 입체뷰</span>
+        <h1>어떤 집을 찾고 계신가요?</h1>
+        <p>원하시는 매물 종류를 선택하면 해당 매물만 모아 지도와 함께 깔끔하게 보여드립니다.</p>
+      </div>
+
+      <!-- 4대 주거 유형 선택 카드 그리드 -->
+      <div class="category-cards-grid">
+        <!-- 1. 아파트 -->
+        <div class="cat-select-card" data-select-category="아파트">
+          <div class="cat-card-top">
+            <div class="cat-icon-box apt"><i class="ri-building-4-fill"></i></div>
+            <span class="cat-badge hot">실거래 그래프</span>
+          </div>
+          <h3>아파트</h3>
+          <p>서울 주요 대단지 매매·전세·월세 및 최근 6개월 국토부 실거래가 시세 추이</p>
+          <div class="cat-tags-row">
+            <span>#서울숲·성수</span>
+            <span>#잠실·송파</span>
+            <span>#반포·서초</span>
+          </div>
+          <div class="cat-card-footer">
+            <span class="cat-count-label">등록 매물 <strong id="count-apt">0</strong>건</span>
+            <span class="cat-go-btn">지도에서 보기 <i class="ri-arrow-right-line"></i></span>
+          </div>
+        </div>
+
+        <!-- 2. 오피스텔 -->
+        <div class="cat-select-card" data-select-category="오피스텔">
+          <div class="cat-card-top">
+            <div class="cat-icon-box officetel"><i class="ri-community-fill"></i></div>
+            <span class="cat-badge vr">3D·평면도</span>
+          </div>
+          <h3>오피스텔</h3>
+          <p>역세권 직장인 맞춤 하이엔드 복층 · 슬라이딩 분리형 풀옵션 오피스텔</p>
+          <div class="cat-tags-row">
+            <span>#강남역복층</span>
+            <span>#여의도신축</span>
+            <span>#합정역한강뷰</span>
+          </div>
+          <div class="cat-card-footer">
+            <span class="cat-count-label">등록 매물 <strong id="count-officetel">0</strong>건</span>
+            <span class="cat-go-btn">지도에서 보기 <i class="ri-arrow-right-line"></i></span>
+          </div>
+        </div>
+
+        <!-- 3. 원룸 / 투룸 -->
+        <div class="cat-select-card" data-select-category="원룸/투룸">
+          <div class="cat-card-top">
+            <div class="cat-icon-box oneroom"><i class="ri-home-heart-fill"></i></div>
+            <span class="cat-badge safe">안심확인</span>
+          </div>
+          <h3>원룸 · 투룸</h3>
+          <p>대학가·역세권 가성비 풀옵션 원룸부터 전세대출 가능한 감성 투룸까지</p>
+          <div class="cat-tags-row">
+            <span>#홍대·연남동</span>
+            <span>#건대입구역</span>
+            <span>#신림·샤로수길</span>
+          </div>
+          <div class="cat-card-footer">
+            <span class="cat-count-label">등록 매물 <strong id="count-oneroom">0</strong>건</span>
+            <span class="cat-go-btn">지도에서 보기 <i class="ri-arrow-right-line"></i></span>
+          </div>
+        </div>
+
+        <!-- 4. 빌라 / 주택 -->
+        <div class="cat-select-card" data-select-category="빌라/주택">
+          <div class="cat-card-top">
+            <div class="cat-icon-box villa"><i class="ri-home-smile-2-fill"></i></div>
+            <span class="cat-badge terrace">신축·테라스</span>
+          </div>
+          <h3>빌라 · 주택</h3>
+          <p>조용하고 쾌적한 주택가 광폭 테라스 신축 빌라 및 반려동물 친화 주택</p>
+          <div class="cat-tags-row">
+            <span>#서초·교대역</span>
+            <span>#한남·이태원</span>
+            <span>#단독테라스</span>
+          </div>
+          <div class="cat-card-footer">
+            <span class="cat-count-label">등록 매물 <strong id="count-villa">0</strong>건</span>
+            <span class="cat-go-btn">지도에서 보기 <i class="ri-arrow-right-line"></i></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 하단 보조 액션 바 -->
+      <div class="landing-bottom-bar">
+        <button type="button" class="btn-landing-ai" id="landingAiBtn">
+          <i class="ri-sparkling-2-fill"></i> Gemini AI에게 조건 말하고 추천받기
+        </button>
+        <button type="button" class="btn-landing-all" data-select-category="all">
+          <i class="ri-map-2-line"></i> 전체 매물 한꺼번에 지도에서 보기
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 검색 & 필터 바 (매물 종류 선택 후 표시) -->
+  <section class="filter-bar hidden" id="filterBar">
+    <button type="button" class="btn-back-category" id="backToHomeBtn" title="매물 종류 다시 선택하기">
+      <i class="ri-arrow-left-line"></i> 유형 다시 선택
+    </button>
+    <div class="search-box">
+      <i class="ri-search-2-line search-icon"></i>
+      <input type="text" id="searchInput" placeholder="지역, 지하철역, 단지명, 특징(예: 강남역, 풀옵션, 복층) 검색" />
+      <button id="clearSearchBtn" class="clear-btn hidden"><i class="ri-close-circle-fill"></i></button>
+    </div>
+
+    <div class="filter-controls">
+      <!-- 거래 유형 -->
+      <div class="chip-group" id="dealTypeGroup">
+        <button class="filter-chip active" data-deal="all">전체 거래</button>
+        <button class="filter-chip" data-deal="월세">월세</button>
+        <button class="filter-chip" data-deal="전세">전세</button>
+        <button class="filter-chip" data-deal="매매">매매</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- 빠른 특징 태그 필터 -->
+      <div class="chip-group" id="tagFilterGroup">
+        <button class="tag-chip" data-tag="역세권"><i class="ri-train-line"></i> 역세권</button>
+        <button class="tag-chip" data-tag="풀옵션"><i class="ri-fridge-line"></i> 풀옵션</button>
+        <button class="tag-chip" data-tag="주차가능"><i class="ri-parking-box-line"></i> 주차가능</button>
+        <button class="tag-chip" data-tag="반려동물"><i class="ri-bear-smile-line"></i> 반려동물</button>
+        <button class="tag-chip" data-tag="신축"><i class="ri-sparkling-line"></i> 신축급</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- 정렬 -->
+      <select id="sortSelect" class="sort-select">
+        <option value="recommend">추천순</option>
+        <option value="priceAsc">가격 낮은순</option>
+        <option value="priceDesc">가격 높은순</option>
+        <option value="areaDesc">넓은 면적순</option>
+      </select>
+    </div>
+  </section>
+
+  <!-- 메인 스플릿 레이아웃 (아실 스타일: 좌1 집값변동 그래프·실거래 | 좌2 실시간 인기도 순위·매물목록 | 우측 전국 전체 단지 지도) -->
+  <main class="split-workspace hidden" id="splitWorkspace">
+    <!-- [좌측 1] 아실(ASIL) 스타일 아파트·단지 집값 변경 그래프 & 실거래 계약내역 패널 -->
+    <aside class="asil-price-panel" id="asilPricePanel">
+      <!-- 상단 단지 타이틀 & 요약 헤더 -->
+      <div class="asil-panel-header">
+        <div class="asil-title-row">
+          <div class="asil-apt-name-wrap">
+            <span class="asil-cat-pill" id="asilSelectedCat">아파트</span>
+            <h2 id="asilAptName">은마</h2>
+            <button type="button" class="asil-3d-btn" id="asilOpen3dDetailBtn" title="3D 방구조 · 2D 평면도 · 사진 상세 보기">
+              <i class="ri-cube-line"></i> 3D·상세보기
+            </button>
+          </div>
+          <button type="button" class="asil-compare-btn" id="asilCompareBtn" title="주변 단지 대비 시세 비교">
+            VS 가격비교
+          </button>
+        </div>
+
+        <div class="asil-summary-row">
+          <div class="asil-month-Prices">
+            <div class="asil-summary-month" id="asilSummaryMonth">26년 10월 기준 실거래</div>
+            <div class="asil-sale-line" id="asilSummarySale">매매 315,125 / 4건</div>
+            <div class="asil-jeonse-line" id="asilSummaryJeonse">전세 60,000 / 1건</div>
+          </div>
+          <div class="asil-pyeong-selector-box">
+            <div class="asil-deal-label">매매 · 전세 · 월세 <i class="ri-arrow-down-s-line"></i></div>
+            <select id="asilAreaSelect" class="asil-area-select">
+              <option value="0.9">24평 · 전용 59㎡</option>
+              <option value="1.0" selected>30평 · 전용 76㎡</option>
+              <option value="1.12">34평 · 전용 84㎡</option>
+              <option value="1.45">45평 · 전용 114㎡</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- 국토교통부 건축HUB 건축물대장 및 K-apt 공동주택 기본정보 스펙 카드 -->
+      <div class="asil-bld-hub-card" id="asilBldHubCard" style="background:#f0f7ff; border:1px solid #bfdbfe; border-radius:10px; padding:10px 14px; margin: 10px 14px 4px 14px; font-size:12px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+          <span style="font-weight:800; color:#1e40af; display:inline-flex; align-items:center; gap:4px; font-size:11.5px;">
+            <i class="ri-government-line"></i> 건축HUB 대장 & K-apt 공동주택
+          </span>
+          <span id="asilBldViolationTag" style="background:#dcfce7; color:#15803d; font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px;">정상 (위반없음)</span>
+        </div>
+        <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px; text-align:center;">
+          <div style="background:#fff; border-radius:6px; padding:4px 2px; border:1px solid #e2e8f0;">
+            <div style="color:#64748b; font-size:10px;">용적률</div>
+            <div id="asilBldVlRat" style="font-weight:800; color:#0f172a; font-size:11.5px;">204.0%</div>
+          </div>
+          <div style="background:#fff; border-radius:6px; padding:4px 2px; border:1px solid #e2e8f0;">
+            <div style="color:#64748b; font-size:10px;">건폐율</div>
+            <div id="asilBldBcRat" style="font-weight:800; color:#0f172a; font-size:11.5px;">18.2%</div>
+          </div>
+          <div style="background:#fff; border-radius:6px; padding:4px 2px; border:1px solid #e2e8f0;">
+            <div style="color:#64748b; font-size:10px;">총 세대수</div>
+            <div id="asilBldHhld" style="font-weight:800; color:#0f172a; font-size:11.5px;">4,424세대</div>
+          </div>
+          <div style="background:#fff; border-radius:6px; padding:4px 2px; border:1px solid #e2e8f0;">
+            <div style="color:#64748b; font-size:10px;">주차대수</div>
+            <div id="asilBldPkng" style="font-weight:800; color:#0f172a; font-size:11.5px;">4,450대</div>
+          </div>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-top:6px; font-size:10.5px; color:#475569;">
+          <span id="asilBldDongFlr"><i class="ri-building-2-line"></i> 28개동 · 지상 14층/지하 1층</span>
+          <span id="asilBldUseApr"><i class="ri-calendar-check-line"></i> 사용승인 1979-08-30</span>
+        </div>
+        <div style="margin-top:6px; padding-top:6px; border-top:1px dashed #cbd5e1; display:flex; justify-content:space-between; font-size:10.5px; color:#1e293b;">
+          <span><i class="ri-tools-line" style="color:#0284c7;"></i> <strong id="asilKaptBuilder">시공사: 한보건설</strong></span>
+          <span><i class="ri-fire-line" style="color:#ea580c;"></i> <span id="asilKaptHeat">난방: 중앙난방</span></span>
+        </div>
+        <div id="asilKaptFacilities" style="margin-top:3px; font-size:10px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+          <i class="ri-community-line"></i> 부대시설: 어린이놀이터 4개소, 경로당 2개소, 상가 아케이드
+        </div>
+      </div>
+
+      <!-- 아실 스타일 장기 집값 변경 복합 그래프 (매매가 꺾은선 + 전세가 영역 + 거래량 막대) -->
+      <div class="asil-chart-container">
+        <div class="asil-chart-legend">
+          <span><i class="legend-line sale"></i> 매매 실거래가</span>
+          <span><i class="legend-line jeonse"></i> 전세 실거래가</span>
+          <span><i class="legend-bar vol"></i> 월별 거래량</span>
+        </div>
+        <div id="asilMainChartWrap" class="asil-svg-chart-wrap">
+          <!-- JS에서 06년~26년 집값 변경 복합 SVG 그래프 렌더링 -->
+        </div>
+
+        <!-- 기간 선택 바 & 최근 3년 보기 토글 -->
+        <div class="asil-period-bar">
+          <span class="asil-period-text" id="asilPeriodText">06년 1월 ~ 26년 11월</span>
+          <div class="asil-period-btns">
+            <button type="button" class="asil-period-btn active" data-period="all">전체(20년)</button>
+            <button type="button" class="asil-period-btn" data-period="3y">최근 3년 보기</button>
+            <button type="button" class="asil-period-btn" data-period="1y">최근 1년</button>
+          </div>
+        </div>
+        <div class="asil-range-track">
+          <div class="asil-range-fill" id="asilRangeFill"></div>
+          <span class="asil-range-thumb left" id="asilThumbLeft"></span>
+          <span class="asil-range-thumb right"></span>
+        </div>
+      </div>
+
+      <!-- 동 선택 / 층 선택 필터 & 집 내놓기 버튼 -->
+      <div class="asil-tx-filter-row">
+        <select id="asilDongFilter" class="asil-mini-select">
+          <option value="all">동 전체</option>
+          <option value="1동">1동</option>
+          <option value="2동">2동</option>
+          <option value="10동">10동</option>
+          <option value="18동">18동</option>
+          <option value="20동">20동</option>
+          <option value="31동">31동</option>
+        </select>
+        <select id="asilFloorFilter" class="asil-mini-select">
+          <option value="all">층 전체</option>
+          <option value="low">저층 (1~5층)</option>
+          <option value="mid">중층 (6~14층)</option>
+          <option value="high">고층 (15층 이상)</option>
+        </select>
+        <button type="button" class="asil-put-house-btn" id="asilPutHouseBtn">
+          집 내놓기
+        </button>
+      </div>
+
+      <!-- 하단 일자별 실거래 계약 내역 테이블 -->
+      <div class="asil-tx-table-wrap">
+        <table class="asil-tx-table">
+          <thead>
+            <tr>
+              <th>계약</th>
+              <th>일</th>
+              <th>정보</th>
+              <th>가격 ↓</th>
+              <th>타입</th>
+              <th>거래동</th>
+              <th>층</th>
+            </tr>
+          </thead>
+          <tbody id="asilTxTableBody">
+            <!-- JS에서 선택 단지의 실거래 계약 리스트 렌더링 -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 우측 하단 매물 수 원형 플로팅 버튼 -->
+      <button type="button" class="asil-floating-listing-badge" id="asilFloatingBadge" title="클릭하여 3D 방구조 및 평면도 상세 보기">
+        <small>매물</small>
+        <strong id="asilListingCountBadge">215</strong>
+      </button>
+    </aside>
+
+    <!-- [좌측 2] 아실 스타일 실시간 인기도 순위 & 매물 카드 목록 패널 -->
+    <aside class="list-pane" id="middleListPane">
+      <!-- 상단 모드 전환 탭 (인기도 순위 vs 매물 카드 목록) -->
+      <div class="middle-pane-tabs">
+        <button type="button" class="mid-tab-btn active" data-mid-tab="ranking">
+          <i class="ri-bar-chart-grouped-line"></i> 실시간 인기도 순위
+        </button>
+        <button type="button" class="mid-tab-btn" data-mid-tab="cards">
+          <i class="ri-layout-grid-line"></i> 매물 카드 (<span id="totalCount">0</span>)
+        </button>
+      </div>
+
+      <!-- 탭 1: 아실 스타일 지역별 단지 인기도 순위 뷰 -->
+      <div class="asil-ranking-view" id="asilRankingView">
+        <div class="asil-region-selectors">
+          <select id="asilSidoSelect" class="asil-region-select">
+            <option value="all">전국 전체</option>
+            <option value="서울" selected>서울특별시</option>
+            <option value="경기">경기도</option>
+            <option value="인천">인천광역시</option>
+            <option value="부산">부산광역시</option>
+            <option value="경남">경상남도</option>
+            <option value="대구">대구광역시</option>
+            <option value="대전">대전광역시</option>
+            <option value="광주">광주광역시</option>
+            <option value="울산">울산광역시</option>
+            <option value="세종">세종특별자치시</option>
+            <option value="강원">강원특별자치도</option>
+            <option value="충청">충북·충남</option>
+            <option value="전라">전북·전남</option>
+            <option value="제주">제주특별자치도</option>
+          </select>
+          <select id="asilSigunguSelect" class="asil-region-select">
+            <option value="all">시·군·구 전체</option>
+          </select>
+        </div>
+        <p class="asil-ranking-desc" id="asilRankingDesc">
+          최근 두달간 사용자가 가장 많이 조회한 인기 단지 순위입니다. 단지를 클릭하면 좌측 집값 그래프와 지도가 연동됩니다.
+        </p>
+        <div class="asil-ranking-table-wrap">
+          <table class="asil-rank-table">
+            <thead>
+              <tr>
+                <th>순위</th>
+                <th>아파트 · 단지명</th>
+                <th>읍면동</th>
+                <th>조회인원</th>
+                <th>보기</th>
+              </tr>
+            </thead>
+            <tbody id="asilRankTableBody">
+              <!-- JS에서 동적 렌더링 -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 탭 2: 기존 매물 사진·3D 카드 목록 뷰 -->
+      <div class="cards-view-container hidden" id="cardsViewContainer">
+        <div class="list-header">
+          <div>
+            <h2 id="listTitle">조건에 맞는 프리미엄 안심매물</h2>
+            <p class="list-subtitle">카드를 클릭하면 좌측 시세 그래프 및 3D·평면도 확인 가능</p>
+          </div>
+        </div>
+        <div class="property-list" id="propertyList">
+          <!-- JS에서 동적으로 렌더링 -->
+        </div>
+      </div>
+    </aside>
+
+    <!-- [우측 메인] 전국 모든 아파트·단지가 표시되는 인터랙티브 지도 영역 -->
+    <div class="map-pane">
+      <!-- 아실(ASIL) 좌측 상단 [명칭/매물가격] 토글 버튼 -->
+      <div class="asil-name-price-toggle">
+        <button type="button" class="asil-np-btn" id="btnToggleName">명칭</button>
+        <button type="button" class="asil-np-btn active" id="btnTogglePrice">매물가격</button>
+      </div>
+
+      <!-- 아실(ASIL) 상단 중앙 지역 선택기: [ 시/도 ] [ 시/군/구 ] [ 읍/면/동 ] -->
+      <div class="asil-map-nav-address" id="asilMapNavAddress">
+        <i class="ri-focus-3-line" style="color:#0038ff;"></i>
+        <select id="mapSidoSelect" class="asil-addr-select">
+          <option value="서울" selected>서울</option>
+          <option value="경기">경기</option>
+          <option value="인천">인천</option>
+          <option value="부산">부산</option>
+          <option value="경남">경남</option>
+          <option value="대구">대구</option>
+          <option value="대전">대전</option>
+          <option value="세종">세종</option>
+          <option value="광주">광주</option>
+          <option value="울산">울산</option>
+          <option value="제주">제주</option>
+        </select>
+        <select id="mapSigunguSelect" class="asil-addr-select">
+          <option value="서초구" selected>서초구</option>
+          <option value="강남구">강남구</option>
+          <option value="송파구">송파구</option>
+          <option value="용산구">용산구</option>
+          <option value="성동구">성동구</option>
+          <option value="마포구">마포구</option>
+          <option value="영등포구">영등포구</option>
+          <option value="양천구">양천구</option>
+          <option value="노원구">노원구</option>
+        </select>
+        <select id="mapDongSelect" class="asil-addr-select">
+          <option value="잠원동" selected>잠원동</option>
+          <option value="반포동">반포동</option>
+          <option value="서초동">서초동</option>
+          <option value="대치동">대치동</option>
+          <option value="도곡동">도곡동</option>
+          <option value="개포동">개포동</option>
+          <option value="압구정동">압구정동</option>
+          <option value="잠실동">잠실동</option>
+          <option value="여의도동">여의도동</option>
+          <option value="목동">목동</option>
+          <option value="성수동">성수동</option>
+          <option value="전체">동 전체</option>
+        </select>
+        <span class="addr-badge" id="mapVisibleCountBadge">잠원·반포 38개 단지 밀집 표시중</span>
+      </div>
+
+      <!-- 지도 좌측 세로 분석 툴바 (아실 실제 앱 9개 메뉴 완벽 구현) -->
+      <div class="asil-map-left-toolbar">
+        <button type="button" class="asil-side-tool" data-tool="supply">공급</button>
+        <button type="button" class="asil-side-tool" data-tool="population">인구</button>
+        <button type="button" class="asil-side-tool active" data-tool="price">가격</button>
+        <button type="button" class="asil-side-tool" data-tool="sentiment">심리</button>
+        <button type="button" class="asil-side-tool" data-tool="deal">거래</button>
+        <button type="button" class="asil-side-tool" data-tool="compare">비교</button>
+        <button type="button" class="asil-side-tool" data-tool="policy">정책</button>
+        <button type="button" class="asil-side-tool" data-tool="school">학군</button>
+        <button type="button" class="asil-side-tool" data-tool="ranking">랭킹</button>
+      </div>
+
+      <!-- 지도 우측 상단 아실 레이어 메뉴 바 -->
+      <div class="asil-map-right-menu">
+        <button type="button" class="asil-rm-item" id="rmRoadview"><i
+            class="ri-camera-lens-line"></i><span>거리뷰</span></button>
+        <button type="button" class="asil-rm-item" id="rmAuction"><i
+            class="ri-hammer-line"></i><span>경매·공매</span></button>
+        <button type="button" class="asil-rm-item highlight" id="rmTransit"><i class="ri-subway-line"></i><span>교통망
+            NEW</span></button>
+        <button type="button" class="asil-rm-item active" id="rmComplex"><i
+            class="ri-building-line"></i><span>단지</span></button>
+        <button type="button" class="asil-rm-item" id="rmLeader"><i
+            class="ri-vip-crown-line"></i><span>대장</span></button>
+        <button type="button" class="asil-rm-item" id="rmListing"><i class="ri-home-4-line"></i><span>매물</span></button>
+        <button type="button" class="asil-rm-item" id="rmAgent"><i
+            class="ri-user-star-line"></i><span>중개</span></button>
+        <button type="button" class="asil-rm-item alert" id="rmRebuild"><i
+            class="ri-refresh-line"></i><span>재재</span></button>
+      </div>
+
+      <!-- 지도 상단 아실 스타일 지표 선택 필터 바 -->
+      <div class="asil-map-top-chips" id="asilMapMetricBar">
+        <button type="button" class="asil-metric-chip active" data-metric="price">매매실거래가</button>
+        <button type="button" class="asil-metric-chip" data-metric="pyeongPrice">평당가격</button>
+        <button type="button" class="asil-metric-chip" data-metric="households">세대수 표시</button>
+        <button type="button" class="asil-metric-chip" data-metric="jeonsePrice">전세가(매물)</button>
+        <button type="button" class="asil-metric-chip" data-metric="gapPrice">매매전세갭</button>
+        <button type="button" class="asil-metric-chip" data-metric="rebuild">재건축·정비구역</button>
+        <button type="button" class="asil-metric-chip" data-metric="buildYear">입주년차</button>
+      </div>
+
+      <div id="map"></div>
+
+      <!-- 지도 위 플로팅 지역 퀵 이동 버튼 -->
+      <div class="map-quick-regions">
+        <span class="quick-label"><i class="ri-compass-3-line"></i> 빠른 단지 탐색:</span>
+        <button class="region-btn active" data-lat="37.5105" data-lng="127.0125" data-zoom="15" data-sido="서울"
+          data-sigungu="서초구" data-dong="잠원동">★ 서초구 잠원·반포동 (아실 화면)</button>
+        <button class="region-btn" data-lat="37.4935" data-lng="127.0585" data-zoom="14" data-sido="서울"
+          data-sigungu="강남구" data-dong="대치동">강남 대치·도곡·개포동</button>
+        <button class="region-btn" data-lat="37.5255" data-lng="127.0325" data-zoom="14" data-sido="서울"
+          data-sigungu="강남구" data-dong="압구정동">압구정·청담동</button>
+        <button class="region-btn" data-lat="37.5145" data-lng="127.0985" data-zoom="14" data-sido="서울"
+          data-sigungu="송파구" data-dong="잠실동">송파 잠실·가락동</button>
+        <button class="region-btn" data-lat="37.3855" data-lng="127.1185" data-zoom="14" data-sido="경기"
+          data-sigungu="성남분당구" data-dong="백현동">분당 판교·서현</button>
+        <button class="region-btn" data-lat="35.1585" data-lng="129.1465" data-zoom="14" data-sido="부산"
+          data-sigungu="해운대구" data-dong="우동">부산 해운대 마린시티</button>
+        <button class="region-btn" data-lat="35.8595" data-lng="128.6285" data-zoom="14" data-sido="대구"
+          data-sigungu="수성구" data-dong="범어동">대구 수성구 범어동</button>
+        <button class="region-btn" id="viewAllMapBtn">전국 모든 아파트 한눈에</button>
+      </div>
+
+      <!-- 지도 하단 범례 안내 -->
+      <div class="map-legend">
+        <span class="legend-item"><span class="dot dot-circle-badge"></span> 파란원: 매물건수</span>
+        <span class="legend-item"><span class="dot dot-monthly"></span> 파란바: 평형·가격</span>
+        <span class="legend-item"><span class="dot dot-rebuild-badge"></span> 빨간뱃지: 재건축단계</span>
+        <span class="legend-item"><span class="dot dot-agent-badge"></span> 사진: 전문공인중개사</span>
+      </div>
+
+      <!-- 지도 우측 상단 타일 스타일 전환 컨트롤 -->
+      <div class="map-style-switcher">
+        <button type="button" class="map-style-btn active" data-map-style="koreanStreet">한글 도로지도</button>
+        <button type="button" class="map-style-btn" data-map-style="esriStreet">상세 지형도</button>
+        <button type="button" class="map-style-btn" data-map-style="satellite">위성 항공뷰</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- 매물 상세 모달 (사진 / 평면도 / 3D 방구조 뷰어 + 국토부 실거래가 그래프) -->
+  <div class="modal-backdrop hidden" id="detailModal">
+    <div class="modal-container modal-lg">
+      <button class="modal-close" id="closeDetailBtn"><i class="ri-close-line"></i></button>
+      <div id="detailModalContent">
+        <!-- JS에서 동적으로 상세정보 렌더링 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 중개사 방문/상담 예약 신청 모달 -->
+  <div class="modal-backdrop hidden" id="inquiryModal">
+    <div class="modal-container modal-sm">
+      <button class="modal-close" id="closeInquiryBtn"><i class="ri-close-line"></i></button>
+      <div class="modal-header-custom">
+        <h3><i class="ri-calendar-event-line"></i> 안심 중개사 방문 · 상담 예약</h3>
+        <p id="inquiryTargetTitle">선택한 매물의 담당 공인중개사에게 상담을 신청합니다.</p>
+      </div>
+      <form id="inquiryForm" class="register-form">
+        <input type="hidden" name="propertyId" id="inquiryPropertyId" />
+        <div class="form-row">
+          <div class="form-group">
+            <label>신청자 성함</label>
+            <input type="text" name="userName" id="inquiryUserName" placeholder="예: 김집뷰" required />
+          </div>
+          <div class="form-group">
+            <label>연락처</label>
+            <input type="text" name="userPhone" placeholder="예: 010-1234-5678" value="010-1234-5678" required />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>방문 희망일</label>
+            <input type="date" name="visitDate" value="2026-11-06" required />
+          </div>
+          <div class="form-group">
+            <label>방문 희망 시간</label>
+            <select name="visitTime">
+              <option value="10:00">오전 10:00</option>
+              <option value="11:30">오전 11:30</option>
+              <option value="14:00" selected>오후 02:00</option>
+              <option value="16:00">오후 04:00</option>
+              <option value="18:30">오후 06:30</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>추가 문의 사항</label>
+          <input type="text" name="message" placeholder="예: 주차 가능 여부와 정확한 입주 가능일이 궁금합니다."
+            value="실매물 방문 투어 및 전세대출 가능 여부 상담 희망합니다." required />
+        </div>
+        <button type="submit" class="btn-submit-property">상담 및 방문예약 확정하기</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 내 상담/방문예약 내역 목록 모달 -->
+  <div class="modal-backdrop hidden" id="inquiriesListModal">
+    <div class="modal-container modal-sm">
+      <button class="modal-close" id="closeInquiriesListBtn"><i class="ri-close-line"></i></button>
+      <div class="modal-header-custom">
+        <h3><i class="ri-calendar-check-fill"></i> 내 상담 및 방문예약 내역</h3>
+        <p>백엔드 DB에 저장된 실시간 중개사 상담 예약 목록입니다.</p>
+      </div>
+      <div id="inquiriesListContainer" class="inquiries-list-wrap">
+        <!-- JS에서 동적으로 렌더링 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Gemini AI 부동산 비서 모달 -->
+  <div class="modal-backdrop hidden" id="aiChatModal">
+    <div class="modal-container modal-sm">
+      <button class="modal-close" id="closeAiModalBtn"><i class="ri-close-line"></i></button>
+      <div class="modal-header-custom">
+        <h3><i class="ri-sparkling-2-fill" style="color:#2563eb;"></i> 집뷰 Gemini AI 부동산 컨설턴트</h3>
+        <p>원하는 조건·예산·지역을 말씀하시면 AI가 실매물과 실거래가를 비교해 추천합니다.</p>
+      </div>
+
+      <div class="ai-quick-prompts">
+        <button type="button" class="ai-prompt-chip" data-prompt="강남·서초 역세권 풀옵션 월세 매물 추천해줘">강남·서초 역세권 월세</button>
+        <button type="button" class="ai-prompt-chip" data-prompt="3억 이하 전세대출 가능한 투룸·오피스텔 찾아줘">3억 이하 전세 추천</button>
+        <button type="button" class="ai-prompt-chip" data-prompt="반려동물 키우기 좋은 신축급 매물 비교해줘">반려동물 가능 신축</button>
+        <button type="button" class="ai-prompt-chip" data-prompt="서울숲·잠실 대단지 아파트 실거래가 추이 알려줘">아파트 실거래 분석</button>
+      </div>
+
+      <div class="ai-chat-feed" id="aiChatFeed">
+        <div class="ai-msg-bubble assistant">
+          <strong><i class="ri-robot-2-line"></i> Gemini AI 컨설턴트</strong>
+          <p>안녕하세요! 집뷰 Gemini AI 부동산 비서입니다. 찾으시는 지역, 예산(월세/전세/매매), 또는 라이프스타일 조건을 입력해 주시면 최적의 안심매물을 추천해 드립니다.</p>
+        </div>
+      </div>
+
+      <form id="aiChatForm" class="ai-chat-input-row">
+        <input type="text" id="aiChatInput" placeholder="예: 강남역이나 여의도 출퇴근하기 좋은 오피스텔 추천해줘" required />
+        <button type="submit" class="btn-ai-send" id="aiSendBtn">
+          <i class="ri-send-plane-fill"></i> 질문
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 국토교통부 아파트·오피스텔·연립다세대·단독다가구 실거래가, 건축HUB 건축물대장 및 K-apt 단지목록·공동주택기본정보 Open API 통합 조회 모달 -->
+  <div class="modal-backdrop hidden" id="molitModal">
+    <div class="modal-container modal-lg" style="padding: 28px;">
+      <button class="modal-close" id="closeMolitModalBtn"><i class="ri-close-line"></i></button>
+      <div class="modal-header-custom">
+        <h3><i class="ri-government-fill" style="color:var(--brand-primary);"></i> 국토교통부 부동산 공공데이터 8대 통합 조회 시스템 (실거래가 5종 + 건축HUB + K-apt 단지목록 & 기본정보)
+        </h3>
+        <p id="molitEndpointInfo">연동 엔드포인트: <code>RTMSDataSvcAptTrade</code> / <code>RTMSDataSvcAptRent</code> / <code>RTMSDataSvcOffiRent</code> / <code>RTMSDataSvcRHRent</code> / <code>RTMSDataSvcSHRent</code> / <code>BldRgstHubService</code> / <code>AptBasisInfoServiceV5</code> / <code>AptListService4</code> | 일반 인증키 자동 적용</p>
+      </div>
+
+      <!-- 실거래 및 건축물대장·K-apt 구분 토글 탭 (8대 분류) -->
+      <div style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin-bottom: 16px;">
+        <button type="button" class="btn-molit-tab active" id="btnMolitTradeTab"
+          style="padding:9px 3px; border-radius:8px; border:2px solid #0038ff; background:#0038ff; color:#fff; font-weight:800; cursor:pointer; font-size:10.5px; transition:all 0.15s ease;">
+          <i class="ri-home-4-line"></i> ① 아파트 매매
+        </button>
+        <button type="button" class="btn-molit-tab" id="btnMolitRentTab"
+          style="padding:9px 3px; border-radius:8px; border:2px solid #cbd5e1; background:#f8fafc; color:#334155; font-weight:800; cursor:pointer; font-size:10.5px; transition:all 0.15s ease;">
+          <i class="ri-key-2-line"></i> ② 아파트 전월세
+        </button>
+        <button type="button" class="btn-molit-tab" id="btnMolitOffiRentTab"
+          style="padding:9px 3px; border-radius:8px; border:2px solid #cbd5e1; background:#f8fafc; color:#334155; font-weight:800; cursor:pointer; font-size:10.5px; transition:all 0.15s ease;">
+          <i class="ri-building-2-line"></i> ③ 오피스텔
+        </button>
+        <button type="button" class="btn-molit-tab" id="btnMolitRHRentTab"
+          style="padding:9px 3px; border-radius:8px; border:2px solid #cbd5e1; background:#f8fafc; color:#334155; font-weight:800; cursor:pointer; font-size:10.5px; transition:all 0.15s ease;">
+          <i class="ri-community-line"></i> ④ 연립다세대
+        </button>
+        <button type="button" class="btn-molit-tab" id="btnMolitSHRentTab"
+          style="padding:9px 3px; border-radius:8px; border:2px solid #cbd5e1; background:#f8fafc; color:#334155; font-weight:800; cursor:pointer; font-size:10.5px; transition:all 0.15s ease;">
+          <i class="ri-home-smile-line"></i> ⑤ 단독/다가구
+        </button>
+        <button type="button" class="btn-molit-tab" id="btnMolitBldHubTab"
+          style="padding:9px 3px; border-radius:8px; border:2px solid #cbd5e1; background:#f8fafc; color:#334155; font-weight:800; cursor:pointer; font-size:10.5px; transition:all 0.15s ease;">
+          <i class="ri-building-line"></i> ⑥ 건축HUB 대장
+        </button>
+        <button type="button" class="btn-molit-tab" id="btnMolitKaptTab"
+          style="padding:9px 3px; border-radius:8px; border:2px solid #cbd5e1; background:#f8fafc; color:#334155; font-weight:800; cursor:pointer; font-size:10.5px; transition:all 0.15s ease;">
+          <i class="ri-community-fill"></i> ⑦ K-apt 기본정보
+        </button>
+        <button type="button" class="btn-molit-tab" id="btnMolitAptListTab"
+          style="padding:9px 3px; border-radius:8px; border:2px solid #cbd5e1; background:#f8fafc; color:#334155; font-weight:800; cursor:pointer; font-size:10.5px; transition:all 0.15s ease;">
+          <i class="ri-list-check-2"></i> ⑧ K-apt 단지목록
+        </button>
+      </div>
+
+      <form id="molitSearchForm" class="form-row"
+        style="margin-bottom: 16px; grid-template-columns: 1.4fr 1fr auto auto; align-items: end;">
+        <div class="form-group">
+          <label id="molitLawdLabel">조회 지역 선택 (전국 법정동/시군구코드)</label>
+          <select id="molitLawdCd" name="lawdCd">
+            <optgroup label="서울특별시">
+              <option value="11680">서울시 강남구 (11680)</option>
+              <option value="11650">서울시 서초구 (11650)</option>
+              <option value="11710">서울시 송파구 (11710)</option>
+              <option value="11200">서울시 성동구 (11200)</option>
+              <option value="11440">서울시 마포구 (11440)</option>
+              <option value="11560">서울시 영등포구 (11560)</option>
+              <option value="11170">서울시 용산구 (11170)</option>
+              <option value="11215">서울시 광진구 (11215)</option>
+              <option value="11350">서울시 노원구 (11350)</option>
+              <option value="11500">서울시 강서구 (11500)</option>
+              <option value="11620">서울시 관악구 (11620)</option>
+              <option value="11110">서울시 종로구 (11110)</option>
+            </optgroup>
+            <optgroup label="경기도 · 인천광역시">
+              <option value="41135">경기도 성남시 분당구·판교 (41135)</option>
+              <option value="41117">경기도 수원시 영통구·광교 (41117)</option>
+              <option value="41285">경기도 고양시 일산동구 (41285)</option>
+              <option value="41290">경기도 과천시 (41290)</option>
+              <option value="41450">경기도 하남시 미사·위례 (41450)</option>
+              <option value="28185">인천광역시 연수구 송도 (28185)</option>
+            </optgroup>
+            <optgroup label="부산 · 대구 · 대전 · 제주 (전국)">
+              <option value="26350">부산광역시 해운대구 (26350)</option>
+              <option value="27260">대구광역시 수성구 (27260)</option>
+              <option value="30200">대전광역시 유성구 (30200)</option>
+              <option value="50110">제주특별자치도 제주시 (50110)</option>
+            </optgroup>
+          </select>
+        </div>
+        <div class="form-group" id="molitSubInputWrap">
+          <label id="molitSubInputLabel">계약년월 (DEAL_YMD, 6자리)</label>
+          <input type="text" id="molitDealYmd" name="dealYmd" value="202510" placeholder="예: 202510" maxlength="6" required />
+          <input type="text" id="molitBldNmSearch" name="bldNm" class="hidden" placeholder="단지명/건물명 검색 (예: 은마, 원베일리)" />
+        </div>
+        <button type="submit" id="btnMolitSubmit" class="btn-submit-property" style="margin-top:0; padding: 10px 18px;">
+          <i class="ri-search-eye-line"></i> 실시간 조회
+        </button>
+        <button type="button" id="importAllMolitBtn" class="btn-submit-property"
+          style="margin-top:0; padding: 10px 18px; background:#0284c7;">
+          <i class="ri-map-pin-add-line"></i> 전체 지도에 표시
+        </button>
+      </form>
+
+      <div id="molitStatusBanner"
+        style="font-size:12.5px; color:var(--brand-primary); background:#eff6ff; padding:9px 14px; border-radius:8px; margin-bottom:12px; font-weight:700;">
+        조회 버튼을 누르면 백엔드가 공공데이터포털 XML API를 호출하여 아파트 실거래 내역을 가져옵니다.
+      </div>
+
+      <div id="molitResultContainer" style="max-height: 380px; overflow-y: auto;">
+        <!-- JS에서 실거래가 테이블 렌더링 -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 로그인 / 회원가입 모달 -->
+  <div class="modal-backdrop hidden" id="loginModal">
+    <div class="modal-container modal-login">
+      <button class="modal-close" id="closeLoginBtn"><i class="ri-close-line"></i></button>
+      <div class="login-header">
+        <div class="login-brand-badge"><i class="ri-building-2-fill"></i></div>
+        <h3>집뷰(ZipView) 시작하기</h3>
+        <p>로그인하고 실거래 알림·관심매물·3D 투어를 무제한 이용하세요.</p>
+      </div>
+
+      <!-- 로그인 / 회원가입 탭 전환 -->
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-auth-mode="login">로그인</button>
+        <button class="auth-tab" data-auth-mode="signup">회원가입</button>
+      </div>
+
+      <form id="authForm" class="auth-form">
+        <div class="form-group hidden" id="signupNameGroup">
+          <label>이름 (닉네임)</label>
+          <input type="text" name="name" placeholder="예: 김집뷰" />
+        </div>
+        <div class="form-group">
+          <label>이메일 아이디</label>
+          <input type="email" name="email" placeholder="example@zipview.kr" value="user@zipview.kr" required />
+        </div>
+        <div class="form-group">
+          <label>비밀번호</label>
+          <input type="password" name="password" placeholder="비밀번호를 입력하세요" value="12345678" required />
+        </div>
+
+        <div class="login-options">
+          <label class="remember-me">
+            <input type="checkbox" checked /> 로그인 상태 유지
+          </label>
+          <a href="#" class="forgot-link" id="forgotPwLink">데모계정 자동입력됨</a>
+        </div>
+
+        <button type="submit" class="btn-auth-submit" id="authSubmitBtn">네이비 멤버십 로그인</button>
+      </form>
+
+      <div class="social-divider"><span>또는 간편 로그인</span></div>
+
+      <div class="social-btns">
+        <button type="button" class="btn-social kakao" data-provider="카카오">
+          <i class="ri-chat-3-fill"></i> 카카오로 3초 만에 시작하기
+        </button>
+        <button type="button" class="btn-social naver" data-provider="네이버">
+          <strong>N</strong> 네이버 아이디로 로그인
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 방 내놓기(매물 등록) 모달 -->
+  <div class="modal-backdrop hidden" id="registerModal">
+    <div class="modal-container modal-sm">
+      <button class="modal-close" id="closeRegisterBtn"><i class="ri-close-line"></i></button>
+      <div class="modal-header-custom">
+        <h3><i class="ri-home-gear-line"></i> 내 방 내놓기 (신규 매물 등록)</h3>
+        <p>등록 즉시 백엔드 DB에 저장되며 평면도·3D 구조·실거래 그래프가 생성됩니다.</p>
+      </div>
+      <form id="registerForm" class="register-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label>매물 종류</label>
+            <select name="category" required>
+              <option value="오피스텔">오피스텔</option>
+              <option value="아파트">아파트</option>
+              <option value="원룸/투룸">원룸/투룸</option>
+              <option value="빌라/주택">빌라/주택</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>거래 유형</label>
+            <select name="dealType" required>
+              <option value="월세">월세</option>
+              <option value="전세">전세</option>
+              <option value="매매">매매</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>가격 표기 (예: 보증금/월세 또는 전세가)</label>
+            <input type="text" name="priceText" placeholder="예: 2,000 / 85 또는 3억 5,000" required />
+          </div>
+          <div class="form-group">
+            <label>환산 기준가 (만원 단위 숫자)</label>
+            <input type="number" name="priceNumeric" placeholder="예: 8500" required />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>매물 한줄 제목</label>
+          <input type="text" name="title" placeholder="예: 강남역 도보 3분 신축 풀옵션 복층 오피스텔" required />
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>소재지 (동/역 주변)</label>
+            <input type="text" name="location" placeholder="예: 서울시 강남구 역삼동" required />
+          </div>
+          <div class="form-group">
+            <label>인근 역세권 정보</label>
+            <input type="text" name="station" placeholder="예: 강남역 도보 4분" required />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>전용면적 (㎡)</label>
+            <input type="number" name="area" placeholder="예: 33" required />
+          </div>
+          <div class="form-group">
+            <label>층수 정보</label>
+            <input type="text" name="floor" placeholder="예: 9층 / 15층" required />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>주요 특징 태그 (쉼표 구분)</label>
+          <input type="text" name="tags" placeholder="예: 역세권, 풀옵션, 주차가능, 신축" value="역세권, 풀옵션, 주차가능" />
+        </div>
+
+        <button type="submit" class="btn-submit-property">매물 즉시 등록하기</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 토스트 알림 -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- Leaflet JS (Fast CDN + Fallback) -->
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
+  <script>
+    if (typeof window.L === "undefined") {
+      document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script>');
+    }
+  </script>
+  <script src="app.js"></script>
+</body>
+
+</html>

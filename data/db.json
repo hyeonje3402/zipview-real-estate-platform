@@ -1,0 +1,572 @@
+{
+  "properties": [
+    {
+      "id": 101,
+      "category": "오피스텔",
+      "dealType": "월세",
+      "priceText": "1,000 / 85",
+      "priceNumeric": 2000,
+      "maintenanceFee": "12만원",
+      "title": "강남역 1분거리 채광 최고 하이엔드 풀옵션 복층",
+      "location": "서울시 강남구 역삼동",
+      "station": "강남역 도보 2분",
+      "area": 29.8,
+      "roomStructure": "복층 분리형 (방1 · 거실1 · 욕실1)",
+      "floor": "12층 / 18층",
+      "direction": "남동향",
+      "moveIn": "즉시 입주",
+      "lat": 37.4988,
+      "lng": 127.0288,
+      "tags": [
+        "역세권",
+        "풀옵션",
+        "주차가능",
+        "신축"
+      ],
+      "options": [
+        "천장형 에어컨",
+        "빌트인 냉장고",
+        "드럼세탁기",
+        "인덕션",
+        "시스템장",
+        "복층구조",
+        "무인택배함"
+      ],
+      "agent": "강남퍼스트 공인중개사사무소",
+      "agentPhone": "02-555-1234",
+      "image": "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 78,
+          "floor": "8층"
+        },
+        {
+          "month": "26.06",
+          "price": 80,
+          "floor": "10층"
+        },
+        {
+          "month": "26.07",
+          "price": 79,
+          "floor": "6층"
+        },
+        {
+          "month": "26.08",
+          "price": 82,
+          "floor": "14층"
+        },
+        {
+          "month": "26.09",
+          "price": 84,
+          "floor": "11층"
+        },
+        {
+          "month": "26.10",
+          "price": 85,
+          "floor": "12층"
+        }
+      ],
+      "unitLabel": "만원(월세)",
+      "views": 42,
+      "createdAt": "2026-10-25T09:00:00.000Z"
+    },
+    {
+      "id": 102,
+      "category": "원룸/투룸",
+      "dealType": "전세",
+      "priceText": "2억 3,000",
+      "priceNumeric": 23000,
+      "maintenanceFee": "7만원",
+      "title": "홍대입구역 연남동 경의선숲길 인근 감성 투룸 (전세대출 가능)",
+      "location": "서울시 마포구 연남동",
+      "station": "홍대입구역 도보 6분",
+      "area": 41.2,
+      "roomStructure": "투룸형 (침실2 · 거실1 · 욕실1 · 베란다)",
+      "floor": "3층 / 5층",
+      "direction": "남향",
+      "moveIn": "협의 입주",
+      "lat": 37.5612,
+      "lng": 126.9252,
+      "tags": [
+        "역세권",
+        "반려동물",
+        "신축"
+      ],
+      "options": [
+        "에어컨 2대",
+        "냉장고",
+        "세탁기",
+        "가스레인지",
+        "베란다",
+        "도어락",
+        "CCTV"
+      ],
+      "agent": "연남숲길 공인중개사사무소",
+      "agentPhone": "02-332-8890",
+      "image": "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 21500,
+          "floor": "2층"
+        },
+        {
+          "month": "26.06",
+          "price": 21800,
+          "floor": "4층"
+        },
+        {
+          "month": "26.07",
+          "price": 22000,
+          "floor": "3층"
+        },
+        {
+          "month": "26.08",
+          "price": 22400,
+          "floor": "5층"
+        },
+        {
+          "month": "26.09",
+          "price": 22700,
+          "floor": "3층"
+        },
+        {
+          "month": "26.10",
+          "price": 23000,
+          "floor": "3층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 39,
+      "createdAt": "2026-10-26T10:30:00.000Z"
+    },
+    {
+      "id": 103,
+      "category": "아파트",
+      "dealType": "매매",
+      "priceText": "14억 8,000",
+      "priceNumeric": 148000,
+      "maintenanceFee": "25만원",
+      "title": "성수 서울숲 한강조망 리모델링 완료 로얄동 32평형",
+      "location": "서울시 성동구 성수동1가",
+      "station": "서울숲역 도보 5분",
+      "area": 84.9,
+      "roomStructure": "3Bay 판상형 (방3 · 욕실2 · 드레스룸)",
+      "floor": "19층 / 25층",
+      "direction": "남향",
+      "moveIn": "2개월 내 협의",
+      "lat": 37.5447,
+      "lng": 127.0445,
+      "tags": [
+        "역세권",
+        "주차가능"
+      ],
+      "options": [
+        "시스템에어컨 4대",
+        "식기세척기",
+        "붙박이장",
+        "중문",
+        "지하주차장 연결",
+        "커뮤니티센터"
+      ],
+      "agent": "서울숲명가 공인중개사사무소",
+      "agentPhone": "02-466-7700",
+      "image": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 139000,
+          "floor": "9층"
+        },
+        {
+          "month": "26.06",
+          "price": 141500,
+          "floor": "12층"
+        },
+        {
+          "month": "26.07",
+          "price": 143000,
+          "floor": "15층"
+        },
+        {
+          "month": "26.08",
+          "price": 144500,
+          "floor": "17층"
+        },
+        {
+          "month": "26.09",
+          "price": 146000,
+          "floor": "21층"
+        },
+        {
+          "month": "26.10",
+          "price": 148000,
+          "floor": "19층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 68,
+      "createdAt": "2026-10-27T11:15:00.000Z"
+    },
+    {
+      "id": 104,
+      "category": "원룸/투룸",
+      "dealType": "월세",
+      "priceText": "500 / 62",
+      "priceNumeric": 1200,
+      "maintenanceFee": "6만원",
+      "title": "건대입구역 먹자골목 인근 화이트톤 분리형 풀옵션 원룸",
+      "location": "서울시 광진구 화양동",
+      "station": "건대입구역 도보 5분",
+      "area": 23.5,
+      "roomStructure": "중문 분리형 원룸 (방1 · 주방분리 · 욕실1)",
+      "floor": "4층 / 6층",
+      "direction": "동향",
+      "moveIn": "즉시 입주",
+      "lat": 37.5425,
+      "lng": 127.0685,
+      "tags": [
+        "역세권",
+        "풀옵션",
+        "반려동물"
+      ],
+      "options": [
+        "에어컨",
+        "냉장고",
+        "세탁기",
+        "전자레인지",
+        "옷장",
+        "신발장",
+        "초고속인터넷"
+      ],
+      "agent": "건대스타 공인중개사사무소",
+      "agentPhone": "02-499-0909",
+      "image": "https://images.unsplash.com/photo-1554995207-c18c203602cb?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 56,
+          "floor": "2층"
+        },
+        {
+          "month": "26.06",
+          "price": 58,
+          "floor": "3층"
+        },
+        {
+          "month": "26.07",
+          "price": 59,
+          "floor": "5층"
+        },
+        {
+          "month": "26.08",
+          "price": 60,
+          "floor": "4층"
+        },
+        {
+          "month": "26.09",
+          "price": 60,
+          "floor": "3층"
+        },
+        {
+          "month": "26.10",
+          "price": 62,
+          "floor": "4층"
+        }
+      ],
+      "unitLabel": "만원(월세)",
+      "views": 34,
+      "createdAt": "2026-10-28T14:20:00.000Z"
+    },
+    {
+      "id": 105,
+      "category": "오피스텔",
+      "dealType": "전세",
+      "priceText": "3억 1,000",
+      "priceNumeric": 31000,
+      "maintenanceFee": "14만원",
+      "title": "여의도역 직장인 강추! 보안 철저한 신축급 투룸 오피스텔",
+      "location": "서울시 영등포구 여의도동",
+      "station": "여의도역 도보 3분",
+      "area": 44.6,
+      "roomStructure": "2Bay 투룸 오피스텔 (침실2 · 거실 · 욕실1)",
+      "floor": "14층 / 20층",
+      "direction": "남서향",
+      "moveIn": "즉시 입주",
+      "lat": 37.5219,
+      "lng": 126.9245,
+      "tags": [
+        "역세권",
+        "풀옵션",
+        "주차가능",
+        "신축"
+      ],
+      "options": [
+        "스타일러",
+        "건조기",
+        "세탁기",
+        "빌트인냉장고",
+        "시스템에어컨",
+        "자주식주차"
+      ],
+      "agent": "여의도프라임 공인중개사사무소",
+      "agentPhone": "02-780-3344",
+      "image": "https://images.unsplash.com/photo-1493809842364-78817add7ffb?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 29500,
+          "floor": "7층"
+        },
+        {
+          "month": "26.06",
+          "price": 29800,
+          "floor": "11층"
+        },
+        {
+          "month": "26.07",
+          "price": 30200,
+          "floor": "13층"
+        },
+        {
+          "month": "26.08",
+          "price": 30500,
+          "floor": "16층"
+        },
+        {
+          "month": "26.09",
+          "price": 30800,
+          "floor": "12층"
+        },
+        {
+          "month": "26.10",
+          "price": 31000,
+          "floor": "14층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 53,
+      "createdAt": "2026-10-29T16:00:00.000Z"
+    },
+    {
+      "id": 106,
+      "category": "아파트",
+      "dealType": "전세",
+      "priceText": "7억 5,000",
+      "priceNumeric": 75000,
+      "maintenanceFee": "19만원",
+      "title": "잠실역 석촌호수 도보권 대단지 학군 우수 24평 올수리",
+      "location": "서울시 송파구 잠실동",
+      "station": "잠실역 도보 7분",
+      "area": 59.9,
+      "roomStructure": "판상형 아파트 (방3 · 거실1 · 욕실2)",
+      "floor": "11층 / 28층",
+      "direction": "남향",
+      "moveIn": "협의 입주",
+      "lat": 37.5125,
+      "lng": 127.0982,
+      "tags": [
+        "역세권",
+        "주차가능"
+      ],
+      "options": [
+        "시스템에어컨",
+        "붙박이장",
+        "확장형 거실",
+        "비데",
+        "보안경비",
+        "어린이집 인접"
+      ],
+      "agent": "잠실레이크 공인중개사사무소",
+      "agentPhone": "02-415-2211",
+      "image": "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 71000,
+          "floor": "6층"
+        },
+        {
+          "month": "26.06",
+          "price": 72000,
+          "floor": "9층"
+        },
+        {
+          "month": "26.07",
+          "price": 72500,
+          "floor": "14층"
+        },
+        {
+          "month": "26.08",
+          "price": 73500,
+          "floor": "18층"
+        },
+        {
+          "month": "26.09",
+          "price": 74200,
+          "floor": "12층"
+        },
+        {
+          "month": "26.10",
+          "price": 75000,
+          "floor": "11층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 77,
+      "createdAt": "2026-10-30T12:10:00.000Z"
+    },
+    {
+      "id": 107,
+      "category": "빌라/주택",
+      "dealType": "월세",
+      "priceText": "3,000 / 110",
+      "priceNumeric": 3500,
+      "maintenanceFee": "5만원",
+      "title": "서초 교대역 조용한 주택가 테라스 있는 유럽풍 신축 빌라",
+      "location": "서울시 서초구 서초동",
+      "station": "교대역 도보 6분",
+      "area": 52,
+      "roomStructure": "테라스형 투룸 (방2 · 거실1 · 광폭테라스)",
+      "floor": "4층 / 4층",
+      "direction": "남향",
+      "moveIn": "즉시 입주",
+      "lat": 37.4923,
+      "lng": 127.0145,
+      "tags": [
+        "주차가능",
+        "반려동물",
+        "신축"
+      ],
+      "options": [
+        "단독 테라스",
+        "에어컨 2대",
+        "인덕션",
+        "엘리베이터",
+        "일렬주차 100%"
+      ],
+      "agent": "서초테라스 공인중개사사무소",
+      "agentPhone": "02-588-4567",
+      "image": "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 102,
+          "floor": "2층"
+        },
+        {
+          "month": "26.06",
+          "price": 105,
+          "floor": "3층"
+        },
+        {
+          "month": "26.07",
+          "price": 105,
+          "floor": "2층"
+        },
+        {
+          "month": "26.08",
+          "price": 108,
+          "floor": "3층"
+        },
+        {
+          "month": "26.09",
+          "price": 109,
+          "floor": "4층"
+        },
+        {
+          "month": "26.10",
+          "price": 110,
+          "floor": "4층"
+        }
+      ],
+      "unitLabel": "만원(월세)",
+      "views": 33,
+      "createdAt": "2026-10-31T15:45:00.000Z"
+    },
+    {
+      "id": 108,
+      "category": "오피스텔",
+      "dealType": "월세",
+      "priceText": "2,000 / 95",
+      "priceNumeric": 2500,
+      "maintenanceFee": "11만원",
+      "title": "합정역 메세나폴리스 인접 한강뷰 나오는 고층 오피스텔",
+      "location": "서울시 마포구 합정동",
+      "station": "합정역 도보 3분",
+      "area": 33.1,
+      "roomStructure": "슬라이딩 분리형 (침실1 · 거실1 · 욕실1)",
+      "floor": "16층 / 19층",
+      "direction": "남서향",
+      "moveIn": "즉시 입주",
+      "lat": 37.5495,
+      "lng": 126.9142,
+      "tags": [
+        "역세권",
+        "풀옵션",
+        "주차가능"
+      ],
+      "options": [
+        "빌트인 냉장고",
+        "천장 에어컨",
+        "세탁기",
+        "드레스룸",
+        "보안카드키"
+      ],
+      "agent": "합정리버뷰 공인중개사사무소",
+      "agentPhone": "02-324-1199",
+      "image": "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 88,
+          "floor": "10층"
+        },
+        {
+          "month": "26.06",
+          "price": 90,
+          "floor": "12층"
+        },
+        {
+          "month": "26.07",
+          "price": 91,
+          "floor": "14층"
+        },
+        {
+          "month": "26.08",
+          "price": 93,
+          "floor": "15층"
+        },
+        {
+          "month": "26.09",
+          "price": 94,
+          "floor": "17층"
+        },
+        {
+          "month": "26.10",
+          "price": 95,
+          "floor": "16층"
+        }
+      ],
+      "unitLabel": "만원(월세)",
+      "views": 48,
+      "createdAt": "2026-11-01T18:00:00.000Z"
+    }
+  ],
+  "users": [
+    {
+      "id": 1,
+      "name": "김집뷰",
+      "email": "user@zipview.kr",
+      "passwordHash": "0711de053c69eed3e8c8515707e0c921:2758ee3ebf8b1703ba514c6f540540b6e518a2a16fcea996e9ea8df6de783878c58dc69dee1ff45bef7c58bc56e2e060159a6eb13ac00d9ab96e11284fe56d79",
+      "role": "member",
+      "favorites": [
+        101,
+        103
+      ],
+      "createdAt": "2026-11-02T18:38:03.669Z"
+    }
+  ],
+  "inquiries": []
+}
