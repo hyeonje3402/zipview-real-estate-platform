@@ -42,7 +42,7 @@ ENDPOINT_OFFI_TRADE = os.getenv("MOLIT_ENDPOINT_OFFI_TRADE", "https://apis.data.
 ENDPOINT_OFFI_RENT  = os.getenv("MOLIT_ENDPOINT_OFFI_RENT",  "https://apis.data.go.kr/1613000/RTMSDataSvcOffiRent/getRTMSDataSvcOffiRent")
 
 # 3. 연립다세대 (빌라)
-ENDPOINT_RH_TRADE = os.getenv("MOLIT_ENDPOINT_RH_TRADE", "https://apis.data.go.kr/1613000/RTMSDataSvcRHTrade/getRTMSDataSvcRHTrade")
+ENDPOINT_RH_TRADE = os.getenv("MOLIT_ENDPOINT_RH_TRADE", "https://apis.data.go.kr/1613000/RTMSDataSvcRHTrade2/getRTMSDataSvcRHTrade2")
 ENDPOINT_RH_RENT  = os.getenv("MOLIT_ENDPOINT_RH_RENT",  "https://apis.data.go.kr/1613000/RTMSDataSvcRHRent/getRTMSDataSvcRHRent")
 
 # 4. 단독/다가구 (원룸·투룸·단독주택)
@@ -166,8 +166,8 @@ def extract_base_fields(it: Dict[str, Any], lawd_cd: str, deal_ymd: str) -> Dict
     dong = (it.get("법정동") or it.get("umdNm") or "").strip()
     jibun = (it.get("지번") or it.get("jibun") or "").strip()
     build_year = clean_int(it.get("건축년도") or it.get("buildYear"))
-    cancel_deal_day = (it.get("해제사유발생일") or it.get("cancelDealDay") or "").strip()
-    req_gbn = (it.get("거래유형") or it.get("reqGbn") or "").strip()
+    cancel_deal_day = (it.get("cdealDay") or it.get("해제사유발생일") or it.get("cancelDealDay") or "").strip()
+    req_gbn = (it.get("dealingGbn") or it.get("거래유형") or it.get("reqGbn") or "").strip()
 
     return {
         "deal_year": year,
@@ -590,7 +590,7 @@ async def fetch_and_save_sh_trades(
             sh_nm = f"{dong} {house_type}".strip() if dong else house_type
 
             deal_amount = clean_int(it.get("거래금액") or it.get("dealAmount"))
-            exclu_ar = clean_float(it.get("연면적") or it.get("대지면적") or it.get("totArea") or 80.0)
+            exclu_ar = clean_float(it.get("totalFloorAr") or it.get("plottageAr") or it.get("연면적") or it.get("대지면적") or it.get("totArea") or 80.0)
             base = extract_base_fields(it, lawd_cd, deal_ymd)
             base["floor"] = base["floor"] or 1
             r, b = infer_rooms_and_bathrooms(exclu_ar, "단독다가구")
