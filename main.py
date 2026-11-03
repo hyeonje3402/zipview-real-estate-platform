@@ -2,6 +2,8 @@ import os
 import sys
 import asyncio
 from datetime import datetime
+from typing import Optional, List
+from collections import defaultdict
 
 # Windows 콘솔 cp949 인코딩 에러 방지
 if hasattr(sys.stdout, "reconfigure"):
@@ -9,13 +11,13 @@ if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
-from typing import Optional, List
-from collections import defaultdict
+
+import aiohttp
 from fastapi import FastAPI, Depends, Query, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, desc, select
 
 from database import engine, get_db, SessionLocal, Base
 from models import ApartmentTrade
@@ -33,9 +35,9 @@ from fetch_api import (
 )
 
 app = FastAPI(
-    title="ZipView 국토교통부 실거래가 API 서버",
-    description="국토부 4대 주택유형 실거래가 데이터를 실시간으로 동기화 및 조회하고 프론트엔드 대시보드에 제공하는 FastAPI 서버",
-    version="2.0.0"
+    title="ZipView 국토교통부 실거래가 API 서버 (비동기 ETL & Supabase)",
+    description="국토부 4대 주택유형 실거래가 데이터를 실시간으로 비동기 동기화 및 조회하고 프론트엔드 대시보드에 제공하는 FastAPI 서버",
+    version="2.1.0"
 )
 
 # 1. CORS 미들웨어 설정
@@ -52,6 +54,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 def format_korean_money(amount_manwon: Optional[int]) -> str:
     """만원 단위 정수를 한국어 'X억 Y만원' 포맷으로 변환"""
@@ -73,58 +76,77 @@ SYNC_STATUS = {
     "last_sync_region": "11680 (강남구)",
     "last_added_count": 0,
     "is_syncing": False,
-    "monitored_regions": ["11680", "11650", "11710"] # 강남구, 서초구, 송파구
+    "monitored_regions": ["11680", "11650", "11710"]  # 강남구, 서초구, 송파구
 }
 
 
-def execute_sync_for_region(regional_code: str, deal_ymd: Optional[str] = None) -> dict:
-    """국토교통부 4대 주택유형 8종 API를 실시간 호출하여 DB에 최신 거래를 Upsert 동기화"""
+async def execute_sync_for_region(regional_code: str, deal_ymd: Optional[str] = None) -> dict:
+    """국토교통부 4대 주택유형 8종 API를 aiohttp 비동기 호출하여 DB에 최신 거래를 Batch Upsert 동기화"""
     target_ymd = deal_ymd or "202410"
-    db = SessionLocal()
     total_added = 0
+    SYNC_STATUS["is_syncing"] = True
+
     try:
-        SYNC_STATUS["is_syncing"] = True
-        
-        # 1. 아파트 (매매 / 전월세)
-        try: total_added += fetch_and_save_apt_trades(regional_code, target_ymd, db)
-        except Exception as e: print(f"[Sync] 아파트 매매 스킵: {e}")
-        try: total_added += fetch_and_save_apt_rents(regional_code, target_ymd, db)
-        except Exception as e: print(f"[Sync] 아파트 전월세 스킵: {e}")
+        async with SessionLocal() as db:
+            async with aiohttp.ClientSession() as session:
+                # 1. 아파트 (매매 / 전월세)
+                try:
+                    total_added += await fetch_and_save_apt_trades(regional_code, target_ymd, db, session)
+                except Exception as e:
+                    print(f"[Sync] 아파트 매매 스킵: {e}")
+                try:
+                    total_added += await fetch_and_save_apt_rents(regional_code, target_ymd, db, session)
+                except Exception as e:
+                    print(f"[Sync] 아파트 전월세 스킵: {e}")
 
-        # 2. 오피스텔 (매매 / 전월세)
-        try: total_added += fetch_and_save_offi_trades(regional_code, target_ymd, db)
-        except Exception as e: print(f"[Sync] 오피스텔 매매 스킵: {e}")
-        try: total_added += fetch_and_save_offi_rents(regional_code, target_ymd, db)
-        except Exception as e: print(f"[Sync] 오피스텔 전월세 스킵: {e}")
+                # 2. 오피스텔 (매매 / 전월세)
+                try:
+                    total_added += await fetch_and_save_offi_trades(regional_code, target_ymd, db, session)
+                except Exception as e:
+                    print(f"[Sync] 오피스텔 매매 스킵: {e}")
+                try:
+                    total_added += await fetch_and_save_offi_rents(regional_code, target_ymd, db, session)
+                except Exception as e:
+                    print(f"[Sync] 오피스텔 전월세 스킵: {e}")
 
-        # 3. 연립다세대 빌라 (매매 / 전월세)
-        try: total_added += fetch_and_save_rh_trades(regional_code, target_ymd, db)
-        except Exception as e: print(f"[Sync] 연립다세대 매매 스킵: {e}")
-        try: total_added += fetch_and_save_rh_rents(regional_code, target_ymd, db)
-        except Exception as e: print(f"[Sync] 연립다세대 전월세 스킵: {e}")
+                # 3. 연립다세대 빌라 (매매 / 전월세)
+                try:
+                    total_added += await fetch_and_save_rh_trades(regional_code, target_ymd, db, session)
+                except Exception as e:
+                    print(f"[Sync] 연립다세대 매매 스킵: {e}")
+                try:
+                    total_added += await fetch_and_save_rh_rents(regional_code, target_ymd, db, session)
+                except Exception as e:
+                    print(f"[Sync] 연립다세대 전월세 스킵: {e}")
 
-        # 4. 단독/다가구 원룸 (매매 / 전월세)
-        try: total_added += fetch_and_save_sh_trades(regional_code, target_ymd, db)
-        except Exception as e: print(f"[Sync] 단독다가구 매매 스킵: {e}")
-        try: total_added += fetch_and_save_sh_rents(regional_code, target_ymd, db)
-        except Exception as e: print(f"[Sync] 단독다가구 전월세 스킵: {e}")
+                # 4. 단독/다가구 원룸 (매매 / 전월세)
+                try:
+                    total_added += await fetch_and_save_sh_trades(regional_code, target_ymd, db, session)
+                except Exception as e:
+                    print(f"[Sync] 단독다가구 매매 스킵: {e}")
+                try:
+                    total_added += await fetch_and_save_sh_rents(regional_code, target_ymd, db, session)
+                except Exception as e:
+                    print(f"[Sync] 단독다가구 전월세 스킵: {e}")
 
-        SYNC_STATUS["last_synced_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        SYNC_STATUS["last_sync_region"] = regional_code
-        SYNC_STATUS["last_added_count"] = total_added
+            SYNC_STATUS["last_synced_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            SYNC_STATUS["last_sync_region"] = regional_code
+            SYNC_STATUS["last_added_count"] = total_added
 
-        total_db_count = db.query(ApartmentTrade).count()
-        return {
-            "status": "success",
-            "regional_code": regional_code,
-            "deal_ymd": target_ymd,
-            "added_count": total_added,
-            "total_records": total_db_count,
-            "synced_at": SYNC_STATUS["last_synced_at"]
-        }
+            # 전체 레코드 수 비동기 집계
+            cnt_res = await db.execute(select(func.count(ApartmentTrade.id)))
+            total_db_count = cnt_res.scalar() or 0
+
+            return {
+                "status": "success",
+                "regional_code": regional_code,
+                "deal_ymd": target_ymd,
+                "added_count": total_added,
+                "total_records": total_db_count,
+                "synced_at": SYNC_STATUS["last_synced_at"]
+            }
     finally:
         SYNC_STATUS["is_syncing"] = False
-        db.close()
 
 
 # 백그라운드 1시간 주기 자동 수집 워커
@@ -132,10 +154,10 @@ async def periodic_auto_sync_worker():
     """서버 가동 중 주기적으로(1시간마다) 주요 지역의 국토부 최신 데이터를 자동 갱신"""
     while True:
         try:
-            await asyncio.sleep(3600) # 1시간마다
+            await asyncio.sleep(3600)  # 1시간 대기
             print("[Auto-Sync Worker] 국토교통부 최신 실거래 데이터 정기 동기화 시작...")
             for reg in SYNC_STATUS["monitored_regions"]:
-                res = execute_sync_for_region(reg, "202410")
+                res = await execute_sync_for_region(reg, "202410")
                 print(f"  * 지역({reg}) 동기화 완료: 신규 {res['added_count']}건 반영")
         except asyncio.CancelledError:
             break
@@ -165,32 +187,41 @@ def read_root():
     }
 
 
-# ==================== 1. 실시간 국토부 동기화 엔드포인트 ====================
+# ==================== 1. 실시간 국토부 비동기 동기화 엔드포인트 ====================
 
 @app.post("/api/sync/{regional_code}")
 @app.get("/api/sync/{regional_code}")
-def sync_realtime_data(
+async def sync_realtime_data(
     regional_code: str,
     deal_ymd: Optional[str] = Query("202410", description="계약년월 (YYYYMM)"),
     background_tasks: BackgroundTasks = None
 ):
     """
-    [실시간 동기화 엔드포인트]
-    프론트엔드에서 '실시간 동기화' 버튼을 누르면 국토교통부 API를 즉시 호출하여
+    [실시간 비동기 동기화 엔드포인트]
+    프론트엔드에서 '실시간 동기화' 버튼을 누르면 국토교통부 API를 즉시 비동기 호출하여
     신규 계약건을 DB에 실시간 반영하고 결과 요약을 반환합니다.
     """
-    result = execute_sync_for_region(regional_code, deal_ymd)
+    result = await execute_sync_for_region(regional_code, deal_ymd)
     return result
 
 
 @app.get("/api/sync-status")
-def get_sync_status(db: Session = Depends(get_db)):
-    """현재 실시간 동기화 상태 및 누적 건수 확인"""
-    total_count = db.query(ApartmentTrade).count()
-    apt_count = db.query(ApartmentTrade).filter(ApartmentTrade.property_type == "아파트").count()
-    offi_count = db.query(ApartmentTrade).filter(ApartmentTrade.property_type == "오피스텔").count()
-    rh_count = db.query(ApartmentTrade).filter(ApartmentTrade.property_type == "연립다세대").count()
-    sh_count = db.query(ApartmentTrade).filter(ApartmentTrade.property_type == "단독다가구").count()
+async def get_sync_status(db: AsyncSession = Depends(get_db)):
+    """현재 실시간 동기화 상태 및 누적 건수 비동기 집계 확인"""
+    cnt_res = await db.execute(select(func.count(ApartmentTrade.id)))
+    total_count = cnt_res.scalar() or 0
+
+    apt_res = await db.execute(select(func.count(ApartmentTrade.id)).where(ApartmentTrade.property_type == "아파트"))
+    apt_count = apt_res.scalar() or 0
+
+    offi_res = await db.execute(select(func.count(ApartmentTrade.id)).where(ApartmentTrade.property_type == "오피스텔"))
+    offi_count = offi_res.scalar() or 0
+
+    rh_res = await db.execute(select(func.count(ApartmentTrade.id)).where(ApartmentTrade.property_type == "연립다세대"))
+    rh_count = rh_res.scalar() or 0
+
+    sh_res = await db.execute(select(func.count(ApartmentTrade.id)).where(ApartmentTrade.property_type == "단독다가구"))
+    sh_count = sh_res.scalar() or 0
 
     return {
         "status": "online",
@@ -206,46 +237,51 @@ def get_sync_status(db: Session = Depends(get_db)):
     }
 
 
-# ==================== 2. 실거래가 조회 엔드포인트 (On-Demand 자동 동기화 내장) ====================
+# ==================== 2. 실거래가 조회 엔드포인트 (비동기 On-Demand 자동 동기화 내장) ====================
 
 @app.get("/api/trades/{regional_code}")
-def get_trades(
+async def get_trades(
     regional_code: str,
     apt_name: Optional[str] = Query(None, description="단지명 (예: 은마, 래미안, 자이)"),
     property_type: Optional[str] = Query(None, description="건물유형 ('아파트', '오피스텔', '연립다세대', '단독다가구')"),
     trade_type: Optional[str] = Query(None, description="거래유형 ('매매', '전세', '월세')"),
     auto_sync: bool = Query(True, description="데이터가 없을 경우 국토부 API 자동 즉시 수집 여부"),
     limit: int = Query(100, ge=1, le=500, description="최대 반환 레코드 수"),
-    db: Session = Depends(get_db)
+    db: AsyncSession = Depends(get_db)
 ):
     """
-    [On-Demand 자동 실시간 동기화 지원]
-    조회 시 해당 지역 데이터가 DB에 비어있으면 백엔드가 국토부 API를 실시간 호출하여
+    [On-Demand 자동 실시간 비동기 동기화 지원]
+    조회 시 해당 지역 데이터가 DB에 비어있으면 백엔드가 국토부 API를 비동기 호출하여
     즉시 DB에 적재한 후 최신 거래 목록과 차트를 리턴합니다.
     """
-    # 1. DB 존재 여부 확인 및 On-Demand 자동 동기화
-    existing_count = db.query(ApartmentTrade).filter(ApartmentTrade.regional_code == regional_code).count()
-    if existing_count == 0 and auto_sync:
-        print(f"⚡ [On-Demand 실시간 동기화] 지역({regional_code}) 데이터 없음 ➜ 국토부 API 즉시 호출")
-        execute_sync_for_region(regional_code, "202410")
+    # 1. DB 존재 여부 확인 및 On-Demand 비동기 자동 동기화
+    cnt_res = await db.execute(select(func.count(ApartmentTrade.id)).where(ApartmentTrade.regional_code == regional_code))
+    existing_count = cnt_res.scalar() or 0
 
-    query = db.query(ApartmentTrade).filter(ApartmentTrade.regional_code == regional_code)
+    if existing_count == 0 and auto_sync:
+        print(f"⚡ [On-Demand 실시간 동기화] 지역({regional_code}) 데이터 없음 ➜ 국토부 API 비동기 즉시 호출")
+        await execute_sync_for_region(regional_code, "202410")
+
+    stmt = select(ApartmentTrade).where(ApartmentTrade.regional_code == regional_code)
 
     if property_type and property_type.strip():
-        query = query.filter(ApartmentTrade.property_type == property_type.strip())
+        stmt = stmt.where(ApartmentTrade.property_type == property_type.strip())
 
     if apt_name and apt_name.strip():
         search_term = f"%{apt_name.strip()}%"
-        query = query.filter(ApartmentTrade.apt_name.ilike(search_term))
+        stmt = stmt.where(ApartmentTrade.apt_name.ilike(search_term))
 
     if trade_type and trade_type.strip():
-        query = query.filter(ApartmentTrade.trade_type == trade_type.strip())
+        stmt = stmt.where(ApartmentTrade.trade_type == trade_type.strip())
 
-    # 2. 최근 거래 내역 100건 (계약일자 내림차순, 최신순)
-    trades_records = query.order_by(
+    # 2. 최근 거래 내역 조회 (계약일자 내림차순, 최신순)
+    stmt = stmt.order_by(
         desc(ApartmentTrade.deal_date),
         desc(ApartmentTrade.id)
-    ).limit(limit).all()
+    ).limit(limit)
+
+    query_res = await db.execute(stmt)
+    trades_records = query_res.scalars().all()
 
     # 3. 거래 목록 응답 가공
     trade_list = []
@@ -344,6 +380,7 @@ def get_trades(
 class ChatRequest(BaseModel):
     prompt: str
     model_choice: Optional[str] = "gpt"
+
 
 @app.post("/api/chat")
 def chat_with_multi_llm(req: ChatRequest):
