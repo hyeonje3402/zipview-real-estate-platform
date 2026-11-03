@@ -552,6 +552,1098 @@
       "unitLabel": "만원(월세)",
       "views": 48,
       "createdAt": "2026-11-01T18:00:00.000Z"
+    },
+    {
+      "id": 109,
+      "category": "아파트",
+      "dealType": "매매",
+      "priceText": "24억 5,000",
+      "priceNumeric": 245000,
+      "maintenanceFee": "32만원",
+      "title": "반포 고속터미널역 한강공원 연결 대단지 로얄층 34평형",
+      "location": "서울시 서초구 반포동",
+      "station": "고속터미널역 도보 4분",
+      "area": 84.95,
+      "roomStructure": "4Bay 판상형 (방3 · 욕실2 · 팬트리 · 드레스룸)",
+      "floor": "22층 / 35층",
+      "direction": "남향",
+      "moveIn": "협의 입주",
+      "lat": 37.5062,
+      "lng": 127.0045,
+      "tags": [
+        "역세권",
+        "주차가능",
+        "신축"
+      ],
+      "options": [
+        "시스템에어컨 5대",
+        "빌트인 식기세척기",
+        "인덕션",
+        "커뮤니티 스카이라운지",
+        "세대창고"
+      ],
+      "agent": "반포퍼스트 공인중개사사무소",
+      "agentPhone": "02-535-9900",
+      "image": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 235000,
+          "floor": "14층"
+        },
+        {
+          "month": "26.06",
+          "price": 238000,
+          "floor": "18층"
+        },
+        {
+          "month": "26.07",
+          "price": 240000,
+          "floor": "20층"
+        },
+        {
+          "month": "26.08",
+          "price": 241500,
+          "floor": "16층"
+        },
+        {
+          "month": "26.09",
+          "price": 243000,
+          "floor": "25층"
+        },
+        {
+          "month": "26.10",
+          "price": 245000,
+          "floor": "22층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 92,
+      "createdAt": "2026-11-01T20:00:00.000Z"
+    },
+    {
+      "id": 110,
+      "category": "원룸/투룸",
+      "dealType": "월세",
+      "priceText": "1,000 / 58",
+      "priceNumeric": 1100,
+      "maintenanceFee": "5만원",
+      "title": "서울대입구역 샤로수길 인접 신축 첫입주 풀옵션 분리형 원룸",
+      "location": "서울시 관악구 봉천동",
+      "station": "서울대입구역 도보 4분",
+      "area": 24.8,
+      "roomStructure": "주방분리형 원룸 (방1 · 주방1 · 욕실1)",
+      "floor": "5층 / 7층",
+      "direction": "남동향",
+      "moveIn": "즉시 입주",
+      "lat": 37.4812,
+      "lng": 126.9527,
+      "tags": [
+        "역세권",
+        "풀옵션",
+        "신축"
+      ],
+      "options": [
+        "천장형 에어컨",
+        "빌트인 냉장고",
+        "드럼세탁기",
+        "전자레인지",
+        "붙박이장",
+        "엘리베이터"
+      ],
+      "agent": "관악캠퍼스 공인중개사사무소",
+      "agentPhone": "02-882-3456",
+      "image": "https://images.unsplash.com/photo-1536376072261-38c75010e6c9?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 54,
+          "floor": "3층"
+        },
+        {
+          "month": "26.06",
+          "price": 55,
+          "floor": "4층"
+        },
+        {
+          "month": "26.07",
+          "price": 56,
+          "floor": "6층"
+        },
+        {
+          "month": "26.08",
+          "price": 56,
+          "floor": "2층"
+        },
+        {
+          "month": "26.09",
+          "price": 57,
+          "floor": "5층"
+        },
+        {
+          "month": "26.10",
+          "price": 58,
+          "floor": "5층"
+        }
+      ],
+      "unitLabel": "만원(월세)",
+      "views": 41,
+      "createdAt": "2026-11-02T09:00:00.000Z"
+    },
+    {
+      "id": 111,
+      "category": "빌라/주택",
+      "dealType": "전세",
+      "priceText": "4억 2,000",
+      "priceNumeric": 42000,
+      "maintenanceFee": "8만원",
+      "title": "한남동 순천향대병원 인근 남산뷰 루프탑 테라스 고급 빌라",
+      "location": "서울시 용산구 한남동",
+      "station": "한남역 도보 6분",
+      "area": 62.4,
+      "roomStructure": "쓰리룸 테라스형 (방3 · 거실1 · 욕실2 · 루프탑)",
+      "floor": "4층 / 4층",
+      "direction": "남향",
+      "moveIn": "즉시 입주",
+      "lat": 37.5345,
+      "lng": 127.0025,
+      "tags": [
+        "역세권",
+        "주차가능",
+        "반려동물"
+      ],
+      "options": [
+        "전용 루프탑",
+        "시스템에어컨 3대",
+        "오븐",
+        "식기세척기",
+        "지정주차 1대"
+      ],
+      "agent": "한남힐스 공인중개사사무소",
+      "agentPhone": "02-794-1122",
+      "image": "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 39800,
+          "floor": "2층"
+        },
+        {
+          "month": "26.06",
+          "price": 40200,
+          "floor": "3층"
+        },
+        {
+          "month": "26.07",
+          "price": 40800,
+          "floor": "3층"
+        },
+        {
+          "month": "26.08",
+          "price": 41200,
+          "floor": "2층"
+        },
+        {
+          "month": "26.09",
+          "price": 41500,
+          "floor": "4층"
+        },
+        {
+          "month": "26.10",
+          "price": 42000,
+          "floor": "4층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 56,
+      "createdAt": "2026-11-02T11:00:00.000Z"
+    },
+    {
+      "id": 112,
+      "category": "빌라/주택",
+      "dealType": "전세",
+      "priceText": "2억 6,500",
+      "priceNumeric": 26500,
+      "maintenanceFee": "4만원",
+      "title": "망원역 한강공원 도보 5분 감성 올리모델링 채광 투룸 빌라",
+      "location": "서울시 마포구 망원동",
+      "station": "망원역 도보 6분",
+      "area": 45.5,
+      "roomStructure": "투룸 거실확장형 (방2 · 거실1 · 욕실1 · 다용도실)",
+      "floor": "3층 / 4층",
+      "direction": "남서향",
+      "moveIn": "협의 입주",
+      "lat": 37.5552,
+      "lng": 126.9065,
+      "tags": [
+        "역세권",
+        "반려동물",
+        "신축"
+      ],
+      "options": [
+        "에어컨 2대",
+        "인덕션",
+        "광폭 싱크대",
+        "중문",
+        "무인경비"
+      ],
+      "agent": "망원한강 공인중개사사무소",
+      "agentPhone": "02-336-7788",
+      "image": "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 25000,
+          "floor": "2층"
+        },
+        {
+          "month": "26.06",
+          "price": 25400,
+          "floor": "3층"
+        },
+        {
+          "month": "26.07",
+          "price": 25800,
+          "floor": "2층"
+        },
+        {
+          "month": "26.08",
+          "price": 26000,
+          "floor": "4층"
+        },
+        {
+          "month": "26.09",
+          "price": 26200,
+          "floor": "3층"
+        },
+        {
+          "month": "26.10",
+          "price": 26500,
+          "floor": "3층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 37,
+      "createdAt": "2026-11-02T14:00:00.000Z"
+    },
+    {
+      "id": 113,
+      "category": "아파트",
+      "dealType": "매매",
+      "priceText": "16억 2,000",
+      "priceNumeric": 162000,
+      "maintenanceFee": "24만원",
+      "title": "판교역 테크노밸리 도보권 백현동 대단지 로얄층 33평형",
+      "location": "경기도 성남시 분당구 백현동",
+      "station": "판교역 도보 6분",
+      "area": 84.9,
+      "roomStructure": "4Bay 판상형 (방3 · 거실1 · 욕실2 · 알파룸)",
+      "floor": "18층 / 25층",
+      "direction": "남향",
+      "moveIn": "협의 입주",
+      "lat": 37.3947,
+      "lng": 127.1112,
+      "tags": [
+        "역세권",
+        "주차가능",
+        "신축"
+      ],
+      "options": [
+        "시스템에어컨 4대",
+        "빌트인 김치냉장고",
+        "식기세척기",
+        "팬트리",
+        "피트니스센터"
+      ],
+      "agent": "판교퍼스트 공인중개사사무소",
+      "agentPhone": "031-8016-1122",
+      "image": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 155000,
+          "floor": "10층"
+        },
+        {
+          "month": "26.06",
+          "price": 157000,
+          "floor": "12층"
+        },
+        {
+          "month": "26.07",
+          "price": 158500,
+          "floor": "15층"
+        },
+        {
+          "month": "26.08",
+          "price": 160000,
+          "floor": "19층"
+        },
+        {
+          "month": "26.09",
+          "price": 161000,
+          "floor": "16층"
+        },
+        {
+          "month": "26.10",
+          "price": 162000,
+          "floor": "18층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 68,
+      "createdAt": "2026-11-02T14:10:00.000Z"
+    },
+    {
+      "id": 114,
+      "category": "아파트",
+      "dealType": "전세",
+      "priceText": "5억 8,000",
+      "priceNumeric": 58000,
+      "maintenanceFee": "18만원",
+      "title": "인천 송도 센트럴파크역 공원조망 오션뷰 34평형 대단지",
+      "location": "인천광역시 연수구 송도동",
+      "station": "센트럴파크역 도보 4분",
+      "area": 84.8,
+      "roomStructure": "타워형 파노라마뷰 (방3 · 거실1 · 욕실2)",
+      "floor": "28층 / 42층",
+      "direction": "남서향",
+      "moveIn": "즉시 입주",
+      "lat": 37.3918,
+      "lng": 126.6432,
+      "tags": [
+        "역세권",
+        "주차가능",
+        "신축"
+      ],
+      "options": [
+        "천장형 에어컨",
+        "오븐",
+        "식기세척기",
+        "지하주차장",
+        "게스트하우스"
+      ],
+      "agent": "송도센트럴 공인중개사사무소",
+      "agentPhone": "032-832-4455",
+      "image": "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 54000,
+          "floor": "15층"
+        },
+        {
+          "month": "26.06",
+          "price": 55000,
+          "floor": "20층"
+        },
+        {
+          "month": "26.07",
+          "price": 56000,
+          "floor": "24층"
+        },
+        {
+          "month": "26.08",
+          "price": 56800,
+          "floor": "22층"
+        },
+        {
+          "month": "26.09",
+          "price": 57500,
+          "floor": "30층"
+        },
+        {
+          "month": "26.10",
+          "price": 58000,
+          "floor": "28층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 54,
+      "createdAt": "2026-11-02T14:20:00.000Z"
+    },
+    {
+      "id": 115,
+      "category": "아파트",
+      "dealType": "매매",
+      "priceText": "12억 9,000",
+      "priceNumeric": 129000,
+      "maintenanceFee": "26만원",
+      "title": "부산 해운대 우동 마린시티 광안대교 오션뷰 로얄동 35평형",
+      "location": "부산광역시 해운대구 우동",
+      "station": "동백역 도보 6분",
+      "area": 84.96,
+      "roomStructure": "오션뷰 파노라마 거실 (방3 · 욕실2 · 드레스룸)",
+      "floor": "34층 / 51층",
+      "direction": "남동향",
+      "moveIn": "협의 입주",
+      "lat": 35.1568,
+      "lng": 129.1452,
+      "tags": [
+        "역세권",
+        "주차가능"
+      ],
+      "options": [
+        "시스템에어컨 4대",
+        "빌트인 냉장고",
+        "오션뷰 통창",
+        "컨시어지 서비스"
+      ],
+      "agent": "해운대마린 공인중개사사무소",
+      "agentPhone": "051-747-8899",
+      "image": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 123000,
+          "floor": "21층"
+        },
+        {
+          "month": "26.06",
+          "price": 124500,
+          "floor": "25층"
+        },
+        {
+          "month": "26.07",
+          "price": 126000,
+          "floor": "30층"
+        },
+        {
+          "month": "26.08",
+          "price": 127000,
+          "floor": "28층"
+        },
+        {
+          "month": "26.09",
+          "price": 128000,
+          "floor": "32층"
+        },
+        {
+          "month": "26.10",
+          "price": 129000,
+          "floor": "34층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 63,
+      "createdAt": "2026-11-02T14:30:00.000Z"
+    },
+    {
+      "id": 116,
+      "category": "오피스텔",
+      "dealType": "월세",
+      "priceText": "1,000 / 72",
+      "priceNumeric": 1700,
+      "maintenanceFee": "10만원",
+      "title": "마곡나루역 LG사이언스파크 도보 3분 신축 풀옵션 원룸형 오피스텔",
+      "location": "서울시 강서구 마곡동",
+      "station": "마곡나루역 도보 3분",
+      "area": 28.4,
+      "roomStructure": "오픈형 원룸 오피스텔 (방1 · 빌트인주방 · 욕실1)",
+      "floor": "9층 / 15층",
+      "direction": "남향",
+      "moveIn": "즉시 입주",
+      "lat": 37.5672,
+      "lng": 126.8275,
+      "tags": [
+        "역세권",
+        "풀옵션",
+        "주차가능",
+        "신축"
+      ],
+      "options": [
+        "스타일러",
+        "천장형 에어컨",
+        "빌트인 냉장고",
+        "드럼세탁기",
+        "무인택배함"
+      ],
+      "agent": "마곡밸리 공인중개사사무소",
+      "agentPhone": "02-2665-1234",
+      "image": "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 68,
+          "floor": "5층"
+        },
+        {
+          "month": "26.06",
+          "price": 69,
+          "floor": "7층"
+        },
+        {
+          "month": "26.07",
+          "price": 70,
+          "floor": "8층"
+        },
+        {
+          "month": "26.08",
+          "price": 70,
+          "floor": "6층"
+        },
+        {
+          "month": "26.09",
+          "price": 71,
+          "floor": "11층"
+        },
+        {
+          "month": "26.10",
+          "price": 72,
+          "floor": "9층"
+        }
+      ],
+      "unitLabel": "만원(월세)",
+      "views": 39,
+      "createdAt": "2026-11-02T14:40:00.000Z"
+    },
+    {
+      "id": 117,
+      "category": "오피스텔",
+      "dealType": "전세",
+      "priceText": "2억 4,000",
+      "priceNumeric": 24000,
+      "maintenanceFee": "12만원",
+      "title": "광교중앙역 호수공원 도보 5분 아브뉴프랑 인접 투룸 오피스텔",
+      "location": "경기도 수원시 영통구 이의동",
+      "station": "광교중앙역 도보 5분",
+      "area": 46.2,
+      "roomStructure": "분리형 투룸 오피스텔 (방2 · 거실1 · 욕실1)",
+      "floor": "15층 / 22층",
+      "direction": "남동향",
+      "moveIn": "즉시 입주",
+      "lat": 37.2886,
+      "lng": 127.0518,
+      "tags": [
+        "역세권",
+        "풀옵션",
+        "주차가능",
+        "신축"
+      ],
+      "options": [
+        "시스템에어컨 2대",
+        "빌트인 냉장고",
+        "건조기",
+        "세탁기",
+        "아일랜드식탁"
+      ],
+      "agent": "광교레이크 공인중개사사무소",
+      "agentPhone": "031-214-7788",
+      "image": "https://images.unsplash.com/photo-1493809842364-78817add7ffb?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 22800,
+          "floor": "8층"
+        },
+        {
+          "month": "26.06",
+          "price": 23000,
+          "floor": "10층"
+        },
+        {
+          "month": "26.07",
+          "price": 23300,
+          "floor": "12층"
+        },
+        {
+          "month": "26.08",
+          "price": 23500,
+          "floor": "14층"
+        },
+        {
+          "month": "26.09",
+          "price": 23800,
+          "floor": "16층"
+        },
+        {
+          "month": "26.10",
+          "price": 24000,
+          "floor": "15층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 44,
+      "createdAt": "2026-11-02T14:50:00.000Z"
+    },
+    {
+      "id": 118,
+      "category": "오피스텔",
+      "dealType": "월세",
+      "priceText": "1,000 / 68",
+      "priceNumeric": 1600,
+      "maintenanceFee": "9만원",
+      "title": "부산 센텀시티역 벡스코 인접 수영강뷰 하이엔드 복층 오피스텔",
+      "location": "부산광역시 해운대구 우동",
+      "station": "센텀시티역 도보 3분",
+      "area": 34.5,
+      "roomStructure": "복층형 구조 (침실 · 거실 · 욕실1)",
+      "floor": "19층 / 26층",
+      "direction": "남향",
+      "moveIn": "즉시 입주",
+      "lat": 35.1695,
+      "lng": 129.1312,
+      "tags": [
+        "역세권",
+        "풀옵션",
+        "주차가능"
+      ],
+      "options": [
+        "천장형 에어컨",
+        "빌트인 냉장고",
+        "세탁기",
+        "인덕션",
+        "붙박이장"
+      ],
+      "agent": "센텀스카이 공인중개사사무소",
+      "agentPhone": "051-741-3300",
+      "image": "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 63,
+          "floor": "10층"
+        },
+        {
+          "month": "26.06",
+          "price": 65,
+          "floor": "12층"
+        },
+        {
+          "month": "26.07",
+          "price": 65,
+          "floor": "15층"
+        },
+        {
+          "month": "26.08",
+          "price": 66,
+          "floor": "18층"
+        },
+        {
+          "month": "26.09",
+          "price": 67,
+          "floor": "20층"
+        },
+        {
+          "month": "26.10",
+          "price": 68,
+          "floor": "19층"
+        }
+      ],
+      "unitLabel": "만원(월세)",
+      "views": 36,
+      "createdAt": "2026-11-02T15:00:00.000Z"
+    },
+    {
+      "id": 119,
+      "category": "원룸/투룸",
+      "dealType": "월세",
+      "priceText": "500 / 52",
+      "priceNumeric": 1000,
+      "maintenanceFee": "5만원",
+      "title": "노원역 문화의거리 인근 깔끔한 화이트톤 풀옵션 분리형 원룸",
+      "location": "서울시 노원구 상계동",
+      "station": "노원역 도보 4분",
+      "area": 22.8,
+      "roomStructure": "주방분리형 원룸 (방1 · 주방1 · 욕실1)",
+      "floor": "4층 / 6층",
+      "direction": "남향",
+      "moveIn": "즉시 입주",
+      "lat": 37.6552,
+      "lng": 127.0615,
+      "tags": [
+        "역세권",
+        "풀옵션"
+      ],
+      "options": [
+        "에어컨",
+        "냉장고",
+        "세탁기",
+        "전자레인지",
+        "인덕션",
+        "CCTV"
+      ],
+      "agent": "노원으뜸 공인중개사사무소",
+      "agentPhone": "02-932-1144",
+      "image": "https://images.unsplash.com/photo-1554995207-c18c203602cb?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 48,
+          "floor": "2층"
+        },
+        {
+          "month": "26.06",
+          "price": 49,
+          "floor": "3층"
+        },
+        {
+          "month": "26.07",
+          "price": 50,
+          "floor": "5층"
+        },
+        {
+          "month": "26.08",
+          "price": 50,
+          "floor": "3층"
+        },
+        {
+          "month": "26.09",
+          "price": 51,
+          "floor": "4층"
+        },
+        {
+          "month": "26.10",
+          "price": 52,
+          "floor": "4층"
+        }
+      ],
+      "unitLabel": "만원(월세)",
+      "views": 31,
+      "createdAt": "2026-11-02T15:10:00.000Z"
+    },
+    {
+      "id": 120,
+      "category": "원룸/투룸",
+      "dealType": "전세",
+      "priceText": "1억 7,500",
+      "priceNumeric": 17500,
+      "maintenanceFee": "6만원",
+      "title": "대전 유성온천역 충남대·카이스트 인근 신축급 풀옵션 투룸",
+      "location": "대전광역시 유성구 봉명동",
+      "station": "유성온천역 도보 5분",
+      "area": 39.5,
+      "roomStructure": "투룸 거실분리형 (방2 · 거실1 · 욕실1)",
+      "floor": "5층 / 7층",
+      "direction": "남향",
+      "moveIn": "즉시 입주",
+      "lat": 36.3538,
+      "lng": 127.3415,
+      "tags": [
+        "역세권",
+        "풀옵션",
+        "주차가능",
+        "신축"
+      ],
+      "options": [
+        "시스템에어컨 2대",
+        "냉장고",
+        "드럼세탁기",
+        "엘리베이터",
+        "지정주차"
+      ],
+      "agent": "유성캠퍼스 공인중개사사무소",
+      "agentPhone": "042-822-5566",
+      "image": "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 16500,
+          "floor": "3층"
+        },
+        {
+          "month": "26.06",
+          "price": 16800,
+          "floor": "4층"
+        },
+        {
+          "month": "26.07",
+          "price": 17000,
+          "floor": "6층"
+        },
+        {
+          "month": "26.08",
+          "price": 17200,
+          "floor": "5층"
+        },
+        {
+          "month": "26.09",
+          "price": 17300,
+          "floor": "4층"
+        },
+        {
+          "month": "26.10",
+          "price": 17500,
+          "floor": "5층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 28,
+      "createdAt": "2026-11-02T15:20:00.000Z"
+    },
+    {
+      "id": 121,
+      "category": "원룸/투룸",
+      "dealType": "월세",
+      "priceText": "500 / 55",
+      "priceNumeric": 1050,
+      "maintenanceFee": "5만원",
+      "title": "대구 수성구 범어역 도보 4분 보안 철저한 신축 풀옵션 원룸",
+      "location": "대구광역시 수성구 범어동",
+      "station": "범어역 도보 4분",
+      "area": 25.2,
+      "roomStructure": "중문 분리형 원룸 (방1 · 주방1 · 욕실1 · 베란다)",
+      "floor": "6층 / 8층",
+      "direction": "남동향",
+      "moveIn": "즉시 입주",
+      "lat": 35.8592,
+      "lng": 128.6265,
+      "tags": [
+        "역세권",
+        "풀옵션",
+        "주차가능",
+        "신축"
+      ],
+      "options": [
+        "천장형 에어컨",
+        "냉장고",
+        "세탁기",
+        "건조기",
+        "전자레인지",
+        "엘리베이터"
+      ],
+      "agent": "범어센트럴 공인중개사사무소",
+      "agentPhone": "053-745-9090",
+      "image": "https://images.unsplash.com/photo-1536376072261-38c75010e6c9?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 50,
+          "floor": "3층"
+        },
+        {
+          "month": "26.06",
+          "price": 52,
+          "floor": "5층"
+        },
+        {
+          "month": "26.07",
+          "price": 52,
+          "floor": "4층"
+        },
+        {
+          "month": "26.08",
+          "price": 53,
+          "floor": "7층"
+        },
+        {
+          "month": "26.09",
+          "price": 54,
+          "floor": "6층"
+        },
+        {
+          "month": "26.10",
+          "price": 55,
+          "floor": "6층"
+        }
+      ],
+      "unitLabel": "만원(월세)",
+      "views": 34,
+      "createdAt": "2026-11-02T15:30:00.000Z"
+    },
+    {
+      "id": 122,
+      "category": "빌라/주택",
+      "dealType": "전세",
+      "priceText": "3억 4,000",
+      "priceNumeric": 34000,
+      "maintenanceFee": "6만원",
+      "title": "고양 일산 정발산역 호수공원 도보권 정원 있는 유럽풍 타운하우스",
+      "location": "경기도 고양시 일산동구 정발산동",
+      "station": "정발산역 도보 7분",
+      "area": 58.6,
+      "roomStructure": "정원 테라스형 쓰리룸 (방3 · 거실1 · 욕실2)",
+      "floor": "1층 / 4층",
+      "direction": "남향",
+      "moveIn": "즉시 입주",
+      "lat": 37.6625,
+      "lng": 126.7735,
+      "tags": [
+        "주차가능",
+        "반려동물",
+        "신축"
+      ],
+      "options": [
+        "개별 정원데크",
+        "시스템에어컨 3대",
+        "식기세척기",
+        "붙박이장",
+        "지하주차장"
+      ],
+      "agent": "일산라페스타 공인중개사사무소",
+      "agentPhone": "031-905-2233",
+      "image": "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 32000,
+          "floor": "2층"
+        },
+        {
+          "month": "26.06",
+          "price": 32500,
+          "floor": "3층"
+        },
+        {
+          "month": "26.07",
+          "price": 32800,
+          "floor": "1층"
+        },
+        {
+          "month": "26.08",
+          "price": 33200,
+          "floor": "2층"
+        },
+        {
+          "month": "26.09",
+          "price": 33600,
+          "floor": "3층"
+        },
+        {
+          "month": "26.10",
+          "price": 34000,
+          "floor": "1층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 42,
+      "createdAt": "2026-11-02T15:40:00.000Z"
+    },
+    {
+      "id": 123,
+      "category": "빌라/주택",
+      "dealType": "월세",
+      "priceText": "2,000 / 90",
+      "priceNumeric": 2400,
+      "maintenanceFee": "5만원",
+      "title": "종로 부암동·서촌 인왕산 뷰 감성 한옥 리모델링 단독주택",
+      "location": "서울시 종로구 부암동",
+      "station": "경복궁역 버스 7분",
+      "area": 54,
+      "roomStructure": "모던 한옥독채 (침실2 · 마루거실 · 중정마당 · 욕실1)",
+      "floor": "1층 / 2층",
+      "direction": "남향",
+      "moveIn": "협의 입주",
+      "lat": 37.5928,
+      "lng": 126.9642,
+      "tags": [
+        "주차가능",
+        "반려동물"
+      ],
+      "options": [
+        "단독 중정마당",
+        "시스템에어컨",
+        "인덕션",
+        "와인셀러",
+        "전용주차"
+      ],
+      "agent": "서촌한옥 공인중개사사무소",
+      "agentPhone": "02-737-4500",
+      "image": "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 85,
+          "floor": "1층"
+        },
+        {
+          "month": "26.06",
+          "price": 86,
+          "floor": "1층"
+        },
+        {
+          "month": "26.07",
+          "price": 88,
+          "floor": "2층"
+        },
+        {
+          "month": "26.08",
+          "price": 88,
+          "floor": "1층"
+        },
+        {
+          "month": "26.09",
+          "price": 89,
+          "floor": "1층"
+        },
+        {
+          "month": "26.10",
+          "price": 90,
+          "floor": "1층"
+        }
+      ],
+      "unitLabel": "만원(월세)",
+      "views": 49,
+      "createdAt": "2026-11-02T15:50:00.000Z"
+    },
+    {
+      "id": 124,
+      "category": "빌라/주택",
+      "dealType": "전세",
+      "priceText": "2억 9,000",
+      "priceNumeric": 29000,
+      "maintenanceFee": "7만원",
+      "title": "제주 애월·노형 바다조망 잔디마당 있는 신축 풀옵션 타운하우스",
+      "location": "제주특별자치도 제주시 노형동",
+      "station": "제주국제공항 차량 10분",
+      "area": 64.5,
+      "roomStructure": "복층 타운하우스 (방3 · 거실1 · 욕실2 · 잔디테라스)",
+      "floor": "2층 / 3층",
+      "direction": "남향",
+      "moveIn": "즉시 입주",
+      "lat": 33.4852,
+      "lng": 126.4785,
+      "tags": [
+        "풀옵션",
+        "주차가능",
+        "반려동물",
+        "신축"
+      ],
+      "options": [
+        "시스템에어컨 4대",
+        "양문형 냉장고",
+        "세탁기·건조기",
+        "개별 테라스",
+        "주차 2대"
+      ],
+      "agent": "제주오션 공인중개사사무소",
+      "agentPhone": "064-748-1100",
+      "image": "https://images.unsplash.com/photo-1580587771525-78b9dba3b914?auto=format&fit=crop&w=800&q=80",
+      "priceHistory": [
+        {
+          "month": "26.05",
+          "price": 27500,
+          "floor": "1층"
+        },
+        {
+          "month": "26.06",
+          "price": 27800,
+          "floor": "2층"
+        },
+        {
+          "month": "26.07",
+          "price": 28000,
+          "floor": "2층"
+        },
+        {
+          "month": "26.08",
+          "price": 28400,
+          "floor": "3층"
+        },
+        {
+          "month": "26.09",
+          "price": 28800,
+          "floor": "2층"
+        },
+        {
+          "month": "26.10",
+          "price": 29000,
+          "floor": "2층"
+        }
+      ],
+      "unitLabel": "만원",
+      "views": 58,
+      "createdAt": "2026-11-02T16:00:00.000Z"
     }
   ],
   "users": [

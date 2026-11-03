@@ -25,6 +25,10 @@ from fetch_api import (
     fetch_and_save_apt_rents,
     fetch_and_save_offi_trades,
     fetch_and_save_offi_rents,
+    fetch_and_save_rh_trades,
+    fetch_and_save_rh_rents,
+    fetch_and_save_sh_trades,
+    fetch_and_save_sh_rents,
     run_integrated_etl
 )
 
@@ -77,21 +81,36 @@ SYNC_STATUS = {
 
 
 def execute_sync_for_region(regional_code: str, deal_ymd: Optional[str] = None) -> dict:
-    """국토교통부 API를 실시간 호출하여 DB에 최신 거래를 Upsert 동기화"""
+    """국토교통부 4대 주택유형 8종 API를 실시간 호출하여 DB에 최신 거래를 Upsert 동기화"""
     target_ymd = deal_ymd or "202410"
     db = SessionLocal()
+    total_added = 0
     try:
         SYNC_STATUS["is_syncing"] = True
-        added_trade = fetch_and_save_apt_trades(regional_code, target_ymd, db)
-        added_rent = fetch_and_save_apt_rents(regional_code, target_ymd, db)
-        total_added = added_trade + added_rent
+        
+        # 1. 아파트 (매매 / 전월세)
+        try: total_added += fetch_and_save_apt_trades(regional_code, target_ymd, db)
+        except Exception as e: print(f"[Sync] 아파트 매매 스킵: {e}")
+        try: total_added += fetch_and_save_apt_rents(regional_code, target_ymd, db)
+        except Exception as e: print(f"[Sync] 아파트 전월세 스킵: {e}")
 
-        # 오피스텔도 함께 동기화
-        try:
-            added_offi = fetch_and_save_offi_trades(regional_code, target_ymd, db)
-            total_added += added_offi
-        except Exception:
-            pass
+        # 2. 오피스텔 (매매 / 전월세)
+        try: total_added += fetch_and_save_offi_trades(regional_code, target_ymd, db)
+        except Exception as e: print(f"[Sync] 오피스텔 매매 스킵: {e}")
+        try: total_added += fetch_and_save_offi_rents(regional_code, target_ymd, db)
+        except Exception as e: print(f"[Sync] 오피스텔 전월세 스킵: {e}")
+
+        # 3. 연립다세대 빌라 (매매 / 전월세)
+        try: total_added += fetch_and_save_rh_trades(regional_code, target_ymd, db)
+        except Exception as e: print(f"[Sync] 연립다세대 매매 스킵: {e}")
+        try: total_added += fetch_and_save_rh_rents(regional_code, target_ymd, db)
+        except Exception as e: print(f"[Sync] 연립다세대 전월세 스킵: {e}")
+
+        # 4. 단독/다가구 원룸 (매매 / 전월세)
+        try: total_added += fetch_and_save_sh_trades(regional_code, target_ymd, db)
+        except Exception as e: print(f"[Sync] 단독다가구 매매 스킵: {e}")
+        try: total_added += fetch_and_save_sh_rents(regional_code, target_ymd, db)
+        except Exception as e: print(f"[Sync] 단독다가구 전월세 스킵: {e}")
 
         SYNC_STATUS["last_synced_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         SYNC_STATUS["last_sync_region"] = regional_code
@@ -169,6 +188,8 @@ def get_sync_status(db: Session = Depends(get_db)):
     total_count = db.query(ApartmentTrade).count()
     apt_count = db.query(ApartmentTrade).filter(ApartmentTrade.property_type == "아파트").count()
     offi_count = db.query(ApartmentTrade).filter(ApartmentTrade.property_type == "오피스텔").count()
+    rh_count = db.query(ApartmentTrade).filter(ApartmentTrade.property_type == "연립다세대").count()
+    sh_count = db.query(ApartmentTrade).filter(ApartmentTrade.property_type == "단독다가구").count()
 
     return {
         "status": "online",
@@ -177,7 +198,9 @@ def get_sync_status(db: Session = Depends(get_db)):
         "database_stats": {
             "total_records": total_count,
             "apartment_records": apt_count,
-            "officetel_records": offi_count
+            "officetel_records": offi_count,
+            "villa_records": rh_count,
+            "detached_records": sh_count
         }
     }
 
