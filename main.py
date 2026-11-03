@@ -32,13 +32,10 @@ from fetch_api import (
     run_integrated_etl
 )
 
-# DB 테이블 생성 (테이블이 없을 경우 자동 생성)
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(
     title="ZipView 국토교통부 실거래가 API 서버",
     description="국토부 4대 주택유형 실거래가 데이터를 실시간으로 동기화 및 조회하고 프론트엔드 대시보드에 제공하는 FastAPI 서버",
-    version="1.1.0"
+    version="2.0.0"
 )
 
 # 1. CORS 미들웨어 설정
@@ -149,9 +146,13 @@ async def periodic_auto_sync_worker():
 
 @app.on_event("startup")
 async def on_startup():
-    """서버 시작 시 백그라운드 실시간 동기화 워커 가동"""
+    """서버 시작 시 비동기 DB 테이블 생성 및 백그라운드 실시간 동기화 워커 가동"""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    print("[PostgreSQL / Supabase] 비동기 데이터베이스 테이블 동기화 완료")
+
     asyncio.create_task(periodic_auto_sync_worker())
-    print("[FastAPI] ZipView 실시간 국토부 동기화 엔진 가동 완료")
+    print("[FastAPI] ZipView 실시간 국토부 비동기 동기화 엔진 가동 완료")
 
 
 @app.get("/")
