@@ -1,10 +1,18 @@
 import os
 import re
+import sys
 import asyncio
 from datetime import datetime
 from urllib.parse import unquote, urlencode
 from typing import Optional, List, Dict, Any, Set, Tuple
 from dotenv import load_dotenv
+
+# Windows 콘솔 cp949 인코딩 에러 방지
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 import aiohttp
 from sqlalchemy.ext.asyncio import AsyncSession
