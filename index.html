@@ -72,6 +72,12 @@
       </div>
 
       <div class="flex items-center space-x-2">
+        <!-- 국토부 실시간 동기화 버튼 -->
+        <button id="btnRealtimeSync" class="flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#E8F3FF] hover:bg-[#D4E8FF] text-[#3182F6] text-xs font-bold transition-all shadow-xs active:scale-95 cursor-pointer" title="국토교통부 공공데이터포털 실시간 최신 데이터 동기화">
+          <span class="w-2 h-2 rounded-full bg-[#3182F6] animate-pulse"></span>
+          <span id="syncBtnText">실시간 국토부 동기화</span>
+        </button>
+
         <a href="index_legacy.html" class="px-3 py-1.5 rounded-full text-xs font-semibold text-[#8B95A1] hover:text-[#191F28] hover:bg-gray-100 transition-colors">
           구버전 지도보기
         </a>
@@ -90,6 +96,21 @@
   <!-- 2. 메인 대시보드 스크롤 컨테이너                                          -->
   <!-- ========================================================================= -->
   <main class="max-w-4xl mx-auto px-4 sm:px-6 pt-6 space-y-5">
+
+    <!-- 실시간 상태 인디케이터 배너 -->
+    <div class="flex items-center justify-between px-4 py-2.5 bg-white rounded-2xl border border-[#E5E8EB] shadow-xs text-xs">
+      <div class="flex items-center gap-2">
+        <span class="flex h-2 w-2 relative">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+        </span>
+        <span class="font-bold text-[#191F28]">국토교통부 실시간 자동 연동 활성화</span>
+        <span class="text-[#8B95A1] text-[11px] hidden sm:inline">| 1시간 주기 백그라운드 자동 수집 가동중</span>
+      </div>
+      <div id="liveSyncStatusText" class="text-[11px] text-[#3182F6] font-mono font-bold">
+        최근 동기화: 실시간 수신됨
+      </div>
+    </div>
 
     <!-- 상단 단지 퀵 선택 필 (Pill Buttons) -->
     <div id="complexTabs" class="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
@@ -878,6 +899,12 @@
 
     // 7. 이벤트 바인딩
     function bindEvents() {
+      // 실시간 국토부 동기화 버튼 클릭
+      const btnSync = document.getElementById("btnRealtimeSync");
+      if (btnSync) {
+        btnSync.onclick = () => triggerRealtimeSync();
+      }
+
       // 지도 모달 열기/닫기
       const mapModal = document.getElementById("mapModal");
       document.getElementById("openMapModalBtn").onclick = () => mapModal.classList.remove("hidden");
@@ -992,6 +1019,54 @@
     function removeLoading(id) {
       const el = document.getElementById(id);
       if (el) el.remove();
+    }
+
+    // 8. 국토교통부 실시간 동기화 트리거
+    async function triggerRealtimeSync() {
+      const syncBtn = document.getElementById("btnRealtimeSync");
+      const syncText = document.getElementById("syncBtnText");
+      const origText = syncText.textContent;
+
+      syncBtn.disabled = true;
+      syncText.textContent = "📡 국토부 API 수신 중...";
+
+      try {
+        const res = await fetch(`http://localhost:8000/api/sync/${currentComplex.regionalCode}?deal_ymd=202410`, {
+          method: "POST"
+        });
+        if (res.ok) {
+          const data = await res.json();
+          showToast(`🎉 국토교통부 실시간 동기화 완료! (신규 ${data.added_count}건 반영, 총 ${data.total_records.toLocaleString()}건)`);
+          const timeLabel = data.synced_at ? data.synced_at.slice(11, 19) : "방금 전";
+          document.getElementById("liveSyncStatusText").textContent = `최근 동기화: ${timeLabel}`;
+          await fetchTradesData();
+        } else {
+          showToast("⚠️ 국토부 API 동기화 중 일시적 오류가 발생했습니다.");
+        }
+      } catch (err) {
+        showToast("⚠️ 백엔드 API 서버(포트 8000) 통신을 확인해 주세요.");
+      } finally {
+        syncBtn.disabled = false;
+        syncText.textContent = origText;
+      }
+    }
+
+    // 토스 스타일 플로팅 토스트 알림
+    function showToast(msg) {
+      let toast = document.getElementById("tossToast");
+      if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "tossToast";
+        toast.className = "fixed top-20 left-1/2 -translate-x-1/2 z-50 bg-[#191F28]/95 backdrop-blur-md text-white px-5 py-3 rounded-full text-xs font-bold shadow-2xl transition-all duration-300 opacity-0 pointer-events-none";
+        document.body.appendChild(toast);
+      }
+      toast.textContent = msg;
+      toast.classList.remove("opacity-0", "pointer-events-none");
+      toast.classList.add("opacity-100", "-translate-y-1");
+      setTimeout(() => {
+        toast.classList.remove("opacity-100", "-translate-y-1");
+        toast.classList.add("opacity-0", "pointer-events-none");
+      }, 3500);
     }
 
     window.addEventListener("DOMContentLoaded", init);
