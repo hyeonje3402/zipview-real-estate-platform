@@ -1,0 +1,23 @@
+# Vercel 배포 제외 목록 (프론트엔드 전용 격리)
+zipview-backend/
+backend_archive/
+*.py
+*.db
+*.sqlite3
+requirements.txt
+__pycache__/
+.env
+.env.example
+*.zip
+*.docx
+*.txt
+*.bat
+scratch/
+scripts/
+server.js
+
+# 백엔드 함수(Serverless Function) 오인식 원천 차단
+api/
+api/*
+functions/
+functions/*

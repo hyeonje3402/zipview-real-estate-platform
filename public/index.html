@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>집뷰(ZipView) - 토스 스타일 실거래가 프로</title>
+
+  <!-- 1. 폰트 및 스타일시트 -->
+  <link rel="stylesheet" as="style" crossorigin
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+
+  <!-- 2. Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'sans-serif'],
+          },
+          colors: {
+            tossBlue: '#3182F6',
+            tossDark: '#191F28',
+            tossGray: '#F2F4F6',
+            tossTextMuted: '#8B95A1',
+            tossTextBody: '#4E5968',
+            tossRed: '#F04452',
+            tossGreen: '#00B493',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #F2F4F6;
+      color: #191F28;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+
+  <!-- ========================================================================= -->
+  <!-- 3. 핵심 런타임 라이브러리 동기 로드 (순서 엄격 배치)                       -->
+  <!-- ========================================================================= -->
+  <!-- React 18 Core -->
+  <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
+  <!-- React DOM 18 -->
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <!-- PropTypes (Recharts UMD 의존성) -->
+  <script src="https://cdn.jsdelivr.net/npm/prop-types@15.8.1/prop-types.min.js"></script>
+  <!-- Recharts UMD (window.Recharts 전역 등록) -->
+  <script src="https://cdn.jsdelivr.net/npm/recharts@2.12.7/umd/Recharts.min.js"></script>
+  <!-- Lucide Icons (window.lucide 전역 등록) -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.363.0/dist/umd/lucide.min.js"></script>
+  <!-- Axios HTTP Client -->
+  <script src="https://cdn.jsdelivr.net/npm/axios@1.6.8/dist/axios.min.js"></script>
+  <!-- Kakao Maps JavaScript API SDK (services 라이브러리 포함 & autoload=false SPA 안전 로드) -->
+  <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=aa2d1500d7b8a140be177761d62f4384&libraries=services&autoload=false"></script>
+  <!-- Babel Standalone (JSX 런타임 트랜스파일러) -->
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.4/babel.min.js"></script>
+</head>
+
+<body class="bg-[#F2F4F6] text-[#191F28] min-h-screen selection:bg-[#E8F3FF] selection:text-[#3182F6]">
+  <div id="root">
+    <!-- 초기 로딩 스켈레톤 -->
+    <div class="max-w-5xl mx-auto px-4 sm:px-6 pt-24 text-center space-y-4">
+      <div
+        class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#3182F6] text-white shadow-xl animate-pulse">
+        <svg class="w-7 h-7 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+        </svg>
+      </div>
+      <h2 class="text-xl font-extrabold text-[#191F28]">집뷰(ZipView) 토스 통합 대시보드 로딩 중...</h2>
+      <p class="text-xs text-[#8B95A1]">국토교통부 실시간 실거래가 및 Recharts 시각화 엔진을 동기화하고 있습니다.</p>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 4. 브라우저 JSX 부트스트랩 및 Error #130 원천 차단 마운트 로직             -->
+  <!-- ========================================================================= -->
+  <script>
+    // 브라우저 런타임 CommonJS / ESM Interop Shim
+    window.moduleRegistry = {};
+    window.require = function(mod) {
+      if (mod === "react") return window.React;
+      if (mod === "react-dom" || mod === "react-dom/client") return window.ReactDOM;
+      if (mod === "recharts") return window.Recharts || {};
+      if (mod === "axios") return window.axios;
+      if (mod === "lucide" || mod === "lucide-react") return window.lucide || {};
+      if (mod === "./TossStyleRealEstateDashboard" || mod.endsWith("TossStyleRealEstateDashboard")) {
+        const comp = window.moduleRegistry["TossStyleRealEstateDashboard"];
+        const actual = (comp && comp.__esModule && comp.default) ? comp.default : (comp && comp.default ? comp.default : comp);
+        return { __esModule: true, default: actual, TossStyleRealEstateDashboard: actual };
+      }
+      if (mod === "./App" || mod.endsWith("App")) {
+        const comp = window.moduleRegistry["App"];
+        const actual = (comp && comp.__esModule && comp.default) ? comp.default : (comp && comp.default ? comp.default : comp);
+        return { __esModule: true, default: actual, App: actual };
+      }
+      return { __esModule: true, default: {} };
+    };
+
+    async function bootstrapZipView() {
+      try {
+        // 1. 핵심 라이브러리 로딩 확인 및 대기
+        let retryCount = 0;
+        while ((!window.React || !window.ReactDOM || !window.Recharts) && retryCount < 40) {
+          await new Promise(res => setTimeout(res, 50));
+          retryCount++;
+        }
+
+        if (!window.React || !window.ReactDOM) {
+          throw new Error("React 또는 ReactDOM 라이브러리가 로드되지 않았습니다.");
+        }
+
+        // 2. TossStyleRealEstateDashboard.jsx 로드 및 컴파일
+        const dashRes = await fetch("./TossStyleRealEstateDashboard.jsx");
+        if (!dashRes.ok) throw new Error("TossStyleRealEstateDashboard.jsx 로드 실패: " + dashRes.status);
+        const dashCode = await dashRes.text();
+        const transpiledDash = Babel.transform(dashCode, {
+          presets: ["react", ["env", { modules: "commonjs" }]]
+        }).code;
+
+        const dashModule = { exports: {} };
+        const dashFn = new Function("require", "module", "exports", transpiledDash);
+        dashFn(window.require, dashModule, dashModule.exports);
+        const DashComp = dashModule.exports.default || dashModule.exports;
+        window.moduleRegistry["TossStyleRealEstateDashboard"] = DashComp;
+
+        // 3. App.jsx 로드 및 컴파일
+        const appRes = await fetch("./App.jsx");
+        if (!appRes.ok) throw new Error("App.jsx 로드 실패: " + appRes.status);
+        const appCode = await appRes.text();
+        const transpiledApp = Babel.transform(appCode, {
+          presets: ["react", ["env", { modules: "commonjs" }]]
+        }).code;
+
+        const appModule = { exports: {} };
+        const appFn = new Function("require", "module", "exports", transpiledApp);
+        appFn(window.require, appModule, appModule.exports);
+        const AppComp = appModule.exports.default || appModule.exports;
+        window.moduleRegistry["App"] = AppComp;
+
+        // 4. 최종 마운트 컴포넌트 유효성 검증 후 React 18 루트 렌더링
+        let TargetComponent = window.moduleRegistry["App"] || window.moduleRegistry["TossStyleRealEstateDashboard"];
+        if (TargetComponent && TargetComponent.default) {
+          TargetComponent = TargetComponent.default;
+        }
+
+        if (typeof TargetComponent !== "function") {
+          throw new Error("렌더링할 루트 컴포넌트가 올바른 함수형 컴포넌트가 아닙니다. (타입: " + typeof TargetComponent + ")");
+        }
+
+        const rootContainer = document.getElementById("root");
+        const root = ReactDOM.createRoot(rootContainer);
+        root.render(React.createElement(TargetComponent));
+        console.log("✅ [집뷰] React 앱이 #root에 성공적으로 마운트되었습니다.");
+      } catch (err) {
+        console.error("❌ [집뷰] 부트스트랩 오류 발생:", err);
+        document.getElementById("root").innerHTML = `
+          <div class="max-w-xl mx-auto mt-20 p-8 bg-white rounded-3xl border border-red-200 shadow-xl text-center">
+            <div class="w-12 h-12 mx-auto mb-4 rounded-full bg-red-100 text-red-500 flex items-center justify-center font-bold text-xl">⚠️</div>
+            <h3 class="text-lg font-bold text-gray-900 mb-2">대시보드 초기화 중 오류가 발생했습니다</h3>
+            <p class="text-xs text-red-600 font-mono bg-red-50 p-4 rounded-xl mb-4 text-left whitespace-pre-wrap">${err.message}</p>
+            <button onclick="location.reload()" class="px-6 py-2.5 bg-[#3182F6] text-white text-xs font-bold rounded-xl shadow-md hover:bg-blue-600 transition-all">새로고침</button>
+          </div>
+        `;
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", bootstrapZipView);
+  </script>
+</body>
+
+</html>

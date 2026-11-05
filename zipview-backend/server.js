@@ -1044,13 +1044,13 @@ async function requestGeminiText(userPrompt, systemInstruction = "") {
   const isVertexKey = GEMINI_API_KEY.startsWith("AQ.");
   const endpoints = isVertexKey
     ? [
-        `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`,
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`
-      ]
+      `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`
+    ]
     : [
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`,
-        `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`
-      ];
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`,
+      `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`
+    ];
 
   const payload = {
     contents: [
@@ -2519,6 +2519,7 @@ const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".js": "application/javascript; charset=utf-8",
+  ".jsx": "application/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -2749,9 +2750,9 @@ const server = http.createServer(async (req, res) => {
             tags: Array.isArray(body.tags)
               ? body.tags
               : String(body.tags || "역세권, 풀옵션")
-                  .split(",")
-                  .map((t) => t.trim())
-                  .filter(Boolean),
+                .split(",")
+                .map((t) => t.trim())
+                .filter(Boolean),
             options: Array.isArray(body.options)
               ? body.options
               : ["시스템에어컨", "빌트인 냉장고", "드럼세탁기", "인덕션", "디지털도어락"],
@@ -2994,10 +2995,10 @@ ${propSummary}
 });
 
 initDB().then(() => {
-  server.listen(PORT, () => {
+  server.listen(3001, () => {
     console.log(`====================================================`);
     console.log(`🏠 집뷰(ZipView) 풀스택 서버가 시작되었습니다!`);
-    console.log(`👉 프론트엔드 & API 주소: http://localhost:${PORT}`);
+    console.log(`👉 프론트엔드 & API 주소: http://localhost:3001`);
     console.log(`====================================================`);
   });
 });

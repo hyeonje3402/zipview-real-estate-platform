@@ -481,7 +481,16 @@ async def fetch_and_save_rh_trades(
         items = parse_xml_to_items(xml_str)
         candidates = []
         for it in items:
-            mhouse_nm = (it.get("연립다세대") or it.get("연립다세대명") or it.get("mhouseNm") or "연립다세대").strip()
+            mhouse_nm = (it.get("연립다세대") or it.get("연립다세대명") or it.get("mhouseNm") or "").strip()
+            dong = (it.get("법정동") or it.get("umdNm") or "").strip()
+            jibun = (it.get("지번") or it.get("jibun") or "").strip()
+            if not mhouse_nm or mhouse_nm in ("연립다세대", "연립주택", "다세대주택"):
+                if dong and jibun:
+                    mhouse_nm = f"{dong} {jibun} (빌라/다세대)"
+                elif dong:
+                    mhouse_nm = f"{dong} 빌라/다세대"
+                else:
+                    mhouse_nm = "연립다세대(빌라)"
             deal_amount = clean_int(it.get("거래금액") or it.get("dealAmount"))
             exclu_ar = clean_float(it.get("전용면적") or it.get("대지권면적") or it.get("excluUseAr"))
             base = extract_base_fields(it, lawd_cd, deal_ymd)
@@ -529,7 +538,16 @@ async def fetch_and_save_rh_rents(
         wolse_candidates = []
 
         for it in items:
-            mhouse_nm = (it.get("연립다세대") or it.get("연립다세대명") or it.get("mhouseNm") or "연립다세대").strip()
+            mhouse_nm = (it.get("연립다세대") or it.get("연립다세대명") or it.get("mhouseNm") or "").strip()
+            dong = (it.get("법정동") or it.get("umdNm") or "").strip()
+            jibun = (it.get("지번") or it.get("jibun") or "").strip()
+            if not mhouse_nm or mhouse_nm in ("연립다세대", "연립주택", "다세대주택"):
+                if dong and jibun:
+                    mhouse_nm = f"{dong} {jibun} (빌라/다세대)"
+                elif dong:
+                    mhouse_nm = f"{dong} 빌라/다세대"
+                else:
+                    mhouse_nm = "연립다세대(빌라)"
             deposit = clean_int(it.get("보증금액") or it.get("deposit"))
             monthly_rent = clean_int(it.get("월세금액") or it.get("monthlyRent")) or 0
             trade_type = "월세" if monthly_rent > 0 else "전세"
@@ -587,7 +605,13 @@ async def fetch_and_save_sh_trades(
         for it in items:
             house_type = (it.get("주택유형") or it.get("houseType") or "단독주택").strip()
             dong = (it.get("법정동") or it.get("umdNm") or "").strip()
-            sh_nm = f"{dong} {house_type}".strip() if dong else house_type
+            jibun = (it.get("지번") or it.get("jibun") or "").strip()
+            if dong and jibun:
+                sh_nm = f"{dong} {jibun} ({house_type})".strip()
+            elif dong:
+                sh_nm = f"{dong} {house_type}".strip()
+            else:
+                sh_nm = house_type
 
             deal_amount = clean_int(it.get("거래금액") or it.get("dealAmount"))
             exclu_ar = clean_float(it.get("totalFloorAr") or it.get("plottageAr") or it.get("연면적") or it.get("대지면적") or it.get("totArea") or 80.0)
@@ -639,7 +663,13 @@ async def fetch_and_save_sh_rents(
         for it in items:
             house_type = (it.get("주택유형") or it.get("houseType") or "다가구/원룸").strip()
             dong = (it.get("법정동") or it.get("umdNm") or "").strip()
-            sh_nm = f"{dong} {house_type}".strip() if dong else house_type
+            jibun = (it.get("지번") or it.get("jibun") or "").strip()
+            if dong and jibun:
+                sh_nm = f"{dong} {jibun} ({house_type})".strip()
+            elif dong:
+                sh_nm = f"{dong} {house_type}".strip()
+            else:
+                sh_nm = house_type
 
             deposit = clean_int(it.get("보증금액") or it.get("deposit"))
             monthly_rent = clean_int(it.get("월세금액") or it.get("monthlyRent")) or 0

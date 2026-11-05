@@ -1,11 +1,9 @@
 {
-  "name": "zipview-real-estate-fullstack",
+  "name": "zipview-real-estate",
   "version": "1.0.0",
-  "description": "집뷰(ZipView) 풀스택 부동산 플랫폼 - Node.js REST API 백엔드 & 인터랙티브 프론트엔드",
-  "main": "server.js",
+  "description": "집뷰(ZipView) 토스 스타일 부동산 대시보드 프론트엔드",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js"
+    "build": "node build.js"
   },
   "engines": {
     "node": ">=18.0.0"
