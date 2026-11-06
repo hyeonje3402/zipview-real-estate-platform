@@ -52,8 +52,8 @@ export default function GeminiChatModal({ isOpen, onClose }) {
     setLoading(true);
 
     try {
-      // 백엔드 FastAPI /api/chat 호출 (LangChain Multi-LLM 팩토리 연동)
-      const res = await axios.post("http://localhost:8000/api/chat", {
+      // 백엔드 FastAPI /api/chat 호출 (Render 배포 연동)
+      const res = await axios.post("https://zipview-real-estate-platform.onrender.com/api/chat", {
         prompt: userMsg.text,
         model_choice: modelChoice
       });

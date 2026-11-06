@@ -878,6 +878,16 @@ const generateMockListings = (centerLat, centerLng, regionName) => {
   }));
 };
 
+// ==================== Render 클라우드 배포 백엔드 API 주소 ====================
+const RENDER_BACKEND_URL = "https://zipview-real-estate-platform.onrender.com";
+
+const getApiBaseUrl = () => {
+  if (typeof window !== "undefined" && window.ZIPVIEW_API_URL) {
+    return window.ZIPVIEW_API_URL;
+  }
+  return RENDER_BACKEND_URL;
+};
+
 export default function TossStyleRealEstateDashboard() {
   // ==================== 1. 전국 지역 상태 (lawdCd 필수 바인딩) ====================
   // ==================== 1. [B2B 확장] View Mode (실거래가 vs 현재 매물 Demo) ====================
@@ -1032,7 +1042,8 @@ export default function TossStyleRealEstateDashboard() {
       }
 
       try {
-        const url = `http://localhost:${targetPort}/api/trades/${currentLawdCd}`;
+        const baseUrl = getApiBaseUrl();
+        const url = `${baseUrl}/api/trades/${currentLawdCd}`;
         const response = await axios.get(url, {
           params,
           signal,
@@ -1131,7 +1142,7 @@ export default function TossStyleRealEstateDashboard() {
           return;
         }
 
-        console.warn(`[ZipView] 포트 ${targetPort} (${currentLawdCd}) 연결 확인:`, err.message);
+        console.warn(`[ZipView] 백엔드(${getApiBaseUrl()}) 연결 확인:`, err.message);
         if (!isRetry) {
           fetchData(currentLawdCd, targetPage, signal, true);
         } else {
@@ -1678,7 +1689,7 @@ export default function TossStyleRealEstateDashboard() {
     setSyncLoading(true);
     showToast(`📡 [${currentRegionLabel}] 최근 3년(36개월) 국토부 실거래가 동기화를 시작합니다...`);
     try {
-      await axios.post(`http://localhost:${apiPort}/api/sync/${lawdCd}`, {}, { timeout: 35000 });
+      await axios.post(`${getApiBaseUrl()}/api/sync/${lawdCd}`, {}, { timeout: 45000 });
       showToast(`🎉 3년 실거래가 동기화 완료! 최신 데이터를 갱신합니다.`);
       await fetchData(lawdCd, 1);
     } catch (err) {
@@ -1914,7 +1925,7 @@ export default function TossStyleRealEstateDashboard() {
 
     try {
       const res = await axios.post(
-        `http://localhost:${apiPort}/api/ai/briefing`,
+        `${getApiBaseUrl()}/api/ai/briefing`,
         {
           lawdCd,
           regionLabel: currentRegionLabel,

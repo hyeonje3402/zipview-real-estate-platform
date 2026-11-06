@@ -38,9 +38,9 @@ export default function AsilRealEstatePanel({
     setLoading(true);
     setError(null);
 
-    // 1. FastAPI 백엔드에서 특정 지역 및 단지의 실거래 데이터 호출
+    // 1. Render FastAPI 백엔드에서 특정 지역 및 단지의 실거래 데이터 호출
     axios
-      .get(`http://localhost:8000/api/trades/${regionalCode}`, {
+      .get(`https://zipview-real-estate-platform.onrender.com/api/trades/${regionalCode}`, {
         params: {
           apt_name: aptName,
           limit: 100
