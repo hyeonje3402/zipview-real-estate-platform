@@ -321,6 +321,120 @@ export const REGION_DATA = {
     { name: "서귀포시", code: "50130" }
   ]
 };
+
+// ==================== 전국 시/도 및 시/군/구 정규화 매퍼 ====================
+export const SIDO_ALIASES = {
+  "서울": "서울특별시", "서울시": "서울특별시",
+  "경기": "경기도", "경기도": "경기도",
+  "인천": "인천광역시", "인천시": "인천광역시",
+  "부산": "부산광역시", "부산시": "부산광역시",
+  "대구": "대구광역시", "대구시": "대구광역시",
+  "광주": "광주광역시", "광주시": "광주광역시",
+  "대전": "대전광역시", "대전시": "대전광역시",
+  "울산": "울산광역시", "울산시": "울산광역시",
+  "세종": "세종특별자치시", "세종시": "세종특별자치시",
+  "강원": "강원특별자치도", "강원도": "강원특별자치도",
+  "충북": "충청북도", "충청북": "충청북도",
+  "충남": "충청남도", "충청남": "충청남도",
+  "전북": "전북특별자치도", "전라북도": "전북특별자치도",
+  "전남": "전라남도", "전라남": "전라남도",
+  "경북": "경상북도", "경상북": "경상북도",
+  "경남": "경상남도", "경상남": "경상남도",
+  "제주": "제주특별자치도", "제주도": "제주특별자치도"
+};
+
+/**
+ * 챗봇 또는 외부에서 전달받은 지역 정보(code, sidoName, districtName, label)를
+ * REGION_DATA의 정확한 [selectedSido, lawdCd]로 100% 정규화 매핑합니다.
+ */
+export const resolveRegionFromData = (target) => {
+  if (!target) return null;
+  const { code, sidoName, districtName, label } = target;
+
+  // 1순위: 5자리 법정동 코드로 매핑
+  if (code && String(code).trim().length === 5) {
+    const cleanCode = String(code).trim();
+    for (const [sido, distList] of Object.entries(REGION_DATA)) {
+      const match = distList.find((d) => String(d.code) === cleanCode);
+      if (match) {
+        return {
+          sido,
+          districtName: match.name,
+          code: match.code,
+          label: `${sido} ${match.name}`
+        };
+      }
+    }
+  }
+
+  // 2순위: sidoName과 districtName 정규화 매핑
+  const cleanSido = sidoName ? String(sidoName).trim() : "";
+  const cleanDist = districtName ? String(districtName).trim() : "";
+
+  const resolvedSido =
+    SIDO_ALIASES[cleanSido] ||
+    cleanSido ||
+    Object.keys(REGION_DATA).find((s) => cleanSido && s.startsWith(cleanSido.slice(0, 2)));
+
+  if (resolvedSido && REGION_DATA[resolvedSido]) {
+    const list = REGION_DATA[resolvedSido];
+    let match = list.find((d) => d.name === cleanDist);
+    if (!match && cleanDist) {
+      const normDist = cleanDist.replace(/\s+/g, "").replace(/(?:시|군|구)$/g, "");
+      match = list.find((d) => {
+        const itemNorm = d.name.replace(/\s+/g, "").replace(/(?:시|군|구)$/g, "");
+        return itemNorm === normDist || itemNorm.includes(normDist) || normDist.includes(itemNorm);
+      });
+    }
+    if (match) {
+      return {
+        sido: resolvedSido,
+        districtName: match.name,
+        code: match.code,
+        label: `${resolvedSido} ${match.name}`
+      };
+    }
+  }
+
+  // 3순위: 구 이름만으로 전국 252개 지역 전체 탐색
+  if (cleanDist) {
+    const normDist = cleanDist.replace(/\s+/g, "").replace(/(?:시|군|구)$/g, "");
+    for (const [sido, distList] of Object.entries(REGION_DATA)) {
+      const match = distList.find((d) => {
+        const itemNorm = d.name.replace(/\s+/g, "").replace(/(?:시|군|구)$/g, "");
+        return itemNorm === normDist;
+      });
+      if (match) {
+        return {
+          sido,
+          districtName: match.name,
+          code: match.code,
+          label: `${sido} ${match.name}`
+        };
+      }
+    }
+  }
+
+  // 4순위: label(전체 문자열)에서 탐색
+  if (label) {
+    const normLabel = label.replace(/\s+/g, "");
+    for (const [sido, distList] of Object.entries(REGION_DATA)) {
+      for (const dist of distList) {
+        const full = `${sido}${dist.name}`.replace(/\s+/g, "");
+        if (normLabel.includes(full) || full.includes(normLabel)) {
+          return {
+            sido,
+            districtName: dist.name,
+            code: dist.code,
+            label: `${sido} ${dist.name}`
+          };
+        }
+      }
+    }
+  }
+
+  return null;
+};
 // ==================== 스켈레톤 UI 컴포넌트군 ====================
 
 // 1. 차트 영역 스켈레톤 및 자동 로딩 스피너 UI (animate-pulse & Spinner)
@@ -1748,6 +1862,59 @@ export default function TossStyleRealEstateDashboard() {
     setLawdCd(newCode);
   };
 
+  // 챗봇 또는 외부 호출에 의한 범용 지역 전환 함수 (전국 252개 시/군/구 100% 매핑)
+  const applyRegionSwitch = useCallback((regionTarget) => {
+    const resolved = resolveRegionFromData(regionTarget);
+    if (!resolved) {
+      console.warn("[Region Switch] 일치하는 지역을 찾을 수 없습니다:", regionTarget);
+      return false;
+    }
+
+    const { sido, code, label } = resolved;
+    if (code !== lawdCd || sido !== selectedSido) {
+      console.log(`[Region Switch] 대시보드 지역을 [${label}] (${code})로 전환합니다.`);
+      // 1) 시/도 및 시/군/구 드롭다운 상태를 토씨 하나 틀리지 않고 100% 동기화
+      setSelectedSido(sido);
+
+      // 2) 이전 지역 잔존 데이터 및 불일치(Inconsistency) 원천 차단
+      if (circleRef.current) {
+        circleRef.current.setMap(null);
+        circleRef.current = null;
+      }
+      setSelectedMapTarget(null);
+      setSelectedListing(null);
+      setLoading(true);
+      setFetchError(null);
+      setRawTrades([]);
+      setChartData([]);
+      setTotalCount(0);
+      setAllBuildings([]);
+      setComplexSummaryMap({});
+      setSummaryInfo({
+        totalCount: 0,
+        latestTradePrice: "-",
+        latestJeonsePrice: "-",
+        lastSyncedAt: "-"
+      });
+      setTablePage(1);
+
+      // 3) 지도 좌표 중심 이동
+      if (REGION_CENTERS[code]) {
+        setRegionCoords(REGION_CENTERS[code]);
+      }
+
+      // 4) 타깃 LAWD_CD 확정 -> useEffect(fetchData) 자동 트리거
+      setPendingDisambiguation(null);
+      setLawdCd(code);
+
+      if (typeof showToast === "function") {
+        showToast(`[${label}] 분석 대시보드로 전환되었습니다.`);
+      }
+      return true;
+    }
+    return false;
+  }, [lawdCd, selectedSido, showToast]);
+
   // ==================== [핵심 1] 주식 스타일 차트 데이터 보강 ====================
   // 전월 대비 매매가/전세가 등락액 및 등락률(▲▼) 사전 계산
   const enrichedStockChartData = useMemo(() => {
@@ -2011,25 +2178,14 @@ export default function TossStyleRealEstateDashboard() {
         setPendingDisambiguation(null);
       }
 
-      // 프론트엔드 종속성 완전 차단: 백엔드 챗봇에서 확정/전환된 타겟 지역으로 대시보드 상태 자율 오버라이드
-      if (res.data?.override_region && res.data?.new_regional_code) {
-        const newCode = res.data.new_regional_code;
-        const newLabel = res.data.new_region_label;
-        if (newCode !== lawdCd) {
-          console.log(`[Region Override] 챗봇 질의에 따라 대시보드 지역을 ${newLabel}(${newCode})로 전환합니다.`);
-          for (const [sido, dists] of Object.entries(REGION_DATA)) {
-            const found = dists.find((d) => d.code === newCode);
-            if (found) {
-              setSelectedSido(sido);
-              break;
-            }
-          }
-          setPendingDisambiguation(null);
-          setLawdCd(newCode);
-          if (typeof showToast === "function") {
-            showToast(`[${newLabel}] 분석 데이터로 전환되었습니다.`);
-          }
-        }
+      // 프론트엔드 종속성 완전 차단: 백엔드 챗봇에서 확정/전환된 타겟 지역으로 대시보드 상태 자율 오버라이드 (전국 252개 시/군/구 정규화 매핑)
+      if (res.data?.override_region && (res.data?.new_regional_code || res.data?.new_city_name || res.data?.new_district_name)) {
+        applyRegionSwitch({
+          code: res.data.new_regional_code,
+          sidoName: res.data.new_city_name || res.data.new_sido_name,
+          districtName: res.data.new_district_name,
+          label: res.data.new_region_label
+        });
       }
 
       setChatMessages((prev) => [

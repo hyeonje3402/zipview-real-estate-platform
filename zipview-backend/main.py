@@ -27,6 +27,7 @@ from ai_agent import run_ai_consultant, ask_multi_llm_agent
 from lawd_cd_registry import (
     resolve_lawd_cd,
     get_region_name,
+    get_sido_and_district,
     LAWD_CD_MASTER_LIST,
     INTEGRATED_CITY_CODE_MAPPING
 )
@@ -787,6 +788,16 @@ async def chat_with_multi_llm(req: ChatRequest, db: AsyncSession = Depends(get_d
     is_override = result.get("override_region", False) if isinstance(result, dict) else False
     new_code = result.get("new_regional_code") if isinstance(result, dict) else None
     new_label = result.get("new_region_label") if isinstance(result, dict) else None
+    new_city = result.get("new_city_name") if isinstance(result, dict) else None
+    new_sido = result.get("new_sido_name") if isinstance(result, dict) else None
+    new_dist = result.get("new_district_name") if isinstance(result, dict) else None
+
+    # new_code가 존재할 때 만약 sido/district가 누락되어 있다면 전국 252개 딕셔너리에서 자동 추출
+    if new_code and (not new_city or not new_dist):
+        s_name, d_name = get_sido_and_district(new_code)
+        new_city = new_city or s_name
+        new_sido = new_sido or s_name
+        new_dist = new_dist or d_name
 
     return {
         "status": "success",
@@ -798,7 +809,10 @@ async def chat_with_multi_llm(req: ChatRequest, db: AsyncSession = Depends(get_d
         "disambiguation": None,
         "override_region": is_override,
         "new_regional_code": new_code,
-        "new_region_label": new_label
+        "new_region_label": new_label,
+        "new_city_name": new_city,
+        "new_sido_name": new_sido,
+        "new_district_name": new_dist
     }
 
 

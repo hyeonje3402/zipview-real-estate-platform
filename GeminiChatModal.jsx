@@ -86,8 +86,11 @@ export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegion
         setPendingDisambiguation(null);
       }
 
-      if (res.data?.override_region && res.data?.new_regional_code && typeof onRegionOverride === "function") {
-        onRegionOverride(res.data.new_regional_code, res.data.new_region_label);
+      if (res.data?.override_region && typeof onRegionOverride === "function") {
+        onRegionOverride(res.data.new_regional_code, res.data.new_region_label, {
+          city_name: res.data.new_city_name || res.data.new_sido_name,
+          district_name: res.data.new_district_name
+        });
       }
 
       const aiMsg = {

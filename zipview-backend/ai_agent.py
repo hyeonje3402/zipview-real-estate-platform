@@ -20,6 +20,7 @@ from models import ApartmentTrade
 from lawd_cd_registry import (
     resolve_lawd_cd,
     get_region_name,
+    get_sido_and_district,
     NORMALIZED_NAME_TO_CODE,
     check_dong_ambiguity,
     check_global_ambiguity,
@@ -572,12 +573,16 @@ async def run_ai_consultant(
 
             cond_desc = ", ".join(cond_parts) if cond_parts else f"'{prompt}'"
             empty_msg = f"**요청하신 [{full_target_name}]의 거래 내역을 새로 분석했습니다.**\n\n조건({cond_desc})에 부합하는 최근 국토교통부 실거래 내역이 데이터베이스에 없습니다."
+            sido_name, district_name = get_sido_and_district(target_code)
             return {
                 "status": "success",
                 "reply": empty_msg,
                 "override_region": True,
                 "new_regional_code": target_code,
-                "new_region_label": resolved_label
+                "new_region_label": resolved_label,
+                "new_city_name": sido_name,
+                "new_sido_name": sido_name,
+                "new_district_name": district_name
             }
 
         briefing_text = await _format_briefing_response(
@@ -604,12 +609,16 @@ async def run_ai_consultant(
         session_data.setdefault("history", []).append({"role": "user", "content": prompt})
         session_data.setdefault("history", []).append({"role": "assistant", "content": briefing_text})
 
+        sido_name, district_name = get_sido_and_district(target_code)
         return {
             "status": "success",
             "reply": briefing_text,
             "override_region": True,
             "new_regional_code": target_code,
-            "new_region_label": resolved_label
+            "new_region_label": resolved_label,
+            "new_city_name": sido_name,
+            "new_sido_name": sido_name,
+            "new_district_name": district_name
         }
 
     # ---------------- 2단계: 신규 질의 자연어 조건 파싱 & 대명사/이전 맥락 복원 ----------------
@@ -732,12 +741,16 @@ async def run_ai_consultant(
 
         cond_desc = ", ".join(cond_parts) if cond_parts else f"'{prompt}'"
         empty_lead = f"**요청하신 [{full_target_name}]의 거래 내역을 새로 분석했습니다.**\n\n" if is_new_override else ""
+        sido_name, district_name = get_sido_and_district(target_code)
         return {
             "status": "success",
             "reply": f"{empty_lead}요청하신 조건({cond_desc})에 해당하는 최근 국토교통부 실거래 내역이 데이터베이스에 없습니다.",
             "override_region": is_new_override,
             "new_regional_code": target_code,
-            "new_region_label": region_name
+            "new_region_label": region_name,
+            "new_city_name": sido_name,
+            "new_sido_name": sido_name,
+            "new_district_name": district_name
         }
 
     # ---------------- 6단계: 실제 데이터 브리핑 생성 ----------------
@@ -765,12 +778,16 @@ async def run_ai_consultant(
     session_data.setdefault("history", []).append({"role": "user", "content": prompt})
     session_data.setdefault("history", []).append({"role": "assistant", "content": briefing_text})
 
+    sido_name, district_name = get_sido_and_district(target_code)
     return {
         "status": "success",
         "reply": briefing_text,
         "override_region": is_new_override,
         "new_regional_code": target_code,
-        "new_region_label": region_name
+        "new_region_label": region_name,
+        "new_city_name": sido_name,
+        "new_sido_name": sido_name,
+        "new_district_name": district_name
     }
 
 
