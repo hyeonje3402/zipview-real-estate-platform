@@ -23,6 +23,12 @@ from sqlalchemy import func, desc, select, or_
 from database import engine, get_db, SessionLocal, Base
 from models import ApartmentTrade
 from ai_agent import ask_multi_llm_agent, LLMAgentFactory
+from lawd_cd_registry import (
+    resolve_lawd_cd,
+    get_region_name,
+    LAWD_CD_MASTER_LIST,
+    INTEGRATED_CITY_CODE_MAPPING
+)
 from fetch_api import (
     fetch_and_save_apt_trades,
     fetch_and_save_apt_rents,
@@ -262,8 +268,14 @@ async def sync_realtime_data(
     deal_ymd: Optional[str] = Query("202410", description="계약년월 (YYYYMM)"),
     background_tasks: BackgroundTasks = None
 ):
-    """프론트엔드 실시간 동기화 요청 처리 (병렬 청크 비동기 실행)"""
-    result = await execute_sync_for_region(regional_code, deal_ymd)
+    """프론트엔드 실시간 동기화 요청 처리 (전국 252개 표준 LAWD_CD 자동 매핑 및 병렬 청크 실행)"""
+    target_code = resolve_lawd_cd(regional_code)
+    if not target_code:
+        raise HTTPException(
+            status_code=400,
+            detail=f"[Mapping Error] 요청된 지역명: \"{regional_code}\"을(를) 찾을 수 없습니다."
+        )
+    result = await execute_sync_for_region(target_code, deal_ymd)
     return result
 
 
@@ -284,32 +296,31 @@ async def get_sync_status(db: AsyncSession = Depends(get_db)):
     }
 
 
-# ==================== 5-1. 통합시/특례시 구 단위 5자리 법정동코드 매핑 ====================
-# 국토부 실거래가 Open API는 시 전체 코드(0으로 끝나는 코드)가 아닌 구 단위 5자리(LAWD_CD)로만 데이터를 반환합니다.
-INTEGRATED_CITY_CODE_MAPPING = {
-    # 경남 창원시 전체(48120) -> 기본값 창원시 의창구(48121)
-    "48120": "48121",
-    # 경기 수원시 전체(41110) -> 기본값 장안구(41111)
-    "41110": "41111",
-    # 경기 성남시 전체(41130) -> 기본값 분당구(41135)
-    "41130": "41135",
-    # 경기 안양시 전체(41170) -> 기본값 동안구(41173)
-    "41170": "41173",
-    # 경기 안산시 전체(41270) -> 기본값 상록구(41271)
-    "41270": "41271",
-    # 경기 고양시 전체(41280) -> 기본값 일산동구(41285)
-    "41280": "41285",
-    # 경기 용인시 전체(41460) -> 기본값 수지구(41465)
-    "41460": "41465",
-    # 충북 청주시 전체(43110) -> 기본값 상당구(43111)
-    "43110": "43111",
-    # 충남 천안시 전체(44130) -> 기본값 서북구(44133)
-    "44130": "44133",
-    # 전북 전주시 전체(45110) -> 기본값 완산구(45111)
-    "45110": "45111",
-    # 경북 포항시 전체(47110) -> 기본값 남구(47111)
-    "47110": "47111"
-}
+# ==================== 5-1. 전국 252개 전수 법정동 코드(LAWD_CD) 레지스트리 API ====================
+@app.get("/api/regions")
+def get_all_regions():
+    """대한민국 17개 시·도 252개 전수 시·군·구 표준 법정동 코드(LAWD_CD) 마스터 목록 반환"""
+    return {
+        "status": "success",
+        "total": len(LAWD_CD_MASTER_LIST),
+        "regions": LAWD_CD_MASTER_LIST
+    }
+
+
+@app.get("/api/region-lookup")
+def lookup_region_code(query: str = Query(..., description="지역명 또는 법정동 코드 (예: 강남구, 11680, 창원시 의창구, 창원시의창구)")):
+    """지역명(띄어쓰기 무관/특수문자 정규화) 검색 및 5자리 표준 법정동 코드(LAWD_CD) 매핑 변환"""
+    code = resolve_lawd_cd(query)
+    if not code:
+        raise HTTPException(
+            status_code=404,
+            detail=f"[Mapping Error] 요청된 지역명: \"{query}\"을(를) 찾을 수 없습니다."
+        )
+    return {
+        "query": query,
+        "lawd_cd": code,
+        "full_name": get_region_name(code)
+    }
 
 
 # ==================== 6. [핵심] 초고속 실거래가 조회 (2단계 스마트 캐싱 & 서버사이드 페이징) ====================
@@ -335,10 +346,18 @@ async def get_trades(
     3. 36개월 차트 통계는 DB 전수 GROUP BY 집계로 정확하게 계산하여 chart_data 반환
     4. 테이블 상세 목록은 offset/limit 기반 안전 페이징으로 전달하여 브라우저 DOM 과부하 차단
     5. 2단계 스마트 캐싱: 인메모리 TTL 캐시(5ms) + PostgreSQL 누락월 자동 병렬 보충
+    6. 전국 252개 시·군·구 표준 5자리 법정동 코드 자동 매핑 및 디버깅 로그 강화
     """
-    # 동적 파라미터 매핑 및 통합시 코드 예외 자동 정규화
-    raw_code = str(lawdCd or LAWD_CD or regional_code).strip()
-    target_code = INTEGRATED_CITY_CODE_MAPPING.get(raw_code, raw_code)
+    # 전국 단위 5자리 법정동 코드(LAWD_CD) 완전 정규화 매핑
+    raw_input = str(regional_code or lawdCd or LAWD_CD or "").strip()
+    target_code = resolve_lawd_cd(raw_input)
+    if not target_code:
+        # resolve_lawd_cd 내부에서 [Mapping Error] 콘솔 로그를 이미 표준 형식으로 출력함
+        raise HTTPException(
+            status_code=400,
+            detail=f"[Mapping Error] 요청된 지역명: \"{raw_input}\"을(를) 찾을 수 없습니다."
+        )
+
     calc_offset = offset if offset is not None else (page - 1) * limit
 
     # ---------------- 1단계: 인메모리 고속 캐시 확인 ----------------
