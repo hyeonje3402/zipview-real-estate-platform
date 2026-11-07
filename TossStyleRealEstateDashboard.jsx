@@ -325,7 +325,7 @@ export const REGION_DATA = {
 
 // 1. 차트 영역 스켈레톤 UI (animate-pulse)
 const ChartSkeleton = ({ regionLabel }) => (
-  <div className="w-full h-80 min-h-[320px] bg-[#F2F4F6] rounded-2xl animate-pulse relative overflow-hidden border border-[#E5E8EB] p-6 flex flex-col justify-between">
+  <div className="w-full h-80 min-h-[320px] bg-[#F2F4F6] rounded-xl animate-pulse relative overflow-hidden border border-[#E5E8EB] p-6 flex flex-col justify-between">
     <div className="flex items-center justify-between">
       <div className="space-y-2">
         <div className="h-4 bg-[#E5E8EB] rounded-md w-48"></div>
@@ -352,7 +352,7 @@ const ChartSkeleton = ({ regionLabel }) => (
     </div>
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
       <div className="bg-white/90 backdrop-blur-xs px-4 py-2 rounded-full border border-[#E5E8EB] shadow-xs flex items-center gap-2">
-        <div className="w-2.5 h-2.5 rounded-full bg-[#3182F6] animate-ping"></div>
+        <div className="w-2.5 h-2.5 rounded-full bg-[#0f172a] animate-ping"></div>
         <span className="text-xs font-bold text-[#4E5968]">
           {regionLabel} 36개월 주식형 복합 시세 분석 중...
         </span>
@@ -363,7 +363,7 @@ const ChartSkeleton = ({ regionLabel }) => (
 
 // 2. 테이블 영역 스켈레톤 UI (5~6줄 막대기 형태)
 const TableSkeleton = ({ regionLabel }) => (
-  <div className="space-y-3 bg-white rounded-2xl border border-[#F2F4F6] p-4 animate-pulse">
+  <div className="space-y-3 bg-white rounded-xl border border-[#F2F4F6] p-4 animate-pulse">
     <div className="flex items-center justify-between pb-3 border-b border-[#F2F4F6]">
       <div className="h-4 bg-[#E5E8EB] rounded w-36"></div>
       <div className="h-4 bg-[#E5E8EB] rounded w-20"></div>
@@ -394,7 +394,7 @@ const TableSkeleton = ({ regionLabel }) => (
 
 // 3. 비교 매트릭스 스켈레톤 UI
 const MatrixSkeleton = ({ regionLabel }) => (
-  <div className="w-full h-48 bg-[#F2F4F6] rounded-2xl animate-pulse flex flex-col items-center justify-center p-6 border border-[#E5E8EB] space-y-2">
+  <div className="w-full h-48 bg-[#F2F4F6] rounded-xl animate-pulse flex flex-col items-center justify-center p-6 border border-[#E5E8EB] space-y-2">
     <div className="w-8 h-8 rounded-full bg-[#E5E8EB] flex items-center justify-center">
       <div className="w-4 h-4 rounded-full bg-[#D1D6DB]"></div>
     </div>
@@ -524,7 +524,7 @@ const TossStockChartTooltip = ({ active, payload, label }) => {
   const data = payload[0]?.payload || {};
 
   return (
-    <div className="bg-[#191F28]/95 backdrop-blur-md text-white px-4 py-3 rounded-2xl shadow-2xl text-xs border border-white/10 space-y-2 min-w-[200px]">
+    <div className="bg-[#191F28]/95 backdrop-blur-md text-white px-4 py-3 rounded-xl shadow-sm text-xs border border-white/10 space-y-2 min-w-[200px]">
       <div className="text-[#8B95A1] font-semibold pb-1.5 border-b border-white/10 flex justify-between items-center">
         <span className="font-extrabold text-white text-sm">20{label}</span>
         <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded-full text-[#B0B8C1] font-medium">
@@ -544,7 +544,7 @@ const TossStockChartTooltip = ({ active, payload, label }) => {
           </div>
           {data.tradeDiff !== undefined && data.tradeDiff !== 0 && (
             <div className="flex justify-end text-[11px] font-extrabold">
-              <span className={data.isTradeUp ? "text-[#F04452]" : "text-[#3182F6]"}>
+              <span className={data.isTradeUp ? "text-[#F04452]" : "text-[#1e3a8a]"}>
                 {data.isTradeUp ? "▲ +" : "▼ -"}{formatTossMoney(Math.abs(data.tradeDiff))} ({data.tradeRate > 0 ? `+${data.tradeRate}` : data.tradeRate}%)
               </span>
             </div>
@@ -555,16 +555,16 @@ const TossStockChartTooltip = ({ active, payload, label }) => {
       {/* 전세 평균가 & 주식형 등락률 */}
       {data.jeonsePrice > 0 && (
         <div className="space-y-0.5">
-          <div className="flex justify-between items-center text-[#3182F6]">
+          <div className="flex justify-between items-center text-[#1e3a8a]">
             <span className="font-bold flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#3182F6]"></span>
+              <span className="w-2 h-2 rounded-full bg-[#0f172a]"></span>
               전세 평균가
             </span>
             <span className="font-black text-sm">{formatTossMoney(data.jeonsePrice)}</span>
           </div>
           {data.jeonseDiff !== undefined && data.jeonseDiff !== 0 && (
             <div className="flex justify-end text-[11px] font-extrabold">
-              <span className={data.isJeonseUp ? "text-[#F04452]" : "text-[#3182F6]"}>
+              <span className={data.isJeonseUp ? "text-[#F04452]" : "text-[#1e3a8a]"}>
                 {data.isJeonseUp ? "▲ +" : "▼ -"}{formatTossMoney(Math.abs(data.jeonseDiff))} ({data.jeonseRate > 0 ? `+${data.jeonseRate}` : data.jeonseRate}%)
               </span>
             </div>
@@ -588,10 +588,10 @@ const TossStockChartTooltip = ({ active, payload, label }) => {
 const ComparisonBarTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
   return (
-    <div className="bg-[#191F28]/95 backdrop-blur-md text-white px-4 py-3 rounded-2xl shadow-xl text-xs border border-white/10 space-y-1.5 min-w-[170px]">
+    <div className="bg-[#191F28]/95 backdrop-blur-md text-white px-4 py-3 rounded-xl shadow-xs text-xs border border-white/10 space-y-1.5 min-w-[170px]">
       <div className="text-[#8B95A1] font-bold pb-1 border-b border-white/10 flex justify-between">
         <span>{label}</span>
-        <span className="text-[#3182F6] font-extrabold">1:1 대조</span>
+        <span className="text-[#1e3a8a] font-extrabold">1:1 대조</span>
       </div>
       {payload.map((entry, index) => {
         const isPercent = String(label).includes("전세가율");
@@ -1146,7 +1146,7 @@ export default function TossStyleRealEstateDashboard() {
         if (!isRetry) {
           fetchData(currentLawdCd, targetPage, signal, true);
         } else {
-          showToast(`⚠️ [${currentRegionLabel}] 데이터 통신 중입니다. 잠시 후 새로고침해 주세요.`);
+          showToast(`[${currentRegionLabel}] 데이터 통신 중입니다. 잠시 후 다시 시도해 주십시오.`);
         }
       } finally {
         if (!signal?.aborted) {
@@ -1254,11 +1254,11 @@ export default function TossStyleRealEstateDashboard() {
         center: coords,
         radius: radius, // 약 30~50m (기본 40m)
         strokeWeight: 2,
-        strokeColor: "#1B64DA", // 채우기 색상보다 약간 진한 파란색 테두리
+        strokeColor: "#0f172a", // 채우기 색상보다 약간 진한 파란색 테두리
         strokeOpacity: 0.85,
         strokeStyle: "solid",
-        fillColor: "#3182F6", // 토스 브랜드 컬러
-        fillOpacity: 0.22, // 지도의 실제 건물 형태가 은은하게 비쳐 보이도록 투명도 0.22 적용
+        fillColor: "#1e3a8a", // 토스 브랜드 컬러
+        fillOpacity: 0.16, // 지도의 실제 건물 형태가 은은하게 비쳐 보이도록 투명도 0.22 적용
         zIndex: 1 // 마커와 인포윈도우를 가리지 않도록 최하단 오버레이 레이어 지정
       });
 
@@ -1329,8 +1329,8 @@ export default function TossStyleRealEstateDashboard() {
               : cleanAddr;
 
             const infoHtml = `
-              <div style="padding:10px 14px;background:#ffffff;border-radius:12px;border:1px solid #E5E8EB;box-shadow:0 8px 20px rgba(0,0,0,0.12);font-family:Pretendard,sans-serif;min-width:180px;">
-                <div style="font-size:10px;font-weight:700;color:#3182F6;margin-bottom:2px;">📍 실거래 위치</div>
+              <div style="padding:12px 14px;background:#ffffff;border-radius:6px;border:1px solid #cbd5e1;box-shadow:0 4px 6px -1px rgba(15,23,42,0.08);font-family:Pretendard,sans-serif;min-width:180px;">
+                <div style="font-size:10px;font-weight:700;color:#1e3a8a;margin-bottom:2px;letter-spacing:0.02em;">실거래 단지 정보</div>
                 <div style="font-size:13px;font-weight:800;color:#191F28;line-height:1.3;">${bTitle}</div>
                 <div style="font-size:11px;color:#8B95A1;margin-top:2px;">${subText}</div>
                 ${priceHtml}
@@ -1536,17 +1536,17 @@ export default function TossStyleRealEstateDashboard() {
     const infoContent = `
       <div style="padding:14px 16px;background:#ffffff;border-radius:14px;border:1px solid #E5E8EB;box-shadow:0 12px 28px rgba(0,0,0,0.12);font-family:Pretendard,sans-serif;min-width:240px;max-width:290px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-          <span style="font-size:10px;font-weight:800;color:#3182F6;background:#E8F3FF;padding:2px 7px;border-radius:5px;">🏠 제휴 중개사 매물</span>
+          <span style="font-size:10px;font-weight:700;color:#0f172a;background:#f1f5f9;border:1px solid #e2e8f0;padding:2px 6px;border-radius:4px;">B2B 제휴 검증 매물</span>
           <span style="font-size:10px;font-weight:800;color:#6B7684;background:#F2F4F6;padding:2px 6px;border-radius:5px;">${item.property_type} · ${item.deal_type}</span>
         </div>
         <div style="font-size:13px;font-weight:900;color:#191F28;line-height:1.3;margin-bottom:4px;">${item.title}</div>
         <div style="font-size:15px;font-weight:900;color:${priceColor};margin-bottom:4px;">${item.price_summary}</div>
         <div style="font-size:11px;font-weight:600;color:#4E5968;margin-bottom:8px;">${item.floor} · ${item.area}</div>
         <div style="font-size:11px;color:#8B95A1;margin-bottom:8px;padding-top:6px;border-top:1px solid #F2F4F6;">
-          🏢 ${item.agency_name} (${item.agent_name || "담당 중개사"})
+          중개사: ${item.agency_name} (${item.agent_name || "담당자"})
         </div>
-        <a href="tel:${item.contact}" onclick="event.stopPropagation();" style="display:flex;align-items:center;justify-content:center;gap:4px;padding:8px 0;background:#3182F6;color:#ffffff;font-size:11px;font-weight:800;border-radius:8px;text-decoration:none;box-shadow:0 2px 6px rgba(49,130,246,0.3);">
-          <span>📞 연락처: ${item.contact}</span>
+        <a href="tel:${item.contact}" onclick="event.stopPropagation();" style="display:flex;align-items:center;justify-content:center;gap:4px;padding:8px 0;background:#0f172a;color:#ffffff;font-size:11px;font-weight:800;border-radius:8px;text-decoration:none;box-shadow:0 2px 6px rgba(49,130,246,0.3);">
+          <span>문의: ${item.contact}</span>
         </a>
       </div>
     `;
@@ -1562,7 +1562,7 @@ export default function TossStyleRealEstateDashboard() {
   // 카드 클릭 시 매물 선택 및 지도 포커스 이동 (자동 줌인 & 영역 하이라이트)
   const handleSelectListing = useCallback((item) => {
     setSelectedListing(item);
-    showToast(`🏠 [매물 선택] ${item.title}`);
+    showToast(`[매물 선택] ${item.title}`);
     const map = mapInstanceRef.current;
     if (map && window.kakao && window.kakao.maps) {
       const coords = new window.kakao.maps.LatLng(item.lat, item.lng);
@@ -1687,10 +1687,10 @@ export default function TossStyleRealEstateDashboard() {
   // 수동 실시간 국토부 동기화 트리거
   const handleRealtimeSync = async () => {
     setSyncLoading(true);
-    showToast(`📡 [${currentRegionLabel}] 최근 3년(36개월) 국토부 실거래가 동기화를 시작합니다...`);
+    showToast(`[${currentRegionLabel}] 최근 36개월 국토교통부 실거래 원장 동기화를 시작합니다.`);
     try {
       await axios.post(`${getApiBaseUrl()}/api/sync/${lawdCd}`, {}, { timeout: 45000 });
-      showToast(`🎉 3년 실거래가 동기화 완료! 최신 데이터를 갱신합니다.`);
+      showToast(`실거래 원장 동기화 완료: 최신 데이터를 갱신합니다.`);
       await fetchData(lawdCd, 1);
     } catch (err) {
       showToast("실시간 3년 치 동기화 중 일시적 오류가 발생했습니다.");
@@ -1976,18 +1976,18 @@ export default function TossStyleRealEstateDashboard() {
           {/* 1) 로고 영역 & 모바일 동기화 버튼 */}
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2.5">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-[#3182F6] flex items-center justify-center text-white font-black text-lg sm:text-xl shadow-xs shrink-0">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#0f172a] flex items-center justify-center text-white font-black text-lg sm:text-xl shadow-xs shrink-0">
                 Z
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
                   <span className="font-extrabold text-base sm:text-lg tracking-tight text-[#191F28]">집뷰</span>
-                  <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[#3182F6]/10 text-[#3182F6]">
-                    PRO 3.0
+                  <span className="text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-[#0f172a]/10 text-[#1e3a8a]">
+                    ENTERPRISE
                   </span>
                 </div>
                 <p className="text-[10px] sm:text-[11px] font-medium text-[#8B95A1] -mt-0.5 hidden xs:block">
-                  실거래가 & 주식형 시각화
+                  부동산 실거래 원장 데이터 인텔리전스
                 </p>
               </div>
             </div>
@@ -2000,8 +2000,7 @@ export default function TossStyleRealEstateDashboard() {
                 title="국토부 실시간 동기화"
                 className="flex items-center gap-1 px-3 min-h-[40px] bg-white border border-[#E5E8EB] hover:bg-[#F2F4F6] text-[#191F28] rounded-full text-xs font-bold transition-all shadow-2xs active:scale-95 disabled:opacity-50"
               >
-                <span className={syncLoading ? "animate-spin" : ""}>🔄</span>
-                <span className="text-[11px] font-extrabold">동기화</span>
+                <span className={syncLoading ? "animate-spin" : ""}>동기화</span>
               </button>
             </div>
           </div>
@@ -2013,7 +2012,7 @@ export default function TossStyleRealEstateDashboard() {
               <button
                 onClick={() => {
                   setViewMode("transaction");
-                  showToast("📊 [과거 실거래가 모드] 국토교통부 3개년 실거래 빅데이터를 표시합니다.");
+                  showToast("[실거래가 분석] 국토교통부 3개년 실거래 원장 데이터를 표시합니다.");
                 }}
                 className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 min-h-[42px] rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
                   viewMode === "transaction"
@@ -2021,23 +2020,21 @@ export default function TossStyleRealEstateDashboard() {
                     : "text-[#8B95A1] hover:text-[#4E5968]"
                 }`}
               >
-                <span>📊</span>
-                <span>과거 실거래가</span>
+                <span>실거래 원장 분석</span>
               </button>
               <button
                 onClick={() => {
                   setViewMode("listing");
-                  showToast("🏠 [현재 매물 보기(Demo)] B2B 제휴 중개사 실시간 호가 매물을 표시합니다.");
+                  showToast("[제휴 매물 현황] B2B 제휴 중개사 현장 확인 매물을 표시합니다.");
                 }}
                 className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 min-h-[42px] rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
                   viewMode === "listing"
-                    ? "bg-[#3182F6] text-white shadow-xs font-black"
+                    ? "bg-[#0f172a] text-white shadow-xs font-black"
                     : "text-[#8B95A1] hover:text-[#4E5968]"
                 }`}
               >
-                <span>🏠</span>
-                <span>현재 매물(Demo)</span>
-                <span className="bg-[#FEE500] text-[#191F28] text-[9px] font-black px-1.5 py-0.5 rounded-full">
+                <span>B2B 제휴 매물 현황</span>
+                <span className="bg-slate-800 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
                   B2B
                 </span>
               </button>
@@ -2050,7 +2047,7 @@ export default function TossStyleRealEstateDashboard() {
                   <select
                     value={selectedSido}
                     onChange={handleSidoChange}
-                    className="w-full sm:w-auto appearance-none bg-[#F2F4F6] text-xs font-bold text-[#191F28] pl-3 pr-6 py-2 min-h-[40px] rounded-full border border-transparent outline-none cursor-pointer hover:bg-[#E5E8EB] focus:ring-2 focus:ring-[#3182F6]/30 focus:border-[#3182F6] transition-all"
+                    className="w-full sm:w-auto appearance-none bg-[#F2F4F6] text-xs font-bold text-[#191F28] pl-3 pr-6 py-2 min-h-[40px] rounded-full border border-transparent outline-none cursor-pointer hover:bg-[#E5E8EB] focus:ring-2 focus:ring-[#3182F6]/30 focus:border-[#0f172a] transition-all"
                   >
                     {Object.keys(REGION_DATA).map((sido) => (
                       <option key={sido} value={sido}>
@@ -2069,7 +2066,7 @@ export default function TossStyleRealEstateDashboard() {
                   <select
                     value={lawdCd}
                     onChange={handleLawdCdChange}
-                    className="w-full sm:w-auto appearance-none bg-[#F2F4F6] text-xs font-bold text-[#191F28] pl-3 pr-6 py-2 min-h-[40px] rounded-full border border-transparent outline-none cursor-pointer hover:bg-[#E5E8EB] focus:ring-2 focus:ring-[#3182F6]/30 focus:border-[#3182F6] transition-all"
+                    className="w-full sm:w-auto appearance-none bg-[#F2F4F6] text-xs font-bold text-[#191F28] pl-3 pr-6 py-2 min-h-[40px] rounded-full border border-transparent outline-none cursor-pointer hover:bg-[#E5E8EB] focus:ring-2 focus:ring-[#3182F6]/30 focus:border-[#0f172a] transition-all"
                   >
                     {(REGION_DATA[selectedSido] || []).map((district) => (
                       <option key={district.code} value={district.code}>
@@ -2089,8 +2086,7 @@ export default function TossStyleRealEstateDashboard() {
                 disabled={syncLoading}
                 className="hidden sm:flex items-center space-x-1.5 px-3.5 py-2 min-h-[42px] bg-white border border-[#E5E8EB] hover:bg-[#F2F4F6] text-[#191F28] rounded-full text-xs font-bold transition-all shadow-2xs active:scale-95 disabled:opacity-50 shrink-0"
               >
-                <span className={syncLoading ? "animate-spin" : ""}>🔄</span>
-                <span>{syncLoading ? "동기화 중..." : "실시간 동기화"}</span>
+                <span className={syncLoading ? "animate-spin" : ""}></span><span>{syncLoading ? "동기화 진행 중..." : "실시간 원장 동기화"}</span>
               </button>
             </div>
           </div>
@@ -2104,26 +2100,26 @@ export default function TossStyleRealEstateDashboard() {
         {/* ========================================================================= */}
         {/* [스마트 자동완성 검색] 단지명/건물명 실시간 통합 검색 바                  */}
         {/* ========================================================================= */}
-        <section className="bg-white rounded-2xl sm:rounded-3xl border border-[#E5E8EB] p-4 sm:p-5 shadow-xs space-y-3">
+        <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-5 shadow-xs space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="relative flex-1">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-[#8B95A1] pointer-events-none">
-                🔍
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">
+                검색
               </span>
               <input
                 type="text"
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}
-                placeholder="단지명 또는 건물명 검색 (예: 푸르지오, 가좌동, 래미안)"
-                className="w-full bg-[#F2F4F6] text-xs sm:text-sm font-bold text-[#191F28] pl-10 pr-10 py-3 rounded-2xl border border-transparent outline-none focus:bg-white focus:border-[#3182F6] focus:ring-4 focus:ring-[#3182F6]/10 transition-all placeholder:text-[#8B95A1] placeholder:font-normal"
+                placeholder="단지명, 법정동, 지번 검색 (예: 래미안, 역삼동, 자이)"
+                className="w-full bg-[#F2F4F6] text-xs sm:text-sm font-bold text-[#191F28] pl-10 pr-10 py-3 rounded-xl border border-transparent outline-none focus:bg-white focus:border-[#0f172a] focus:ring-4 focus:ring-[#3182F6]/10 transition-all placeholder:text-[#8B95A1] placeholder:font-normal"
               />
               {searchKeyword && (
                 <button
                   onClick={() => setSearchKeyword("")}
                   className="absolute right-3.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-[#E5E8EB] hover:bg-[#CCD0D5] text-[#4E5968] flex items-center justify-center text-xs font-bold transition-all cursor-pointer"
-                  title="검색어 지우기"
+                  title="검색어 초기화"
                 >
-                  ✕
+                  <span className="text-[11px] font-bold">x</span>
                 </button>
               )}
             </div>
@@ -2132,13 +2128,13 @@ export default function TossStyleRealEstateDashboard() {
             <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
               <span className="text-xs font-bold text-[#4E5968] bg-[#F2F4F6] px-3 py-2 rounded-xl">
                 {viewMode === "listing"
-                  ? `🏠 제휴 매물 ${filteredMockListings.length}건`
-                  : `📊 실거래 ${filteredTrades.length.toLocaleString()}건`}
+                  ? `검증 매물 ${filteredMockListings.length}건`
+                  : `실거래 ${filteredTrades.length.toLocaleString()}건`}
               </span>
               {searchKeyword && (
                 <button
                   onClick={() => setSearchKeyword("")}
-                  className="text-xs font-bold text-[#3182F6] bg-[#E8F3FF] hover:bg-[#D4E8FF] px-3 py-2 rounded-xl transition-all cursor-pointer active:scale-95"
+                  className="text-xs font-bold text-[#1e3a8a] bg-[#E8F3FF] hover:bg-[#D4E8FF] px-3 py-2 rounded-xl transition-all cursor-pointer active:scale-95"
                 >
                   전체 보기
                 </button>
@@ -2155,7 +2151,7 @@ export default function TossStyleRealEstateDashboard() {
                 onClick={() => setSearchKeyword(tag)}
                 className={`px-2.5 py-1 rounded-lg font-bold shrink-0 transition-all cursor-pointer text-[11px] ${
                   searchKeyword === tag
-                    ? "bg-[#3182F6] text-white"
+                    ? "bg-[#0f172a] text-white"
                     : "bg-[#F2F4F6] hover:bg-[#E5E8EB] text-[#4E5968]"
                 }`}
               >
@@ -2166,8 +2162,8 @@ export default function TossStyleRealEstateDashboard() {
         </section>
         {/* 요약 지표 카드 4종 */}
         <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-[#F2F4F6] shadow-2xs">
-            <span className="text-xs font-semibold text-[#8B95A1]">누적 실거래 데이터</span>
+          <div className="bg-white p-5 rounded-xl border border-[#F2F4F6] shadow-2xs">
+            <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">누적 실거래 원장</span>
             {isLoading ? (
               <div className="h-8 bg-[#E5E8EB] rounded-lg w-24 animate-pulse mt-1"></div>
             ) : (
@@ -2176,13 +2172,11 @@ export default function TossStyleRealEstateDashboard() {
                 <span className="text-sm font-bold text-[#8B95A1] ml-1">건</span>
               </p>
             )}
-            <p className="text-[11px] text-[#3182F6] font-semibold mt-1">
-              최근 3년 전수 DB 보존
-            </p>
+            <p className="text-[11px] text-[#64748B] font-medium mt-1">36개월 전수 수집 데이터 검증 완료</p>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-[#F2F4F6] shadow-2xs">
-            <span className="text-xs font-semibold text-[#8B95A1]">최신 매매 최고가</span>
+          <div className="bg-white p-5 rounded-xl border border-[#F2F4F6] shadow-2xs">
+            <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">최신 매매 최고 거래가</span>
             {isLoading ? (
               <div className="h-8 bg-[#E5E8EB] rounded-lg w-28 animate-pulse mt-1"></div>
             ) : (
@@ -2195,12 +2189,12 @@ export default function TossStyleRealEstateDashboard() {
             </p>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-[#F2F4F6] shadow-2xs">
-            <span className="text-xs font-semibold text-[#8B95A1]">최신 전세 보증금</span>
+          <div className="bg-white p-5 rounded-xl border border-[#F2F4F6] shadow-2xs">
+            <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">최신 전세 최고 보증금</span>
             {isLoading ? (
               <div className="h-8 bg-[#E5E8EB] rounded-lg w-28 animate-pulse mt-1"></div>
             ) : (
-              <p className="text-2xl font-black text-[#3182F6] mt-1 tracking-tight">
+              <p className="text-2xl font-black text-[#1e3a8a] mt-1 tracking-tight">
                 {summaryInfo.latestJeonsePrice}
               </p>
             )}
@@ -2209,7 +2203,7 @@ export default function TossStyleRealEstateDashboard() {
             </p>
           </div>
 
-          <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#F2F4F6] shadow-2xs">
+          <div className="bg-white p-4 sm:p-5 rounded-xl border border-[#F2F4F6] shadow-2xs">
             <span className="text-xs font-semibold text-[#8B95A1]">
               {viewMode === "listing" ? "제휴 실시간 호가 매물" : "비교 분석 가능 단지"}
             </span>
@@ -2234,11 +2228,11 @@ export default function TossStyleRealEstateDashboard() {
         {/* ========================================================================= */}
         {viewMode === "transaction" && (
         <>
-        <section className="bg-white rounded-2xl sm:rounded-3xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-4">
+        <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-3 border-b border-[#F2F4F6]">
             <div>
               <div className="flex items-center gap-2">
-                <span className="bg-[#E8F3FF] text-[#3182F6] text-xs font-black px-2.5 py-1 rounded-full">
+                <span className="bg-[#E8F3FF] text-[#1e3a8a] text-xs font-black px-2.5 py-1 rounded-full">
                   Stock Multi-Chart
                 </span>
                 <h3 className="text-lg font-black text-[#191F28] tracking-tight">
@@ -2274,7 +2268,7 @@ export default function TossStyleRealEstateDashboard() {
 
           {/* 주식 앱 스타일 시세 & 등락률 상단 지표 바 (토스증권 스타일) */}
           {latestMonthStockMetric && (
-            <div className="flex flex-wrap items-center gap-4 bg-[#F9FAFB] p-3.5 rounded-2xl border border-[#E5E8EB]/60">
+            <div className="flex flex-wrap items-center gap-4 bg-[#F9FAFB] p-3.5 rounded-xl border border-[#E5E8EB]/60">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-[#8B95A1]">최근 기준월:</span>
                 <span className="text-xs font-extrabold text-[#191F28] bg-white px-2 py-0.5 rounded-md border border-[#E5E8EB]">
@@ -2295,7 +2289,7 @@ export default function TossStyleRealEstateDashboard() {
                     className={`inline-flex items-center gap-0.5 text-xs font-black px-2 py-0.5 rounded-md ${
                       latestMonthStockMetric.isTradeUp
                         ? "bg-[#FEECEE] text-[#F04452]"
-                        : "bg-[#E8F3FF] text-[#3182F6]"
+                        : "bg-[#E8F3FF] text-[#1e3a8a]"
                     }`}
                   >
                     {latestMonthStockMetric.isTradeUp ? "▲ +" : "▼ -"}
@@ -2318,7 +2312,7 @@ export default function TossStyleRealEstateDashboard() {
                     className={`inline-flex items-center gap-0.5 text-xs font-black px-2 py-0.5 rounded-md ${
                       latestMonthStockMetric.isJeonseUp
                         ? "bg-[#FEECEE] text-[#F04452]"
-                        : "bg-[#E8F3FF] text-[#3182F6]"
+                        : "bg-[#E8F3FF] text-[#1e3a8a]"
                     }`}
                   >
                     {latestMonthStockMetric.isJeonseUp ? "▲ +" : "▼ -"}
@@ -2339,11 +2333,11 @@ export default function TossStyleRealEstateDashboard() {
               <ChartSkeleton regionLabel={currentRegionLabel} />
             ) : enrichedStockChartData.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-xs text-[#8B95A1] font-medium space-y-1">
-                <span className="text-2xl">📊</span>
+                
                 <span className="font-bold text-[#191F28]">{currentRegionLabel} 36개월 데이터를 불러오는 중입니다.</span>
                 <button
                   onClick={handleRealtimeSync}
-                  className="mt-2 px-3.5 py-1.5 bg-[#3182F6] text-white rounded-full font-bold hover:bg-[#1B64DA] transition-all"
+                  className="mt-2 px-3.5 py-1.5 bg-[#0f172a] text-white rounded-full font-bold hover:bg-[#1e293b] transition-all"
                 >
                   실시간 국토부 데이터 패칭하기
                 </button>
@@ -2453,7 +2447,7 @@ export default function TossStyleRealEstateDashboard() {
         {/* ========================================================================= */}
         {/* [요구사항 2] 1:1 비교 막대그래프 & 매트릭스 신규 섹션                      */}
         {/* ========================================================================= */}
-        <section className="bg-white rounded-3xl border border-[#E5E8EB] p-5 sm:p-7 shadow-xs space-y-6">
+        <section className="bg-white rounded-xl border border-[#E5E8EB] p-5 sm:p-7 shadow-xs space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 gap-3 border-b border-[#F2F4F6]">
             <div>
               <div className="flex items-center gap-2">
@@ -2470,13 +2464,13 @@ export default function TossStyleRealEstateDashboard() {
             </div>
 
             {/* 1:1 비교 단지 선택 컨트롤러 */}
-            <div className="flex items-center gap-2 bg-[#F9FAFB] p-2 rounded-2xl border border-[#E5E8EB]">
+            <div className="flex items-center gap-2 bg-[#F9FAFB] p-2 rounded-xl border border-[#E5E8EB]">
               {/* 단지 A 선택 드롭다운 (토스 블루) */}
               <div className="relative">
                 <select
                   value={targetComplexA?.name || ""}
                   onChange={(e) => setCompareComplexA(e.target.value)}
-                  className="appearance-none bg-white text-xs font-extrabold text-[#3182F6] pl-3 pr-7 py-2 rounded-xl border border-[#3182F6]/30 shadow-2xs outline-none cursor-pointer hover:border-[#3182F6] transition-all"
+                  className="appearance-none bg-white text-xs font-extrabold text-[#1e3a8a] pl-3 pr-7 py-2 rounded-xl border border-[#0f172a]/30 shadow-2xs outline-none cursor-pointer hover:border-[#0f172a] transition-all"
                 >
                   {availableComplexNames.map((name) => (
                     <option key={`a-${name}`} value={name}>
@@ -2484,7 +2478,7 @@ export default function TossStyleRealEstateDashboard() {
                     </option>
                   ))}
                 </select>
-                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#3182F6] text-[10px]">
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#1e3a8a] text-[10px]">
                   ▼
                 </div>
               </div>
@@ -2523,15 +2517,15 @@ export default function TossStyleRealEstateDashboard() {
               {/* 상단 1:1 나란히 세워진 2색 막대그래프 (매매가, 전세가, 전세가율) */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                 {/* 1. 평균 매매가 & 전세가 비교 막대그래프 (2/3 너비) */}
-                <div className="lg:col-span-2 bg-[#F9FAFB] p-5 rounded-2xl border border-[#E5E8EB] space-y-3">
+                <div className="lg:col-span-2 bg-[#F9FAFB] p-5 rounded-xl border border-[#E5E8EB] space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="font-extrabold text-sm text-[#191F28]">평균 매매가 & 전세가 비교</h4>
                       <p className="text-[11px] text-[#8B95A1]">단위: 만원 (축: 억 단위)</p>
                     </div>
                     <div className="flex items-center gap-3 text-xs font-bold">
-                      <span className="flex items-center gap-1 text-[#3182F6]">
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#3182F6]"></span>
+                      <span className="flex items-center gap-1 text-[#1e3a8a]">
+                        <span className="w-2.5 h-2.5 rounded-full bg-[#0f172a]"></span>
                         {targetComplexA.name}
                       </span>
                       <span className="flex items-center gap-1 text-[#7B2CBF]">
@@ -2574,7 +2568,7 @@ export default function TossStyleRealEstateDashboard() {
                 </div>
 
                 {/* 2. 평균 전세가율 (%) 비교 막대그래프 (1/3 너비) */}
-                <div className="bg-[#F9FAFB] p-5 rounded-2xl border border-[#E5E8EB] space-y-3 flex flex-col justify-between">
+                <div className="bg-[#F9FAFB] p-5 rounded-xl border border-[#E5E8EB] space-y-3 flex flex-col justify-between">
                   <div>
                     <h4 className="font-extrabold text-sm text-[#191F28]">평균 전세가율 (%) 비교</h4>
                     <p className="text-[11px] text-[#8B95A1]">매매가 대비 전세 보증금 비율</p>
@@ -2615,7 +2609,7 @@ export default function TossStyleRealEstateDashboard() {
                   {/* 갭투자 분석 인디케이터 */}
                   <div className="bg-white p-3 rounded-xl border border-[#E5E8EB] text-xs space-y-1">
                     <div className="flex justify-between items-center">
-                      <span className="text-[#3182F6] font-bold">{targetComplexA.name}</span>
+                      <span className="text-[#1e3a8a] font-bold">{targetComplexA.name}</span>
                       <span className="font-black text-sm">{targetComplexA.jeonseRatio}%</span>
                     </div>
                     <div className="flex justify-between items-center">
@@ -2627,14 +2621,14 @@ export default function TossStyleRealEstateDashboard() {
               </div>
 
               {/* 하단 1:1 정밀 스펙 비교 테이블 */}
-              <div className="overflow-x-auto rounded-2xl border border-[#E5E8EB]">
+              <div className="overflow-x-auto rounded-xl border border-[#E5E8EB]">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-[#F2F4F6] text-[#8B95A1] border-b border-[#E5E8EB]">
                       <th className="py-3 px-4 font-bold w-40">비교 항목</th>
-                      <th className="py-3 px-4 font-extrabold text-[#3182F6] text-sm">
+                      <th className="py-3 px-4 font-extrabold text-[#1e3a8a] text-sm">
                         <div className="flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#3182F6]"></span>
+                          <span className="w-2.5 h-2.5 rounded-full bg-[#0f172a]"></span>
                           <span>[단지 A] {targetComplexA.name}</span>
                         </div>
                       </th>
@@ -2666,11 +2660,11 @@ export default function TossStyleRealEstateDashboard() {
                     <tr>
                       <td className="py-3.5 px-4 font-bold text-[#8B95A1] bg-[#FAFAFA]/70">평균 전세가</td>
                       <td className="py-3.5 px-4">
-                        <span className="text-sm font-black text-[#3182F6]">{formatTossMoney(targetComplexA.avgJeonse)}</span>
+                        <span className="text-sm font-black text-[#1e3a8a]">{formatTossMoney(targetComplexA.avgJeonse)}</span>
                         <span className="text-[11px] text-[#8B95A1] block font-medium">최근: {formatTossMoney(targetComplexA.latestJeonse)}</span>
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className="text-sm font-black text-[#3182F6]">{formatTossMoney(targetComplexB.avgJeonse)}</span>
+                        <span className="text-sm font-black text-[#1e3a8a]">{formatTossMoney(targetComplexB.avgJeonse)}</span>
                         <span className="text-[11px] text-[#8B95A1] block font-medium">최근: {formatTossMoney(targetComplexB.latestJeonse)}</span>
                       </td>
                     </tr>
@@ -2713,14 +2707,11 @@ export default function TossStyleRealEstateDashboard() {
         {/* ========================================================================= */}
         {/* [중단] 인터랙티브 카카오맵 실거래 단지 & 매물 위치 지도 뷰                 */}
         {/* ========================================================================= */}
-        <section className="bg-white rounded-2xl sm:rounded-3xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-4">
+        <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-3 border-b border-[#F2F4F6]">
             <div>
               <div className="flex items-center gap-2">
-                <span className="bg-[#FEE500] text-[#191F28] text-xs font-black px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
-                  <span className="w-2 h-2 rounded-full bg-[#371D1E]"></span>
-                  Kakao Maps
-                </span>
+                <span className="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded tracking-wide">Kakao Map GIS</span>
                 <h3 className="text-lg font-black text-[#191F28] tracking-tight">
                   {viewMode === "listing"
                     ? (selectedListing ? `${selectedListing.title}` : `${currentRegionLabel} B2B 제휴 매물 지도 (총 ${filteredMockListings.length}건)`)
@@ -2728,29 +2719,28 @@ export default function TossStyleRealEstateDashboard() {
                 </h3>
               </div>
               <p className="text-xs text-[#8B95A1] font-medium mt-1">
-                카카오맵 Geocoder로 실제 주소를 좌표 변환하여 단지 위치를 확인합니다. (하단 표에서 원하는 건물을 클릭하면 해당 위치로 즉시 이동합니다)
+                국토교통부 실거래 원장의 법정동 및 지번 주소를 좌표 변환하여 공간 위치를 표시합니다.
               </p>
             </div>
 
             <div className="flex items-center gap-2 self-start sm:self-auto">
               <span className="text-xs font-bold text-[#4E5968] bg-[#F2F4F6] px-3 py-1.5 rounded-full truncate max-w-[220px]">
-                📍 {mapAddress || `${currentRegionLabel} 중심지`}
+                위치: {mapAddress || `${currentRegionLabel} 중심지`}
               </span>
               <button
                 onClick={() => {
                   const targetQuery = mapAddress || currentRegionLabel;
                   window.open(`https://map.kakao.com/link/search/${encodeURIComponent(targetQuery)}`, "_blank");
                 }}
-                className="px-3.5 py-1.5 rounded-full text-xs font-bold bg-[#FEE500] hover:bg-[#FADA0A] text-[#191F28] transition-all shadow-2xs flex items-center gap-1 active:scale-95"
+                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 transition-all flex items-center gap-1 active:scale-95"
               >
-                <span>길찾기/로드뷰</span>
-                <span className="text-[10px]">↗</span>
+                <span>카카오 지도 외부 연동</span>
               </button>
             </div>
           </div>
 
           {/* 카카오맵 캔버스 영역 (모바일 h-[300px] 고정으로 스크롤 먹통 방지 & 데스크탑 h-[480px]) */}
-          <div className="relative w-full h-[300px] sm:h-[420px] md:h-[480px] rounded-2xl overflow-hidden border border-[#E5E8EB] shadow-inner bg-[#F9FAFB] touch-pan-y">
+          <div className="relative w-full h-[300px] sm:h-[420px] md:h-[480px] rounded-xl overflow-hidden border border-[#E5E8EB] shadow-inner bg-[#F9FAFB] touch-pan-y">
             <div
               id="map"
               ref={mapContainerRef}
@@ -2760,7 +2750,7 @@ export default function TossStyleRealEstateDashboard() {
             {/* 로딩 인디케이터 */}
             {mapStatus === "loading" && (
               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#F9FAFB]/90 backdrop-blur-xs space-y-3">
-                <div className="w-10 h-10 rounded-full border-3 border-[#3182F6] border-t-transparent animate-spin"></div>
+                <div className="w-10 h-10 rounded-full border-3 border-[#0f172a] border-t-transparent animate-spin"></div>
                 <div className="text-center space-y-1">
                   <p className="text-xs font-bold text-[#191F28]">카카오맵 지도를 불러오는 중입니다...</p>
                   <p className="text-[11px] text-[#8B95A1]">정밀 도로망 및 단지 위치를 로딩하고 있습니다.</p>
@@ -2771,14 +2761,14 @@ export default function TossStyleRealEstateDashboard() {
             {/* 에러 시 도메인 및 환경별 정밀 안내 카드 */}
             {mapStatus === "error" && (
               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/95 backdrop-blur-md p-6 text-center space-y-3">
-                <div className="w-14 h-14 rounded-3xl bg-[#FFF0F0] text-[#F04452] flex items-center justify-center text-2xl font-bold shadow-xs">
-                  🗺️
+                <div className="w-14 h-14 rounded-xl bg-[#FFF0F0] text-[#F04452] flex items-center justify-center text-2xl font-bold shadow-xs">
+                  
                 </div>
                 <div className="space-y-1.5 max-w-md">
                   <h4 className="text-base font-extrabold text-[#191F28]">카카오맵 로드 안내</h4>
                   <p className="text-xs text-[#4E5968] leading-relaxed">
                     카카오맵 SDK는 보안 정책상 카카오 개발자 콘솔에 등록된 <br />
-                    <span className="font-bold text-[#3182F6]">Web 플랫폼 사이트 도메인</span>에서만 정상 표시됩니다.
+                    <span className="font-bold text-[#1e3a8a]">Web 플랫폼 사이트 도메인</span>에서만 정상 표시됩니다.
                   </p>
                   <div className="mt-2 p-2.5 bg-[#F2F4F6] rounded-xl text-left text-[11px] space-y-1 border border-[#E5E8EB]">
                     <div className="flex items-center justify-between text-[#8B95A1]">
@@ -2787,7 +2777,7 @@ export default function TossStyleRealEstateDashboard() {
                     </div>
                     <div className="flex items-center justify-between text-[#8B95A1]">
                       <span>API 키 등록 권장 주소:</span>
-                      <span className="font-mono font-bold text-[#3182F6]">http://localhost:3001</span>
+                      <span className="font-mono font-bold text-[#1e3a8a]">http://localhost:3001</span>
                     </div>
                   </div>
                 </div>
@@ -2796,9 +2786,9 @@ export default function TossStyleRealEstateDashboard() {
                   {typeof window !== "undefined" && window.location.port !== "3001" && (
                     <a
                       href="http://localhost:3001"
-                      className="px-4 py-2.5 bg-[#3182F6] hover:bg-[#1B64DA] text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95 inline-flex items-center gap-1.5"
+                      className="px-4 py-2.5 bg-[#0f172a] hover:bg-[#1e293b] text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95 inline-flex items-center gap-1.5"
                     >
-                      <span>👉 3001번 포트로 이동</span>
+                      <span>3001번 포트로 이동</span>
                     </a>
                   )}
                   <button
@@ -2817,7 +2807,7 @@ export default function TossStyleRealEstateDashboard() {
                     }}
                     className="px-4 py-2.5 bg-[#FEE500] hover:bg-[#FADA0A] text-[#191F28] text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer active:scale-95"
                   >
-                    카카오맵 웹에서 바로보기 ↗
+                    카카오 지도 외부 보기
                   </button>
                 </div>
               </div>
@@ -2825,9 +2815,9 @@ export default function TossStyleRealEstateDashboard() {
 
             {/* [실거래가 모드] 지도 좌측 하단 활성 매물 요약 플로팅 카드 */}
             {viewMode === "transaction" && mapStatus === "ready" && selectedMapTarget && (
-              <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:max-w-xs z-10 bg-white/95 backdrop-blur-md p-3.5 rounded-2xl border border-[#E5E8EB] shadow-xl space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:max-w-xs z-10 bg-white/95 backdrop-blur-md p-3.5 rounded-xl border border-[#E5E8EB] shadow-xs space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-[#E8F3FF] text-[#3182F6]">
+                  <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-[#E8F3FF] text-[#1e3a8a]">
                     {selectedMapTarget.property_type || "아파트"}
                   </span>
                   <span className="text-[11px] font-bold text-[#8B95A1]">{selectedMapTarget.deal_date || "최근 거래"}</span>
@@ -2844,10 +2834,10 @@ export default function TossStyleRealEstateDashboard() {
 
             {/* [현재 매물 모드] 지도 좌측 하단 활성 제휴 매물 플로팅 카드 */}
             {viewMode === "listing" && mapStatus === "ready" && selectedListing && (
-              <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:max-w-sm z-10 bg-white/95 backdrop-blur-md p-3.5 sm:p-4 rounded-2xl border border-[#E5E8EB] shadow-xl space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+              <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:max-w-sm z-10 bg-white/95 backdrop-blur-md p-3.5 sm:p-4 rounded-xl border border-[#E5E8EB] shadow-xs space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-[#E8F3FF] text-[#3182F6]">
+                    <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-[#E8F3FF] text-[#1e3a8a]">
                       {selectedListing.property_type}
                     </span>
                     <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-[#FFF0F0] text-[#F04452]">
@@ -2866,16 +2856,16 @@ export default function TossStyleRealEstateDashboard() {
                   <span>{selectedListing.area}</span>
                 </div>
                 <div className="pt-2 border-t border-[#F2F4F6] flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-[#8B95A1] truncate max-w-[170px]">🏢 {selectedListing.agency_name}</span>
+                  <span className="text-[11px] text-[#8B95A1] truncate max-w-[170px]">중개사: {selectedListing.agency_name}</span>
                   <a
                     href={`tel:${selectedListing.contact}`}
                     onClick={(e) => {
                       e.stopPropagation();
-                      showToast(`📞 [중개사 연결] ${selectedListing.agency_name} (${selectedListing.contact})`);
+                      showToast(`[중개사 문의] ${selectedListing.agency_name} (${selectedListing.contact})`);
                     }}
-                    className="px-3 py-1.5 bg-[#3182F6] hover:bg-[#1B64DA] text-white text-[11px] font-black rounded-lg transition-all shadow-xs flex items-center gap-1 active:scale-95"
+                    className="px-3 py-1.5 bg-[#0f172a] hover:bg-[#1e293b] text-white text-[11px] font-black rounded-lg transition-all shadow-xs flex items-center gap-1 active:scale-95"
                   >
-                    <span>📞 문의</span>
+                    <span>문의하기</span>
                   </a>
                 </div>
               </div>
@@ -2887,17 +2877,17 @@ export default function TossStyleRealEstateDashboard() {
         {/* [조건부 렌더링] 과거 실거래가 표 vs 현재 제휴 매물(Demo) 카드 리스트      */}
         {/* ========================================================================= */}
         {viewMode === "transaction" ? (
-        <section className="bg-white rounded-2xl sm:rounded-3xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-4 animate-in fade-in duration-200">
+        <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-4 animate-in fade-in duration-200">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <span className="bg-[#E8F3FF] text-[#3182F6] text-xs font-black px-2.5 py-1 rounded-full">Raw Data</span>
+                <span className="bg-slate-100 text-slate-800 text-[10px] font-bold px-2 py-0.5 rounded border border-slate-300">RAW DATA</span>
                 <h3 className="text-lg font-black text-[#191F28] tracking-tight">
                   {currentRegionLabel} 국토교통부 실거래 계약 상세 내역 ({totalCount.toLocaleString()}건)
                 </h3>
               </div>
               <p className="text-xs text-[#8B95A1] font-medium mt-1">
-                공공데이터포털 실시간 API 및 클라우드 PostgreSQL에 저장된 실거래 로우 데이터 원본입니다.
+                국토교통부 실거래가 공개시스템 및 클라우드 원장 DB 기준 정합성 검증 완료 데이터입니다.
               </p>
             </div>
 
@@ -2911,17 +2901,15 @@ export default function TossStyleRealEstateDashboard() {
                   setSearchKeyword(e.target.value);
                   setSearchQuery(e.target.value);
                 }}
-                className="w-full bg-[#F2F4F6] text-xs px-3.5 py-2 pl-9 pr-7 rounded-full border border-transparent outline-none focus:border-[#3182F6] focus:bg-white transition-all font-medium"
+                className="w-full bg-[#F2F4F6] text-xs px-3.5 py-2 pl-9 pr-7 rounded-full border border-transparent outline-none focus:border-[#0f172a] focus:bg-white transition-all font-medium"
               />
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-[#8B95A1]">
-                🔍
-              </span>
+              
               {searchKeyword && (
                 <button
                   onClick={() => setSearchKeyword("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8B95A1] hover:text-[#191F28] text-xs font-bold cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold cursor-pointer"
                 >
-                  ✕
+                  <span className="text-[11px] font-bold">x</span>
                 </button>
               )}
             </div>
@@ -2942,7 +2930,7 @@ export default function TossStyleRealEstateDashboard() {
                   onClick={() => setPropertyTypeFilter(p.id)}
                   className={`px-3.5 py-2 min-h-[40px] rounded-full text-xs sm:text-sm font-bold transition-all active:scale-95 ${
                     propertyTypeFilter === p.id
-                      ? "bg-[#3182F6] text-white shadow-xs font-black"
+                      ? "bg-[#0f172a] text-white shadow-xs font-black"
                       : "bg-[#F2F4F6] text-[#4E5968] hover:bg-[#E5E8EB]"
                   }`}
                 >
@@ -2977,7 +2965,7 @@ export default function TossStyleRealEstateDashboard() {
           {isLoading ? (
             <TableSkeleton regionLabel={currentRegionLabel} />
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-[#F2F4F6]">
+            <div className="overflow-x-auto rounded-xl border border-[#F2F4F6]">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-[#FAFAFA] border-b border-[#F2F4F6] text-[#8B95A1]">
@@ -2998,25 +2986,22 @@ export default function TossStyleRealEstateDashboard() {
                     <tr>
                       <td colSpan="10" className="py-16 text-center">
                         <div className="flex flex-col items-center justify-center space-y-3">
-                          <div className="w-14 h-14 rounded-2xl bg-[#F2F4F6] text-[#8B95A1] flex items-center justify-center text-2xl shadow-inner">
-                            🔍
-                          </div>
                           <div className="space-y-1">
-                            <h4 className="text-sm font-extrabold text-[#191F28]">
-                              {searchKeyword.trim() ? `"${searchKeyword}" 검색 결과가 없습니다` : "조회된 실거래 데이터가 없습니다"}
+                            <h4 className="text-sm font-bold text-slate-800">
+                              {searchKeyword.trim() ? `"${searchKeyword}" 검색 조건과 일치하는 실거래 내역이 없습니다` : "조회된 실거래 내역이 없습니다"}
                             </h4>
-                            <p className="text-xs text-[#8B95A1]">
+                            <p className="text-xs text-slate-500">
                               {searchKeyword.trim()
-                                ? "단지명이나 동 이름을 확인하시거나, 다른 검색어로 검색해 보세요."
-                                : "상단 필터나 조회 지역을 변경해 보세요."}
+                                ? "단지명이나 법정동 표기를 확인하시거나 검색어를 초기화해 주십시오."
+                                : "상단 지역 필터 또는 거래 구분을 조정해 주십시오."}
                             </p>
                           </div>
                           {searchKeyword.trim() && (
                             <button
                               onClick={() => setSearchKeyword("")}
-                              className="px-4 py-2 bg-[#E8F3FF] hover:bg-[#D4E8FF] text-[#3182F6] text-xs font-bold rounded-xl transition-all cursor-pointer active:scale-95"
+                              className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-md transition-all cursor-pointer active:scale-95"
                             >
-                              전체 매물 보기 (검색어 초기화)
+                              전체 원장 내역 조회
                             </button>
                           )}
                         </div>
@@ -3036,7 +3021,7 @@ export default function TossStyleRealEstateDashboard() {
                           onClick={() => {
                             handleSelectPropertyForMap(item);
                             const { title } = buildPropertyAddressAndTitle(item);
-                            showToast(`📍 [지도 이동] ${title}`);
+                            showToast(`[위치 이동] ${title}`);
                           }}
                           className={`hover:bg-[#F9FAFB] cursor-pointer transition-colors ${
                             selectedMapTarget?.id === item.id ? "bg-[#E8F3FF]/40 border-l-4 border-l-[#3182F6]" : ""
@@ -3049,7 +3034,7 @@ export default function TossStyleRealEstateDashboard() {
                             <span
                               className={`text-[11px] font-bold px-2.5 py-0.5 rounded-md ${
                                 item.property_type === "아파트"
-                                  ? "bg-[#E8F3FF] text-[#3182F6]"
+                                  ? "bg-[#E8F3FF] text-[#1e3a8a]"
                                   : item.property_type === "오피스텔"
                                   ? "bg-[#F0EBFE] text-[#7B2CBF]"
                                   : item.property_type === "연립다세대"
@@ -3076,7 +3061,7 @@ export default function TossStyleRealEstateDashboard() {
                                 isTrade
                                   ? "bg-[#FEECEE] text-[#F04452]"
                                   : isJeonse
-                                  ? "bg-[#E8F3FF] text-[#3182F6]"
+                                  ? "bg-[#E8F3FF] text-[#1e3a8a]"
                                   : "bg-[#E6F9F5] text-[#00B493]"
                               }`}
                             >
@@ -3084,7 +3069,7 @@ export default function TossStyleRealEstateDashboard() {
                             </span>
                           </td>
                           <td className="py-3 px-3.5 font-black text-[#191F28] text-sm whitespace-nowrap">
-                            <span className={isTrade ? "text-[#F04452]" : isJeonse ? "text-[#3182F6]" : "text-[#191F28]"}>
+                            <span className={isTrade ? "text-[#F04452]" : isJeonse ? "text-[#1e3a8a]" : "text-[#191F28]"}>
                               {formattedPrice}
                             </span>
                           </td>
@@ -3112,7 +3097,7 @@ export default function TossStyleRealEstateDashboard() {
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-[#F2F4F6]">
               <div className="text-xs font-semibold text-[#8B95A1]">
                 총 <span className="font-extrabold text-[#191F28]">{totalCount.toLocaleString()}</span>건 중{" "}
-                <span className="text-[#3182F6] font-bold">
+                <span className="text-[#1e3a8a] font-bold">
                   {((tablePage - 1) * ROWS_PER_PAGE + 1).toLocaleString()} - {Math.min(tablePage * ROWS_PER_PAGE, totalCount).toLocaleString()}
                 </span>
                 건 표시 (페이지 {tablePage} / {totalPages.toLocaleString()})
@@ -3157,7 +3142,7 @@ export default function TossStyleRealEstateDashboard() {
                       onClick={() => handlePageChange(pageNum)}
                       className={`w-8 h-8 rounded-full text-xs font-bold transition-all ${
                         tablePage === pageNum
-                          ? "bg-[#3182F6] text-white shadow-xs font-extrabold scale-105"
+                          ? "bg-[#0f172a] text-white shadow-xs font-extrabold scale-105"
                           : "bg-transparent text-[#4E5968] hover:bg-[#F2F4F6]"
                       }`}
                     >
@@ -3192,30 +3177,29 @@ export default function TossStyleRealEstateDashboard() {
         /* ========================================================================= */
         /* [현재 매물 모드 (Demo)] 직방/다방 스타일 B2B 제휴 매물 카드 그리드        */
         /* ========================================================================= */
-        <section className="bg-white rounded-2xl sm:rounded-3xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-5 sm:space-y-6 animate-in fade-in duration-300">
+        <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-5 sm:space-y-6 animate-in fade-in duration-300">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-3 border-b border-[#F2F4F6]">
             <div>
               <div className="flex items-center gap-2">
-                <span className="bg-[#3182F6] text-white text-xs font-black px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
-                  <span>🏠</span>
-                  <span>B2B 제휴 매물</span>
+                <span className="bg-[#0f172a] text-white text-xs font-black px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
+                  <span>B2B 제휴 검증 매물</span>
                 </span>
                 <h3 className="text-lg font-black text-[#191F28] tracking-tight">
                   {currentRegionLabel} 제휴 공인중개사 실시간 매물 ({filteredMockListings.length}건)
                 </h3>
               </div>
               <p className="text-xs text-[#8B95A1] font-medium mt-1">
-                토스제휴 중개사 네트워크에서 실시간 등록된 현장 검증 호가 매물 데이터입니다. (클릭 시 지도 위치 연동)
+                공인중개사 네트워크를 통해 실시간 등록된 현장 검증 호가 매물 데이터입니다.
               </p>
             </div>
 
             {/* 매물 등록 제휴 문의 버튼 */}
             <div className="flex items-center gap-2 self-start sm:self-auto">
               <button
-                onClick={() => showToast("🤝 공인중개사 제휴 문의: partners@zipview.co.kr (상담 접수 중)")}
-                className="px-3.5 py-2 rounded-full text-xs font-bold bg-[#E8F3FF] hover:bg-[#D5E8FF] text-[#3182F6] transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+                onClick={() => showToast("공인중개사 제휴 등록: partners@zipview.co.kr (등록 접수 안내)")}
+                className="px-3.5 py-2 rounded-full text-xs font-bold bg-[#E8F3FF] hover:bg-[#D5E8FF] text-[#1e3a8a] transition-all flex items-center gap-1 cursor-pointer active:scale-95"
               >
-                <span>🤝 중개사 매물 제휴 등록</span>
+                <span>제휴 매물 등록 안내</span>
               </button>
             </div>
           </div>
@@ -3236,7 +3220,7 @@ export default function TossStyleRealEstateDashboard() {
                   onClick={() => setListingPropertyFilter(p.id)}
                   className={`px-3.5 py-2 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer active:scale-95 ${
                     listingPropertyFilter === p.id
-                      ? "bg-[#3182F6] text-white shadow-xs font-black"
+                      ? "bg-[#0f172a] text-white shadow-xs font-black"
                       : "bg-[#F2F4F6] text-[#4E5968] hover:bg-[#E5E8EB]"
                   }`}
                 >
@@ -3270,10 +3254,8 @@ export default function TossStyleRealEstateDashboard() {
 
           {/* 직방/다방 스타일 매물 카드 그리드 (반응형 3열) */}
           {filteredMockListings.length === 0 ? (
-            <div className="py-16 text-center space-y-3 bg-white rounded-3xl border border-[#E5E8EB]">
-              <div className="w-14 h-14 mx-auto rounded-2xl bg-[#F2F4F6] text-[#8B95A1] flex items-center justify-center text-2xl shadow-inner">
-                🏠
-              </div>
+            <div className="py-16 text-center space-y-3 bg-white rounded-xl border border-[#E5E8EB]">
+              
               <div className="space-y-1">
                 <h4 className="text-sm font-extrabold text-[#191F28]">
                   {searchKeyword.trim() ? `"${searchKeyword}" 조건에 맞는 제휴 매물이 없습니다` : "조회된 제휴 매물이 없습니다"}
@@ -3291,7 +3273,7 @@ export default function TossStyleRealEstateDashboard() {
                     setListingPropertyFilter("all");
                     setListingTradeFilter("all");
                   }}
-                  className="px-4 py-2 bg-[#E8F3FF] hover:bg-[#D4E8FF] text-[#3182F6] text-xs font-bold rounded-xl transition-all cursor-pointer active:scale-95"
+                  className="px-4 py-2 bg-[#E8F3FF] hover:bg-[#D4E8FF] text-[#1e3a8a] text-xs font-bold rounded-xl transition-all cursor-pointer active:scale-95"
                 >
                   전체 매물 보기 (필터 및 검색 초기화)
                 </button>
@@ -3301,23 +3283,23 @@ export default function TossStyleRealEstateDashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4.5">
               {filteredMockListings.map((item) => {
                 const isSelected = selectedListing?.id === item.id;
-                const priceColor = item.deal_type === "매매" ? "text-[#F04452]" : item.deal_type === "전세" ? "text-[#3182F6]" : "text-[#00B493]";
+                const priceColor = item.deal_type === "매매" ? "text-[#F04452]" : item.deal_type === "전세" ? "text-[#1e3a8a]" : "text-[#00B493]";
 
                 return (
                   <div
                     key={item.id}
                     onClick={() => handleSelectListing(item)}
-                    className={`bg-white rounded-2xl border p-4 sm:p-5 transition-all cursor-pointer space-y-2.5 sm:space-y-3 relative overflow-hidden flex flex-col justify-between ${
+                    className={`bg-white rounded-xl border p-4 sm:p-5 transition-all cursor-pointer space-y-2.5 sm:space-y-3 relative overflow-hidden flex flex-col justify-between ${
                       isSelected
-                        ? "border-[#3182F6] ring-2 ring-[#3182F6]/30 shadow-lg bg-[#F8FAFF]"
-                        : "border-[#E5E8EB] hover:border-[#3182F6]/50 hover:shadow-md hover:-translate-y-0.5"
+                        ? "border-[#0f172a] ring-2 ring-[#3182F6]/30 shadow-xs bg-[#F8FAFF]"
+                        : "border-[#E5E8EB] hover:border-[#0f172a]/50 hover:shadow-xs hover:-translate-y-0.5"
                     }`}
                   >
                     {/* 상단 뱃지 & 관리비 */}
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-md bg-[#E8F3FF] text-[#3182F6]">
+                          <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-md bg-[#E8F3FF] text-[#1e3a8a]">
                             {item.property_type}
                           </span>
                           <span
@@ -3325,7 +3307,7 @@ export default function TossStyleRealEstateDashboard() {
                               item.deal_type === "매매"
                                 ? "bg-[#FFF0F0] text-[#F04452]"
                                 : item.deal_type === "전세"
-                                ? "bg-[#E8F3FF] text-[#3182F6]"
+                                ? "bg-[#E8F3FF] text-[#1e3a8a]"
                                 : "bg-[#E6F9F5] text-[#00A455]"
                             }`}
                           >
@@ -3369,7 +3351,7 @@ export default function TossStyleRealEstateDashboard() {
                     {/* 하단 중개사 정보 & 인터랙션 버튼군 */}
                     <div className="pt-3 border-t border-[#F2F4F6] flex items-center justify-between gap-2 mt-2">
                       <div className="text-[11px] text-[#8B95A1] truncate max-w-[150px]">
-                        <div className="font-extrabold text-[#191F28] truncate">🏢 {item.agency_name}</div>
+                        <div className="font-extrabold text-[#191F28] truncate">중개사: {item.agency_name}</div>
                         <div className="text-[10px] text-[#8B95A1]">{item.agent_name}</div>
                       </div>
 
@@ -3381,17 +3363,17 @@ export default function TossStyleRealEstateDashboard() {
                           }}
                           className="px-2.5 py-1.5 bg-[#F2F4F6] hover:bg-[#E5E8EB] text-[#191F28] text-xs font-bold rounded-xl transition-all cursor-pointer"
                         >
-                          📍 위치
+                          위치 확인
                         </button>
                         <a
                           href={`tel:${item.contact}`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            showToast(`📞 [중개사 문의 연결] ${item.agency_name} (${item.contact})`);
+                            showToast(`[중개사 문의] ${item.agency_name} (${item.contact})`);
                           }}
-                          className="px-3 py-1.5 bg-[#3182F6] hover:bg-[#1B64DA] text-white text-xs font-black rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
+                          className="px-3 py-1.5 bg-[#0f172a] hover:bg-[#1e293b] text-white text-xs font-black rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
                         >
-                          <span>📞 문의</span>
+                          <span>문의하기</span>
                         </a>
                       </div>
                     </div>
@@ -3411,31 +3393,31 @@ export default function TossStyleRealEstateDashboard() {
         {!isAiOpen && (
           <button
             onClick={() => setIsAiOpen(true)}
-            className="flex items-center gap-2 bg-[#3182F6] hover:bg-[#1B64DA] text-white px-5 py-3.5 rounded-full shadow-lg font-extrabold text-sm transition-all transform hover:scale-105 active:scale-95"
+            className="flex items-center gap-2 bg-[#0f172a] hover:bg-[#1e293b] text-white px-5 py-3.5 rounded-full shadow-xs font-extrabold text-sm transition-all transform hover:scale-105 active:scale-95"
           >
-            <span>✨</span>
-            <span>집뷰 AI 상담</span>
+            <span>AI 어시스턴트</span>
           </button>
         )}
 
         {isAiOpen && (
-          <div className="w-[360px] sm:w-[400px] h-[520px] bg-white rounded-3xl shadow-2xl border border-[#E5E8EB] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-[360px] sm:w-[400px] h-[520px] bg-white rounded-xl shadow-sm border border-[#E5E8EB] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {/* AI 모달 상단 헤더 */}
-            <div className="bg-[#3182F6] text-white px-5 py-4 flex items-center justify-between">
+            <div className="bg-[#0f172a] text-white px-5 py-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-sm">
                   AI
                 </div>
                 <div>
-                  <h4 className="font-extrabold text-sm leading-tight">집뷰 부동산 브리핑 AI</h4>
-                  <p className="text-[11px] text-white/80">{currentRegionLabel} 맞춤 분석</p>
+                  <h4 className="font-bold text-sm leading-tight text-white">부동산 시장 분석 어시스턴트</h4>
+                  <p className="text-[11px] text-slate-300">{currentRegionLabel} 원장 데이터 분석</p>
                 </div>
               </div>
               <button
                 onClick={() => setIsAiOpen(false)}
-                className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-xs font-bold transition-all"
+                className="w-7 h-7 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-semibold text-white transition-all cursor-pointer"
+                title="닫기"
               >
-                ✕
+                x
               </button>
             </div>
 
@@ -3449,9 +3431,9 @@ export default function TossStyleRealEstateDashboard() {
                   }`}
                 >
                   <div
-                    className={`max-w-[85%] px-3.5 py-2.5 rounded-2xl whitespace-pre-wrap leading-relaxed ${
+                    className={`max-w-[85%] px-3.5 py-2.5 rounded-xl whitespace-pre-wrap leading-relaxed ${
                       m.sender === "user"
-                        ? "bg-[#3182F6] text-white rounded-br-none"
+                        ? "bg-[#0f172a] text-white rounded-br-none"
                         : "bg-white text-[#191F28] border border-[#E5E8EB] rounded-bl-none shadow-2xs"
                     }`}
                   >
@@ -3461,10 +3443,10 @@ export default function TossStyleRealEstateDashboard() {
                 </div>
               ))}
               {aiLoading && (
-                <div className="flex items-center gap-1.5 bg-white text-[#8B95A1] px-4 py-2.5 rounded-2xl border border-[#E5E8EB] w-fit text-[11px]">
-                  <div className="w-2 h-2 rounded-full bg-[#3182F6] animate-bounce"></div>
-                  <div className="w-2 h-2 rounded-full bg-[#3182F6] animate-bounce delay-100"></div>
-                  <div className="w-2 h-2 rounded-full bg-[#3182F6] animate-bounce delay-200"></div>
+                <div className="flex items-center gap-1.5 bg-white text-[#8B95A1] px-4 py-2.5 rounded-xl border border-[#E5E8EB] w-fit text-[11px]">
+                  <div className="w-2 h-2 rounded-full bg-[#0f172a] animate-bounce"></div>
+                  <div className="w-2 h-2 rounded-full bg-[#0f172a] animate-bounce delay-100"></div>
+                  <div className="w-2 h-2 rounded-full bg-[#0f172a] animate-bounce delay-200"></div>
                   <span className="ml-1">데이터 분석 브리핑 작성 중...</span>
                 </div>
               )}
@@ -3478,12 +3460,12 @@ export default function TossStyleRealEstateDashboard() {
                 placeholder="궁금한 단지명이나 시세를 물어보세요..."
                 value={chatPrompt}
                 onChange={(e) => setChatPrompt(e.target.value)}
-                className="flex-1 bg-[#F2F4F6] text-xs px-3.5 py-2.5 rounded-full border border-transparent outline-none focus:border-[#3182F6] focus:bg-white transition-all font-medium"
+                className="flex-1 bg-[#F2F4F6] text-xs px-3.5 py-2.5 rounded-full border border-transparent outline-none focus:border-[#0f172a] focus:bg-white transition-all font-medium"
               />
               <button
                 type="submit"
                 disabled={!chatPrompt.trim() || aiLoading}
-                className="bg-[#3182F6] text-white w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs disabled:opacity-40 hover:bg-[#1B64DA] transition-all"
+                className="bg-[#0f172a] text-white w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs disabled:opacity-40 hover:bg-[#1e293b] transition-all"
               >
                 ↑
               </button>
@@ -3496,8 +3478,8 @@ export default function TossStyleRealEstateDashboard() {
       {/* 4. 하단 플로팅 토스트 메시지                                              */}
       {/* ========================================================================= */}
       {toastMessage && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#191F28]/95 backdrop-blur-sm text-white text-xs font-semibold px-5 py-3 rounded-full shadow-2xl flex items-center gap-2 border border-white/10 animate-in fade-in slide-in-from-bottom-3 duration-200">
-          <span>🔔</span>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#191F28]/95 backdrop-blur-sm text-white text-xs font-semibold px-5 py-3 rounded-full shadow-sm flex items-center gap-2 border border-white/10 animate-in fade-in slide-in-from-bottom-3 duration-200">
+          
           <span>{toastMessage}</span>
         </div>
       )}

@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>집뷰(ZipView) - 토스 스타일 실거래가 프로</title>
+  <title>집뷰(ZipView) - 엔터프라이즈 부동산 실거래가 인텔리전스</title>
 
   <!-- 1. 폰트 및 스타일시트 -->
   <link rel="stylesheet" as="style" crossorigin
@@ -20,13 +20,23 @@
             sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'sans-serif'],
           },
           colors: {
-            tossBlue: '#3182F6',
-            tossDark: '#191F28',
-            tossGray: '#F2F4F6',
-            tossTextMuted: '#8B95A1',
-            tossTextBody: '#4E5968',
-            tossRed: '#F04452',
-            tossGreen: '#00B493',
+            corpNavy: '#0F172A',     // Slate 900
+            corpPrimary: '#1E3A8A',  // Deep Blue 900
+            corpAccent: '#2563EB',   // Blue 600
+            corpBorder: '#E2E8F0',   // Slate 200
+            corpBg: '#F8FAFC',       // Slate 50
+            corpMuted: '#64748B',    // Slate 500
+            corpBody: '#334155',     // Slate 700
+            corpRed: '#DC2626',      // Red 600
+            corpGreen: '#059669',    // Emerald 600
+            // 하위 호환 매핑
+            tossBlue: '#1E3A8A',
+            tossDark: '#0F172A',
+            tossGray: '#F1F5F9',
+            tossTextMuted: '#64748B',
+            tossTextBody: '#334155',
+            tossRed: '#DC2626',
+            tossGreen: '#059669',
           }
         }
       }
@@ -36,8 +46,8 @@
   <style>
     body {
       font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif;
-      background-color: #F2F4F6;
-      color: #191F28;
+      background-color: #F8FAFC;
+      color: #0F172A;
       -webkit-font-smoothing: antialiased;
     }
 
@@ -72,19 +82,19 @@
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.4/babel.min.js"></script>
 </head>
 
-<body class="bg-[#F2F4F6] text-[#191F28] min-h-screen selection:bg-[#E8F3FF] selection:text-[#3182F6]">
+<body class="bg-[#F8FAFC] text-[#0F172A] min-h-screen selection:bg-[#E2E8F0] selection:text-[#0F172A]">
   <div id="root">
-    <!-- 초기 로딩 스켈레톤 -->
-    <div class="max-w-5xl mx-auto px-4 sm:px-6 pt-24 text-center space-y-4">
+    <!-- 초기 로딩 스켈레톤 (B2B 엔터프라이즈 모던 디자인) -->
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 pt-24 text-center space-y-4">
       <div
-        class="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#3182F6] text-white shadow-xl animate-pulse">
-        <svg class="w-7 h-7 animate-spin" fill="none" viewBox="0 0 24 24">
-          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        class="inline-flex items-center justify-center w-12 h-12 rounded-lg bg-[#0F172A] text-white border border-[#334155] shadow-xs">
+        <svg class="w-6 h-6 animate-spin text-slate-300" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
         </svg>
       </div>
-      <h2 class="text-xl font-extrabold text-[#191F28]">집뷰(ZipView) 토스 통합 대시보드 로딩 중...</h2>
-      <p class="text-xs text-[#8B95A1]">국토교통부 실시간 실거래가 및 Recharts 시각화 엔진을 동기화하고 있습니다.</p>
+      <h2 class="text-lg font-bold text-[#0F172A] tracking-tight">집뷰(ZipView) 엔터프라이즈 데이터 로드 중</h2>
+      <p class="text-xs text-[#64748B]">국토교통부 실거래 원장 데이터 및 시장 분석 차트 엔진을 초기화하고 있습니다.</p>
     </div>
   </div>
 
@@ -167,15 +177,15 @@
         const rootContainer = document.getElementById("root");
         const root = ReactDOM.createRoot(rootContainer);
         root.render(React.createElement(TargetComponent));
-        console.log("✅ [집뷰] React 앱이 #root에 성공적으로 마운트되었습니다.");
+        console.log("[ZipView] React 애플리케이션 마운트 완료.");
       } catch (err) {
-        console.error("❌ [집뷰] 부트스트랩 오류 발생:", err);
+        console.error("[ZipView] 부트스트랩 오류 발생:", err);
         document.getElementById("root").innerHTML = `
-          <div class="max-w-xl mx-auto mt-20 p-8 bg-white rounded-3xl border border-red-200 shadow-xl text-center">
-            <div class="w-12 h-12 mx-auto mb-4 rounded-full bg-red-100 text-red-500 flex items-center justify-center font-bold text-xl">⚠️</div>
-            <h3 class="text-lg font-bold text-gray-900 mb-2">대시보드 초기화 중 오류가 발생했습니다</h3>
-            <p class="text-xs text-red-600 font-mono bg-red-50 p-4 rounded-xl mb-4 text-left whitespace-pre-wrap">${err.message}</p>
-            <button onclick="location.reload()" class="px-6 py-2.5 bg-[#3182F6] text-white text-xs font-bold rounded-xl shadow-md hover:bg-blue-600 transition-all">새로고침</button>
+          <div class="max-w-xl mx-auto mt-20 p-8 bg-white rounded-lg border border-red-200 shadow-sm text-center">
+            <div class="w-10 h-10 mx-auto mb-3 rounded bg-red-50 text-red-600 flex items-center justify-center font-bold text-sm border border-red-200">!</div>
+            <h3 class="text-base font-bold text-slate-900 mb-1">대시보드 초기화 오류</h3>
+            <p class="text-xs text-red-600 font-mono bg-red-50 p-3 rounded mb-4 text-left whitespace-pre-wrap">${err.message}</p>
+            <button onclick="location.reload()" class="px-5 py-2 bg-slate-900 text-white text-xs font-semibold rounded hover:bg-slate-800 transition-all">새로고침</button>
           </div>
         `;
       }

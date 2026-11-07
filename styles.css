@@ -1,25 +1,25 @@
 :root {
-  /* 남색(Deep Navy) 메인 테마 팔레트 */
-  --brand-primary: #1e3a8a;       /* 로얄 딥 네이비 */
-  --brand-primary-dark: #0f172a;  /* 미드나잇 네이비 */
-  --brand-primary-hover: #172554; /* 진한 네이비 호버 */
-  --brand-accent: #2563eb;        /* 포인트 블루 */
-  --brand-soft: #eff6ff;          /* 연한 네이비 배경 */
-  --bg-main: #f1f5f9;
+  /* B2B 엔터프라이즈 다크 네이비 테마 팔레트 */
+  --brand-primary: #0f172a;       /* Slate 900 (메인 다크 네이비) */
+  --brand-primary-dark: #020617;  /* Slate 950 */
+  --brand-primary-hover: #1e293b; /* Slate 800 */
+  --brand-accent: #2563eb;        /* Blue 600 (신뢰감 포인트) */
+  --brand-soft: #f1f5f9;          /* Slate 100 */
+  --bg-main: #f8fafc;             /* Slate 50 */
   --bg-surface: #ffffff;
-  --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
-  --border-color: #cbd5e1;
-  --deal-monthly: #1e3a8a;        /* 월세: 남색 */
-  --deal-jeonse: #0284c7;         /* 전세: 오션 블루 */
-  --deal-sale: #4f46e5;           /* 매매: 인디고 네이비 */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
-  --shadow-md: 0 6px 20px rgba(15, 23, 42, 0.12);
-  --shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.22);
+  --text-primary: #0f172a;        /* Slate 900 */
+  --text-secondary: #334155;      /* Slate 700 */
+  --text-muted: #64748b;          /* Slate 500 */
+  --border-color: #e2e8f0;        /* Slate 200 */
+  --deal-monthly: #0f172a;        /* 월세 */
+  --deal-jeonse: #0284c7;         /* 전세 */
+  --deal-sale: #dc2626;           /* 매매 */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08);
 }
 
 * {

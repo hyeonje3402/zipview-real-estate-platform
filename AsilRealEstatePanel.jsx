@@ -112,34 +112,52 @@ export default function AsilRealEstatePanel({
       fontFamily: "-apple-system, BlinkMacSystemFont, 'Pretendard', sans-serif"
     }}>
       {/* 1. 상단 단지 헤더 요약 */}
-      <div style={{ padding: "16px 20px", borderBottom: "1px solid #f1f5f9" }}>
+      <div style={{ padding: "16px 20px", borderBottom: "1px solid #e2e8f0", background: "#f8fafc" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={{ fontSize: "18px", fontWeight: 800, color: "#0f172a", margin: 0 }}>
+          <h2 style={{ fontSize: "16px", fontWeight: 700, color: "#0f172a", margin: 0, letterSpacing: "-0.01em" }}>
             {aptName}
           </h2>
           {onClose && (
-            <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "18px" }}>
-              ✕
+            <button
+              onClick={onClose}
+              style={{
+                border: "1px solid #cbd5e1",
+                background: "#ffffff",
+                cursor: "pointer",
+                width: "24px",
+                height: "24px",
+                borderRadius: "4px",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#64748b"
+              }}
+              title="닫기"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
             </button>
           )}
         </div>
-        <div style={{ marginTop: "8px", display: "flex", gap: "12px", fontSize: "13px" }}>
+        <div style={{ marginTop: "8px", display: "flex", gap: "14px", fontSize: "12px" }}>
           <div>
-            <span style={{ color: "#64748b" }}>최신 매매: </span>
-            <strong style={{ color: "#0038ff" }}>{data.summary.latest_trade_price}</strong>
+            <span style={{ color: "#64748b" }}>최근 매매: </span>
+            <strong style={{ color: "#0f172a", fontWeight: 700 }}>{data.summary.latest_trade_price}</strong>
           </div>
           <div>
-            <span style={{ color: "#64748b" }}>최신 전세: </span>
-            <strong style={{ color: "#10b981" }}>{data.summary.latest_jeonse_price}</strong>
+            <span style={{ color: "#64748b" }}>최근 전세: </span>
+            <strong style={{ color: "#059669", fontWeight: 700 }}>{data.summary.latest_jeonse_price}</strong>
           </div>
         </div>
       </div>
 
       {/* 2. 매매가/전세가 실거래 추이 꺾은선 차트 (Recharts) */}
-      <div style={{ padding: "16px 12px", background: "#f8fafc", borderBottom: "1px solid #e2e8f0" }}>
-        <div style={{ fontSize: "12px", fontWeight: 700, color: "#475569", marginBottom: "8px", display: "flex", justifyContent: "space-between" }}>
-          <span>📈 실거래가 변동 추이</span>
-          <span style={{ fontSize: "11px", color: "#94a3b8" }}>국토교통부 실거래 기준</span>
+      <div style={{ padding: "16px 12px", background: "#ffffff", borderBottom: "1px solid #e2e8f0" }}>
+        <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155", marginBottom: "8px", display: "flex", justifyContent: "space-between" }}>
+          <span>실거래가 변동 추이</span>
+          <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 500 }}>국토교통부 실거래 원장</span>
         </div>
 
         {loading ? (
@@ -162,25 +180,25 @@ export default function AsilRealEstatePanel({
               <YAxis tickFormatter={formatYAxis} tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "4px" }} />
-              {/* 매매가: 파란선 */}
+              {/* 매매가: 딥 네이비 선 */}
               <Line
                 type="monotone"
                 dataKey="tradeAvgPrice"
                 name="매매평균"
-                stroke="#0038ff"
-                strokeWidth={2.5}
-                dot={{ r: 3, fill: "#0038ff" }}
+                stroke="#1e3a8a"
+                strokeWidth={2}
+                dot={{ r: 2.5, fill: "#1e3a8a" }}
                 connectNulls
               />
-              {/* 전세가: 초록선 */}
+              {/* 전세가: 에메랄드 점선 */}
               <Line
                 type="monotone"
                 dataKey="jeonseAvgPrice"
                 name="전세평균"
-                stroke="#10b981"
-                strokeWidth={2}
+                stroke="#059669"
+                strokeWidth={1.5}
                 strokeDasharray="4 2"
-                dot={{ r: 3, fill: "#10b981" }}
+                dot={{ r: 2.5, fill: "#059669" }}
                 connectNulls
               />
             </LineChart>
@@ -191,19 +209,19 @@ export default function AsilRealEstatePanel({
       {/* 3. 하단 실거래 계약 내역 테이블 */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         {/* 거래유형 필터 칩 */}
-        <div style={{ padding: "10px 16px", display: "flex", gap: "6px", borderBottom: "1px solid #f1f5f9" }}>
+        <div style={{ padding: "8px 16px", display: "flex", gap: "6px", borderBottom: "1px solid #e2e8f0", background: "#f8fafc" }}>
           {["all", "매매", "전세", "월세"].map((t) => (
             <button
               key={t}
               onClick={() => setSelectedTypeFilter(t)}
               style={{
-                padding: "4px 10px",
-                borderRadius: "14px",
+                padding: "3px 8px",
+                borderRadius: "4px",
                 border: "1px solid",
-                borderColor: selectedTypeFilter === t ? "#0038ff" : "#e2e8f0",
-                background: selectedTypeFilter === t ? "#eff6ff" : "#ffffff",
-                color: selectedTypeFilter === t ? "#0038ff" : "#64748b",
-                fontWeight: 700,
+                borderColor: selectedTypeFilter === t ? "#0f172a" : "#cbd5e1",
+                background: selectedTypeFilter === t ? "#0f172a" : "#ffffff",
+                color: selectedTypeFilter === t ? "#ffffff" : "#475569",
+                fontWeight: 600,
                 fontSize: "11px",
                 cursor: "pointer"
               }}
@@ -211,7 +229,7 @@ export default function AsilRealEstatePanel({
               {t === "all" ? "전체" : t}
             </button>
           ))}
-          <span style={{ marginLeft: "auto", fontSize: "11px", color: "#94a3b8", alignSelf: "center" }}>
+          <span style={{ marginLeft: "auto", fontSize: "11px", color: "#64748b", alignSelf: "center", fontWeight: 500 }}>
             총 {filteredTrades.length}건
           </span>
         </div>

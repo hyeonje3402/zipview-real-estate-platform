@@ -2,34 +2,31 @@ import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 
 /**
- * Gemini AI 자연어 부동산 데이터 분석 챗봇 모달 컴포넌트
- * - 백엔드 FastAPI (POST http://localhost:8000/api/chat) 연동
- * - Function Calling을 통해 국토부 실거래 DB 실시간 질의
- * - 사용자/AI 말풍선 히스토리, 추천 프롬프트 칩, 로딩 스피너 제공
+ * ZipView AI 시장 분석 어시스턴트 모달 (B2B Enterprise)
+ * - 국토교통부 실거래 원장 데이터 및 시장 분석 LLM 연동
+ * - 간결하고 정제된 실무 인터페이스 및 타이포그래피 정보 위계 적용
  */
 export default function GeminiChatModal({ isOpen, onClose }) {
   const [messages, setMessages] = useState([
     {
       id: 1,
       sender: "ai",
-      text: "안녕하세요! 집뷰(ZipView) **AI 부동산 데이터 컨설턴트**입니다.\nOpenAI GPT 및 Google Gemini와 국토교통부 실거래 DB가 실시간 연동되어 있습니다. 단지별 최근 실거래가나 예산별 아파트를 편하게 물어보세요!",
-      timestamp: "방금 전"
+      text: "집뷰(ZipView) 부동산 시장 분석 어시스턴트입니다.\n국토교통부 실거래 원장 데이터 및 시장 지표를 기반으로 단지별 거래가 추이, 갭 비율, 신고가 내역 등을 분석하여 제공합니다.",
+      timestamp: "시스템 초기화"
     }
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [modelChoice, setModelChoice] = useState("gpt"); // "gpt" (OpenAI GPT-4o) | "gemini" (Google Gemini 1.5)
+  const [modelChoice, setModelChoice] = useState("gpt");
   const messagesEndRef = useRef(null);
 
-  // 추천 질의 칩 목록
   const promptChips = [
-    "은마아파트 최근 전세가 어떻게 돼?",
-    "은마아파트 최근 매매 시세 분석해줘",
-    "20억 이하로 살 수 있는 강남 아파트 있어?",
-    "최근 매매와 전세 갭 차이가 얼마나 나?"
+    "은마아파트 최근 1년 전세 실거래 추이",
+    "강남구 30평형대 최고가 거래 분석",
+    "최근 매매 대비 전세가율 현황",
+    "분기별 신고가 거래 단지 목록"
   ];
 
-  // 메시지 추가 시 스크롤 자동 이동
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
@@ -44,7 +41,7 @@ export default function GeminiChatModal({ isOpen, onClose }) {
       id: Date.now(),
       sender: "user",
       text: textToSend.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      timestamp: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
     };
 
     setMessages((prev) => [...prev, userMsg]);
@@ -52,7 +49,6 @@ export default function GeminiChatModal({ isOpen, onClose }) {
     setLoading(true);
 
     try {
-      // 백엔드 FastAPI /api/chat 호출 (Render 배포 연동)
       const res = await axios.post("https://zipview-real-estate-platform.onrender.com/api/chat", {
         prompt: userMsg.text,
         model_choice: modelChoice
@@ -61,8 +57,8 @@ export default function GeminiChatModal({ isOpen, onClose }) {
       const aiMsg = {
         id: Date.now() + 1,
         sender: "ai",
-        text: res.data.reply || "답변을 수신하지 못했습니다.",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        text: res.data.reply || "데이터를 조회할 수 없습니다.",
+        timestamp: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
       };
 
       setMessages((prev) => [...prev, aiMsg]);
@@ -71,8 +67,8 @@ export default function GeminiChatModal({ isOpen, onClose }) {
       const errorMsg = {
         id: Date.now() + 1,
         sender: "ai",
-        text: "서버 통신 중 오류가 발생했습니다. 백엔드(포트 8000)가 실행 중인지 확인해 주세요.",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        text: "데이터 서버와의 통신 중 지연이 발생했습니다. 잠시 후 다시 시도해 주십시오.",
+        timestamp: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
@@ -89,102 +85,128 @@ export default function GeminiChatModal({ isOpen, onClose }) {
     <div style={{
       position: "fixed",
       inset: 0,
-      backgroundColor: "rgba(15, 23, 42, 0.65)",
-      backdropFilter: "blur(4px)",
+      backgroundColor: "rgba(15, 23, 42, 0.6)",
+      backdropFilter: "blur(2px)",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
       zIndex: 9999,
-      fontFamily: "-apple-system, BlinkMacSystemFont, 'Pretendard', sans-serif"
+      fontFamily: "'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif"
     }}>
       <div style={{
-        width: "520px",
+        width: "540px",
         height: "680px",
-        maxWidth: "92vw",
-        maxHeight: "90vh",
+        maxWidth: "94vw",
+        maxHeight: "92vh",
         background: "#ffffff",
-        borderRadius: "16px",
-        boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+        borderRadius: "10px",
+        border: "1px solid #cbd5e1",
+        boxShadow: "0 20px 25px -5px rgba(15, 23, 42, 0.2)",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden"
       }}>
-        {/* 1. 모달 헤더 */}
+        {/* 1. 모달 헤더 (Dark Navy Flat) */}
         <div style={{
           padding: "16px 20px",
-          background: "linear-gradient(135deg, #0038ff 0%, #1e40af 100%)",
+          background: "#0f172a",
+          borderBottom: "1px solid #1e293b",
           color: "#ffffff",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between"
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <span style={{ fontSize: "22px" }}>🤖</span>
-            <div>
-              <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 800 }}>AI 부동산 데이터 컨설턴트</h3>
-              <p style={{ margin: "2px 0 0", fontSize: "11px", opacity: 0.85 }}>
-                OpenAI GPT-4o & Gemini 실시간 DB 연동
-              </p>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{
+                fontSize: "10px",
+                fontWeight: 700,
+                letterSpacing: "0.05em",
+                textTransform: "uppercase",
+                background: "#1e293b",
+                color: "#94a3b8",
+                padding: "2px 6px",
+                borderRadius: "4px",
+                border: "1px solid #334155"
+              }}>
+                Enterprise AI
+              </span>
+              <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 700, color: "#f8fafc", letterSpacing: "-0.01em" }}>
+                부동산 시장 분석 어시스턴트
+              </h3>
             </div>
+            <p style={{ margin: "3px 0 0", fontSize: "11px", color: "#94a3b8" }}>
+              국토교통부 실거래 원장 데이터 실시간 질의
+            </p>
           </div>
+
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <select
               value={modelChoice}
               onChange={(e) => setModelChoice(e.target.value)}
               style={{
-                background: "rgba(255, 255, 255, 0.2)",
-                color: "#ffffff",
-                border: "1px solid rgba(255, 255, 255, 0.4)",
-                borderRadius: "14px",
-                padding: "3px 8px",
+                background: "#1e293b",
+                color: "#f8fafc",
+                border: "1px solid #334155",
+                borderRadius: "6px",
+                padding: "4px 8px",
                 fontSize: "11px",
-                fontWeight: 700,
+                fontWeight: 600,
                 outline: "none",
                 cursor: "pointer"
               }}
             >
-              <option value="gpt" style={{ color: "#000" }}>🟢 OpenAI GPT-4o</option>
-              <option value="gemini" style={{ color: "#000" }}>🔵 Google Gemini 1.5</option>
+              <option value="gpt">GPT-4o</option>
+              <option value="gemini">Gemini 1.5</option>
             </select>
             <button
               onClick={onClose}
-            style={{
-              background: "rgba(255, 255, 255, 0.15)",
-              border: "none",
-              color: "#fff",
-              width: "28px",
-              height: "28px",
-              borderRadius: "50%",
-              cursor: "pointer",
-              fontSize: "14px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }}
-          >
-            ✕
-          </button>
+              style={{
+                background: "transparent",
+                border: "1px solid #334155",
+                color: "#94a3b8",
+                width: "28px",
+                height: "28px",
+                borderRadius: "6px",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.15s"
+              }}
+              title="닫기"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
         </div>
 
-        {/* 2. 빠른 추천 질문 칩 바 */}
+        {/* 2. 실무 추천 분석 칩 */}
         <div style={{
-          padding: "10px 14px",
+          padding: "8px 16px",
           background: "#f8fafc",
           borderBottom: "1px solid #e2e8f0",
           display: "flex",
+          alignItems: "center",
           gap: "6px",
           overflowX: "auto",
           whiteSpace: "nowrap"
         }}>
+          <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", shrink: 0 }}>
+            추천 분석:
+          </span>
           {promptChips.map((chip, idx) => (
             <button
               key={idx}
               onClick={() => sendMessage(chip)}
               disabled={loading}
               style={{
-                padding: "5px 11px",
-                borderRadius: "16px",
-                border: "1px solid #cbd5e1",
+                padding: "4px 10px",
+                borderRadius: "6px",
+                border: "1px solid #e2e8f0",
                 background: "#ffffff",
                 fontSize: "11px",
                 color: "#334155",
@@ -193,15 +215,15 @@ export default function GeminiChatModal({ isOpen, onClose }) {
                 transition: "all 0.15s ease"
               }}
             >
-              💡 {chip}
+              {chip}
             </button>
           ))}
         </div>
 
-        {/* 3. 대화 말풍선 스크롤 영역 */}
+        {/* 3. 대화 스크롤 영역 */}
         <div style={{
           flex: 1,
-          padding: "18px",
+          padding: "16px 20px",
           overflowY: "auto",
           display: "flex",
           flexDirection: "column",
@@ -221,36 +243,36 @@ export default function GeminiChatModal({ isOpen, onClose }) {
               >
                 <div style={{
                   display: "flex",
-                  alignItems: "flex-end",
-                  gap: "6px",
+                  alignItems: "flex-start",
+                  gap: "8px",
                   flexDirection: isUser ? "row-reverse" : "row"
                 }}>
                   {!isUser && (
                     <div style={{
-                      width: "32px",
-                      height: "32px",
-                      borderRadius: "50%",
-                      background: "#eff6ff",
-                      color: "#0038ff",
+                      width: "26px",
+                      height: "26px",
+                      borderRadius: "6px",
+                      background: "#0f172a",
+                      color: "#ffffff",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: "16px",
+                      fontSize: "10px",
+                      fontWeight: 800,
                       flexShrink: 0
                     }}>
-                      🤖
+                      AI
                     </div>
                   )}
                   <div style={{
-                    maxWidth: "380px",
-                    padding: "12px 16px",
-                    borderRadius: isUser ? "16px 16px 2px 16px" : "16px 16px 16px 2px",
-                    background: isUser ? "#0038ff" : "#ffffff",
+                    maxWidth: "400px",
+                    padding: "12px 14px",
+                    borderRadius: isUser ? "8px 8px 2px 8px" : "8px 8px 8px 2px",
+                    background: isUser ? "#1e3a8a" : "#ffffff",
                     color: isUser ? "#ffffff" : "#0f172a",
-                    fontSize: "13.5px",
+                    fontSize: "13px",
                     lineHeight: "1.6",
                     whiteSpace: "pre-line",
-                    boxShadow: isUser ? "0 2px 6px rgba(0, 56, 255, 0.25)" : "0 2px 6px rgba(0, 0, 0, 0.04)",
                     border: isUser ? "none" : "1px solid #e2e8f0"
                   }}>
                     {msg.text}
@@ -260,7 +282,7 @@ export default function GeminiChatModal({ isOpen, onClose }) {
                   fontSize: "10px",
                   color: "#94a3b8",
                   marginTop: "4px",
-                  padding: "0 6px"
+                  padding: "0 4px"
                 }}>
                   {msg.timestamp}
                 </span>
@@ -268,27 +290,28 @@ export default function GeminiChatModal({ isOpen, onClose }) {
             );
           })}
 
-          {/* AI 응답 대기 로딩 애니메이션 */}
           {loading && (
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "6px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", padding: "4px" }}>
               <div style={{
-                width: "30px", height: "30px", borderRadius: "50%",
-                background: "#eff6ff", display: "flex", alignItems: "center", justifyContent: "center"
+                width: "26px", height: "26px", borderRadius: "6px",
+                background: "#0f172a", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "10px", fontWeight: 800
               }}>
-                🤖
+                AI
               </div>
               <div style={{
-                background: "#ffffff", padding: "10px 14px", borderRadius: "14px",
-                border: "1px solid #e2e8f0", fontSize: "12.5px", color: "#64748b", display: "flex", alignItems: "center", gap: "6px"
+                background: "#ffffff", padding: "8px 12px", borderRadius: "6px",
+                border: "1px solid #e2e8f0", fontSize: "12px", color: "#64748b", display: "flex", alignItems: "center", gap: "8px"
               }}>
-                <span className="spinner-dot">⚡</span> Gemini가 국토부 실거래 DB를 조회하고 있습니다...
+                <span style={{ display: "inline-block", width: "10px", height: "10px", borderRadius: "50%", border: "2px solid #0f172a", borderTopColor: "transparent" }}></span>
+                국토교통부 실거래 원장 데이터를 집계하고 있습니다...
               </div>
             </div>
           )}
           <div ref={messagesEndRef} />
         </div>
 
-        {/* 4. 하단 입력 폼 */}
+        {/* 4. 하단 입력창 */}
         <form
           onSubmit={handleSubmit}
           style={{
@@ -303,14 +326,15 @@ export default function GeminiChatModal({ isOpen, onClose }) {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="예: 은마아파트 최근 전세 시세와 최고 거래가 알려줘"
+            placeholder="질문 내용을 입력하십시오 (예: 강남구 최근 1년 전세 시세 및 최고 거래가 분석)"
             disabled={loading}
             style={{
               flex: 1,
-              padding: "12px 16px",
-              borderRadius: "24px",
-              border: "1.5px solid #cbd5e1",
+              padding: "10px 14px",
+              borderRadius: "6px",
+              border: "1px solid #cbd5e1",
               fontSize: "13px",
+              color: "#0f172a",
               outline: "none"
             }}
           />
@@ -319,21 +343,20 @@ export default function GeminiChatModal({ isOpen, onClose }) {
             disabled={loading || !input.trim()}
             style={{
               padding: "0 18px",
-              borderRadius: "24px",
+              borderRadius: "6px",
               border: "none",
-              background: loading || !input.trim() ? "#94a3b8" : "#0038ff",
+              background: loading || !input.trim() ? "#cbd5e1" : "#0f172a",
               color: "#ffffff",
-              fontWeight: 700,
+              fontWeight: 600,
               fontSize: "13px",
               cursor: loading || !input.trim() ? "not-allowed" : "pointer",
               transition: "background 0.15s ease"
             }}
           >
-            질문
+            전송
           </button>
         </form>
       </div>
     </div>
   );
 }
-
