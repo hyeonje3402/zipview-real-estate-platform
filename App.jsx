@@ -26,7 +26,7 @@ export default function App() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F2F4F6] text-[#191F28] font-sans antialiased selection:bg-[#E8F3FF] selection:text-[#3182F6]">
+    <main className="min-h-screen w-full max-w-full overflow-x-hidden box-border bg-[#F8FAFC] text-[#0F172A] font-sans antialiased selection:bg-[#E2E8F0] selection:text-[#0F172A]">
       <ComponentToRender />
     </main>
   );
