@@ -83,11 +83,11 @@ async def request_molit_xml_async(
     endpoint: str,
     lawd_cd: str,
     deal_ymd: str,
-    max_retries: int = 3,
-    base_delay: float = 1.0
+    max_retries: int = 2,
+    base_delay: float = 0.4
 ) -> str:
     """
-    aiohttp를 사용한 국토교통부 Open API 비동기 호출 함수
+    aiohttp를 사용한 국토교통부 Open API 고성능 비동기 호출 함수
     Rate Limit 방어 및 네트워크 불안정 극복을 위한 지수 백오프(Exponential Backoff) 재시도 포함
     """
     raw_key = unquote(MOLIT_API_KEY)
@@ -105,7 +105,7 @@ async def request_molit_xml_async(
 
     for attempt in range(1, max_retries + 1):
         try:
-            timeout = aiohttp.ClientTimeout(total=25)
+            timeout = aiohttp.ClientTimeout(total=15)
             async with session.get(url, headers=headers, timeout=timeout) as response:
                 if response.status == 200:
                     text = await response.text(encoding="utf-8", errors="replace")

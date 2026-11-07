@@ -47,22 +47,29 @@ app = FastAPI(
     version="3.0.0"
 )
 
-# 1. CORS 미들웨어 설정
+# 1. CORS 미들웨어 설정 (프로덕션 보안 및 Vercel 도메인 완벽 매핑)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
+        "https://zip-view-rose.vercel.app",
+        "https://zipview-real-estate-platform.onrender.com",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://localhost:3001",
         "http://127.0.0.1:3001",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "https://zip-view-rose.vercel.app",
-        "*"
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:8001",
+        "http://127.0.0.1:8001"
     ],
+    allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600
 )
 
 
@@ -177,15 +184,15 @@ async def execute_sync_for_region_chunked(
 
     total_added = 0
     SYNC_STATUS["is_syncing"] = True
-    sem = asyncio.Semaphore(6)  # 안전한 동시 요청 수 (Rate Limit 방어)
+    sem = asyncio.Semaphore(12)  # 상용 프로덕션 트래픽 고속 비동기 처리
 
     # 5~6개월 단위 청크 분할
     chunks = [target_ymds[i:i + chunk_size] for i in range(0, len(target_ymds), chunk_size)]
     print(f"🚀 [병렬 청크 수집] 지역({regional_code}) 총 {len(target_ymds)}개 월을 {len(chunks)}개 청크로 병렬 처리 시작")
 
     try:
-        # aiohttp 연결 풀 생성 (Keep-Alive 활성화)
-        connector = aiohttp.TCPConnector(limit=25, ttl_dns_roundrobin=300)
+        # aiohttp 고성능 연결 풀 생성 (Keep-Alive 활성화)
+        connector = aiohttp.TCPConnector(limit=50, ttl_dns_roundrobin=300)
         async with aiohttp.ClientSession(connector=connector) as session:
             for idx, chunk in enumerate(chunks):
                 chunk_label = f"{chunk[0]}~{chunk[-1]}" if len(chunk) > 1 else chunk[0]
@@ -203,10 +210,6 @@ async def execute_sync_for_region_chunked(
                         total_added += r
                     elif isinstance(r, Exception):
                         print(f"⚠️ [청크 {idx + 1} 부분 에러]: {r}")
-
-                # 공공데이터포털 트래픽 분산을 위한 짧은 인터벌
-                if idx < len(chunks) - 1:
-                    await asyncio.sleep(0.15)
 
         SYNC_STATUS["last_synced_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         SYNC_STATUS["last_sync_region"] = regional_code

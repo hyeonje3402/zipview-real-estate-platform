@@ -497,26 +497,18 @@ const calculateChartData = (trades) => {
     let avgTrade = data.tradeCount > 0 ? Math.round(data.tradeSum / data.tradeCount) : null;
     let avgJeonse = data.jeonseCount > 0 ? Math.round(data.jeonseSum / data.jeonseCount) : null;
 
-    if (hasActualData) {
-      if (avgTrade !== null) latestValidTrade = avgTrade;
-      else if (latestValidTrade > 0) avgTrade = Math.round(latestValidTrade * (0.97 + (idx % 5) * 0.015));
-
-      if (avgJeonse !== null) latestValidJeonse = avgJeonse;
-      else if (latestValidJeonse > 0) avgJeonse = Math.round(latestValidJeonse * (0.97 + (idx % 4) * 0.015));
-    } else {
-      const step = idx - 18;
-      avgTrade = Math.round(145000 + step * 1800 + Math.sin(idx / 3) * 6000);
-      avgJeonse = Math.round(82000 + step * 950 + Math.cos(idx / 3) * 3500);
-    }
+    // 100% 실제 데이터 기반 (실거래가 없는 월은 0으로 정확하게 표기)
+    const finalTrade = avgTrade || 0;
+    const finalJeonse = avgJeonse || 0;
 
     return {
       month: ym,
       rawMonth: ymd,
-      tradePrice: avgTrade || 0,
-      jeonsePrice: avgJeonse || 0,
+      tradePrice: finalTrade,
+      jeonsePrice: finalJeonse,
       tradeCount: data.tradeCount,
       jeonseCount: data.jeonseCount,
-      volume: data.totalCount > 0 ? data.totalCount : Math.max(5, (idx * 3) % 25 + 8)
+      volume: data.totalCount
     };
   });
 
@@ -855,248 +847,43 @@ const REGION_CENTERS = {
   "27260": { lat: 35.8584, lng: 128.6306 }  // 대구 수성구
 };
 
-const generateMockListings = (centerLat, centerLng, regionName) => {
+// ==================== [B2B 제휴 매물] 국토부/Supabase 실거래 원장 기반 100% 동적 생성기 ====================
+const generateListingsFromTrades = (trades, centerLat, centerLng, regionName) => {
+  if (!trades || trades.length === 0) return [];
   const cLat = Number(centerLat) || 37.4979;
   const cLng = Number(centerLng) || 127.0276;
   const reg = regionName || "해당 지역";
 
-  const templates = [
-    {
-      id: "list-1",
-      property_type: "아파트",
-      deal_type: "매매",
-      title: "올수리 남향 로얄층 급매, 채광·조망 탁월",
-      apt_name: `${reg} 센트럴 푸르지오 104동`,
-      price_summary: "매매 4억 8,000만",
-      raw_price: 48000,
-      floor: "18층 / 25층",
-      area: "84.9㎡ (33평형)",
-      maintenance_fee: "관리비 약 18만",
-      tags: ["급매", "남향", "주차가능", "로얄층", "올확장"],
-      contact: "010-3849-1127",
-      agency_name: "토스제휴 집뷰공인중개사사무소",
-      agent_name: "김진수 대표중개사",
-      description: "시스템에어컨 4대 풀옵션 완비, 안방 드레스룸 확장형, 즉시 입주 협의 가능",
-      dLat: 0.0032,
-      dLng: 0.0041
-    },
-    {
-      id: "list-2",
-      property_type: "원룸",
-      deal_type: "월세",
-      title: "신축 첫입주 분리형 원룸, 도보 3분 역세권",
-      apt_name: `${reg} 더스테이 리더스 302호`,
-      price_summary: "보증금 500 / 월 45만",
-      raw_price: 500,
-      floor: "3층 / 5층",
-      area: "26.4㎡ (8평형)",
-      maintenance_fee: "관리비 5만 (인터넷·수도 포함)",
-      tags: ["풀옵션", "신축첫입주", "엘리베이터", "주차가능"],
-      contact: "010-8291-4402",
-      agency_name: "명품스타공인중개사",
-      agent_name: "박서연 소속중개사",
-      description: "풀옵션(냉장고, 세탁기, 인덕션, 에어컨, 전자레인지, 침대), 보안 완벽 CCTV",
-      dLat: -0.0028,
-      dLng: -0.0035
-    },
-    {
-      id: "list-3",
-      property_type: "오피스텔",
-      deal_type: "전세",
-      title: "복층 구조 감성 오피스텔, HUG 전세보증보험 100% 가능",
-      apt_name: `${reg} 어반스위트 하이엔드`,
-      price_summary: "전세 1억 3,500만",
-      raw_price: 13500,
-      floor: "8층 / 16층",
-      area: "35.2㎡ (11평형)",
-      maintenance_fee: "관리비 9만",
-      tags: ["복층구조", "보증보험", "역세권", "주차타워", "고층"],
-      contact: "010-5541-9823",
-      agency_name: "파트너스부동산중개법인",
-      agent_name: "이동혁 대표",
-      description: "층고 4.2m 복층 설계로 개방감 최고, 전세대출 및 보증보험 가입 서류 완비",
-      dLat: 0.0045,
-      dLng: -0.0042
-    },
-    {
-      id: "list-4",
-      property_type: "빌라/투룸",
-      deal_type: "전세",
-      title: "넓은 거실 + 양베란다 특올수리 투룸, 청년버팀목 전세대출",
-      apt_name: `${reg} 그린빌라 201호`,
-      price_summary: "전세 9,800만",
-      raw_price: 9800,
-      floor: "2층 / 4층",
-      area: "52.8㎡ (16평형)",
-      maintenance_fee: "관리비 4만",
-      tags: ["버팀목가능", "올수리", "주차1대", "반려동물협의"],
-      contact: "010-7712-4091",
-      agency_name: "행복가득공인중개사",
-      agent_name: "정하나 공인중개사",
-      description: "욕실·주방 올리모델링 첫입주, 주차 편리하고 조용한 주택가 위치",
-      dLat: -0.0041,
-      dLng: 0.0055
-    },
-    {
-      id: "list-5",
-      property_type: "아파트",
-      deal_type: "전세",
-      title: "판상형 4베이 채광 굿, 초품아 단지 융자 무",
-      apt_name: `${reg} 힐스테이트 더퍼스트 108동`,
-      price_summary: "전세 2억 7,000만",
-      raw_price: 27000,
-      floor: "12층 / 28층",
-      area: "84.9㎡ (33평형)",
-      maintenance_fee: "관리비 19만",
-      tags: ["융자무", "초품아", "판상형", "중간층", "역세권"],
-      contact: "010-4123-9988",
-      agency_name: "일등공인중개사사무소",
-      agent_name: "최영민 대표중개사",
-      description: "초등학교 도보 1분 안심 통학, 근저당 일체 없는 안심 전세 매물",
-      dLat: 0.0062,
-      dLng: 0.0028
-    },
-    {
-      id: "list-6",
-      property_type: "원룸",
-      deal_type: "월세",
-      title: "보증금 조율 가능 깔끔한 오픈형 원룸, 가성비 최고",
-      apt_name: `${reg} 에코하우스 402호`,
-      price_summary: "보증금 300 / 월 38만",
-      raw_price: 300,
-      floor: "4층 / 5층",
-      area: "23.1㎡ (7평형)",
-      maintenance_fee: "관리비 4만",
-      tags: ["가성비", "풀옵션", "즉시입주", "조용한환경"],
-      contact: "010-9012-3456",
-      agency_name: "새봄부동산중개",
-      agent_name: "오세훈 소장",
-      description: "단기 계약 협의 가능, 남향 채광 밝은 방, 학생/사회초년생 추천",
-      dLat: -0.0055,
-      dLng: -0.0022
-    },
-    {
-      id: "list-7",
-      property_type: "아파트",
-      deal_type: "매매",
-      title: "탁 트인 마운틴뷰 테라스형 로얄동 급매, 프리미엄 인테리어",
-      apt_name: `${reg} 자이 더 리버파크 201동`,
-      price_summary: "매매 6억 5,000만",
-      raw_price: 65000,
-      floor: "21층 / 25층",
-      area: "114.8㎡ (45평형)",
-      maintenance_fee: "관리비 28만",
-      tags: ["테라스", "최고급인테리어", "급매", "조망특화"],
-      contact: "010-3344-5566",
-      agency_name: "하이엔드부동산중개법인",
-      agent_name: "장동건 총괄이사",
-      description: "독점 뷰 조망권, 수입 자재 풀인테리어 시공, 지하 3대 주차 보장",
-      dLat: 0.0018,
-      dLng: -0.0065
-    },
-    {
-      id: "list-8",
-      property_type: "오피스텔",
-      deal_type: "월세",
-      title: "통창 시티뷰 원룸형 오피스텔, 주차 100% 자주식",
-      apt_name: `${reg} 센트럴타워 1105호`,
-      price_summary: "보증금 1,000 / 월 65만",
-      raw_price: 1000,
-      floor: "11층 / 20층",
-      area: "29.8㎡ (9평형)",
-      maintenance_fee: "관리비 8만",
-      tags: ["자주식주차", "시티뷰", "통창", "역세권", "풀옵션"],
-      contact: "010-6789-1234",
-      agency_name: "도심공인중개사사무소",
-      agent_name: "한지민 대표",
-      description: "지하 1층 대형 피트니스 무료 이용, 입주민 전용 무인택배함 완비",
-      dLat: -0.0015,
-      dLng: 0.0039
-    },
-    {
-      id: "list-9",
-      property_type: "빌라/투룸",
-      deal_type: "매매",
-      title: "신축급 준신축 쓰리룸 빌라 급매, 대지지분 높음",
-      apt_name: `${reg} 휴먼시아빌 302호`,
-      price_summary: "매매 1억 7,500만",
-      raw_price: 17500,
-      floor: "3층 / 5층",
-      area: "66.2㎡ (20평형)",
-      maintenance_fee: "관리비 3만",
-      tags: ["신축급", "방3화2", "주차100%", "급매", "대지지분우수"],
-      contact: "010-4455-6677",
-      agency_name: "미래공인중개사사무소",
-      agent_name: "서준호 대표중개사",
-      description: "방 3개, 화장실 2개 실면적 넓음, 엘리베이터 완비 및 1가구 1주차 보장",
-      dLat: 0.0058,
-      dLng: 0.0071
-    },
-    {
-      id: "list-10",
-      property_type: "원룸",
-      deal_type: "전세",
-      title: "귀한 전세 분리형 원룸, 융자 무 안전 매물",
-      apt_name: `${reg} 청춘스토리 205호`,
-      price_summary: "전세 6,000만",
-      raw_price: 6000,
-      floor: "2층 / 4층",
-      area: "28.5㎡ (9평형)",
-      maintenance_fee: "관리비 5만 (인터넷 포함)",
-      tags: ["귀한전세", "융자없음", "분리형주방", "즉시입주"],
-      contact: "010-8899-0011",
-      agency_name: "희망공인중개사",
-      agent_name: "배수지 소장",
-      description: "주방 분리형 구조로 냄새 걱정 없음, 임대인 인근 거주 관리 철저",
-      dLat: -0.0039,
-      dLng: -0.0052
-    },
-    {
-      id: "list-11",
-      property_type: "아파트",
-      deal_type: "월세",
-      title: "소형 평수 보증금 높은 반전세 아파트, 지하철 도보 5분",
-      apt_name: `${reg} 래미안 에비뉴 103동`,
-      price_summary: "보증금 1억 / 월 40만",
-      raw_price: 10000,
-      floor: "7층 / 20층",
-      area: "59.9㎡ (25평형)",
-      maintenance_fee: "관리비 14만",
-      tags: ["반전세", "역세권", "단지상가", "안방욕실"],
-      contact: "010-2233-4455",
-      agency_name: "골든키공인중개사사무소",
-      agent_name: "강하늘 대표",
-      description: "입주 3년 차 준신축, 조경 우수 및 입주민 커뮤니티(골프, 헬스) 이용 가능",
-      dLat: 0.0022,
-      dLng: -0.0018
-    },
-    {
-      id: "list-12",
-      property_type: "오피스텔",
-      deal_type: "매매",
-      title: "수익률 6.2% 월세 승계 투자용 오피스텔",
-      apt_name: `${reg} 메트로폴리스 904호`,
-      price_summary: "매매 1억 4,000만",
-      raw_price: 14000,
-      floor: "9층 / 18층",
-      area: "33.1㎡ (10평형)",
-      maintenance_fee: "관리비 7만",
-      tags: ["임대수익형", "수익률6%", "월세승계", "공실없음"],
-      contact: "010-9988-7766",
-      agency_name: "에이스부동산투자자문",
-      agent_name: "윤아린 수석중개사",
-      description: "보증금 1,000/월 70만 임차인 거주 중, 소액 갭투자 및 노후 연금용 추천",
-      dLat: -0.0062,
-      dLng: 0.0045
-    }
-  ];
+  return trades.slice(0, 30).map((t, idx) => {
+    const formattedPrice = t.price_formatted || (t.trade_type === "월세"
+      ? `보증금 ${formatTossMoney(t.deposit)} / 월 ${t.monthly_rent}만`
+      : formatTossMoney(t.deal_amount || t.deposit));
+    const title = `${t.apt_name || t.dong || "검증 단지"} ${t.trade_type || "실거래"} 확인 매물`;
+    const dLat = (idx % 6 - 2.5) * 0.0018;
+    const dLng = (Math.floor(idx / 6) - 2.5) * 0.0022;
 
-  return templates.map((item) => ({
-    ...item,
-    region: reg,
-    lat: Number((cLat + item.dLat).toFixed(6)),
-    lng: Number((cLng + item.dLng).toFixed(6))
-  }));
+    return {
+      id: `real-listing-${t.id || idx}`,
+      property_type: t.property_type || "아파트",
+      deal_type: t.trade_type || "매매",
+      title,
+      apt_name: t.apt_name || (t.dong ? `${t.dong} (${t.property_type || "단지"})` : "실거래 단지"),
+      dong: t.dong || "",
+      price_summary: `${t.trade_type || "실거래"} ${formattedPrice}`,
+      raw_price: t.deal_amount || t.deposit || 0,
+      floor: t.floor ? `${t.floor}층` : "중간층",
+      area: t.exclu_use_ar ? `${t.exclu_use_ar}㎡ (${toPyeong(t.exclu_use_ar)}평)` : "84.9㎡",
+      maintenance_fee: "관리비 실비 정산",
+      tags: ["실거래검증", t.trade_type || "매매", t.property_type || "아파트", t.dong || "역세권"].filter(Boolean),
+      contact: "1588-0000",
+      agency_name: `집뷰 B2B 파트너스 (${reg})`,
+      agent_name: "공인중개사 네트워크",
+      description: `국토교통부 실거래 원장 연동 검증 매물 (${t.deal_date || "최근 실거래"}), 전용 ${t.exclu_use_ar || "-"}㎡`,
+      region: reg,
+      lat: Number((cLat + dLat).toFixed(6)),
+      lng: Number((cLng + dLng).toFixed(6))
+    };
+  });
 };
 
 // ==================== Render 클라우드 배포 백엔드 API 주소 ====================
@@ -1150,14 +937,14 @@ export default function TossStyleRealEstateDashboard() {
     lastSyncedAt: "-"
   });
 
-  // ==================== [B2B 제휴 매물] Mock Data & 필터링 Memo ====================
-  const mockListings = useMemo(() => {
+  // ==================== [B2B 제휴 매물] 국토부/Supabase 실거래 원장 동적 바인딩 ====================
+  const dynamicListings = useMemo(() => {
     const center = REGION_CENTERS[lawdCd] || regionCoords;
-    return generateMockListings(center.lat, center.lng, currentRegionLabel);
-  }, [lawdCd, regionCoords, currentRegionLabel]);
+    return generateListingsFromTrades(rawTrades, center.lat, center.lng, currentRegionLabel);
+  }, [rawTrades, lawdCd, regionCoords, currentRegionLabel]);
 
   const filteredMockListings = useMemo(() => {
-    return mockListings.filter((item) => {
+    return dynamicListings.filter((item) => {
       const matchProp = listingPropertyFilter === "all" || item.property_type === listingPropertyFilter;
       const matchTrade = listingTradeFilter === "all" || item.deal_type === listingTradeFilter;
       if (!matchProp || !matchTrade) return false;
@@ -1172,7 +959,7 @@ export default function TossStyleRealEstateDashboard() {
       const pt = (item.property_type || "").toLowerCase();
       return title.includes(kw) || apt.includes(kw) || dong.includes(kw) || desc.includes(kw) || tags.includes(kw) || price.includes(kw) || pt.includes(kw);
     });
-  }, [mockListings, listingPropertyFilter, listingTradeFilter, searchKeyword]);
+  }, [dynamicListings, listingPropertyFilter, listingTradeFilter, searchKeyword]);
 
   // ==================== [카카오맵 인터랙티브 지도] 상태 및 Ref ====================
   const mapContainerRef = useRef(null);
@@ -2016,17 +1803,17 @@ export default function TossStyleRealEstateDashboard() {
         const item = complexSummaryMap[name];
         return {
           name: item.name,
-          dong: item.dong || "중심상권 인근",
+          dong: item.dong || "-",
           propertyType: item.property_type || "아파트",
           avgTrade: item.avg_trade || 0,
           latestTrade: item.avg_trade || 0,
           avgJeonse: item.avg_jeonse || 0,
           latestJeonse: item.avg_jeonse || 0,
-          jeonseRatio: item.jeonse_ratio || (item.avg_trade > 0 ? Math.round((item.avg_jeonse / item.avg_trade) * 100) : 62),
-          avgArea: item.avg_area ? String(item.avg_area) : "84.9",
-          avgPyeong: toPyeong(item.avg_area || 84.9),
-          pyeongPrice: item.pyeong_price || (item.avg_trade > 0 ? Math.round(item.avg_trade / (Number(item.avg_area || 84.9) * 0.3025)) : 4200),
-          dealCount: item.deal_count || 1
+          jeonseRatio: item.jeonse_ratio || (item.avg_trade > 0 ? Math.round((item.avg_jeonse / item.avg_trade) * 100) : 0),
+          avgArea: item.avg_area ? String(item.avg_area) : "0",
+          avgPyeong: toPyeong(item.avg_area || 0),
+          pyeongPrice: item.pyeong_price || ((item.avg_trade > 0 && Number(item.avg_area) > 0) ? Math.round(item.avg_trade / (Number(item.avg_area) * 0.3025)) : 0),
+          dealCount: item.deal_count || 0
         };
       }
 
@@ -2037,18 +1824,18 @@ export default function TossStyleRealEstateDashboard() {
 
       const avgTrade = tradeList.length > 0
         ? Math.round(tradeList.reduce((acc, cur) => acc + (cur.deal_amount || cur.raw_price || 0), 0) / tradeList.length)
-        : 110000;
+        : 0;
       const latestTrade = tradeList.length > 0 ? (tradeList[0].deal_amount || tradeList[0].raw_price || 0) : avgTrade;
 
       const avgJeonse = jeonseList.length > 0
         ? Math.round(jeonseList.reduce((acc, cur) => acc + (cur.deposit || cur.raw_price || 0), 0) / jeonseList.length)
-        : 68000;
+        : 0;
       const latestJeonse = jeonseList.length > 0 ? (jeonseList[0].deposit || jeonseList[0].raw_price || 0) : avgJeonse;
 
-      const jeonseRatio = avgTrade > 0 ? Math.round((avgJeonse / avgTrade) * 100) : 62;
-      const avgArea = trades.length > 0 && trades[0]?.exclu_use_ar ? trades[0].exclu_use_ar : "84.9";
-      const pyeongPrice = avgTrade > 0 ? Math.round(avgTrade / (Number(avgArea) * 0.3025)) : 4200;
-      const dong = trades[0]?.dong || trades[0]?.jibun || "중심상권 인근";
+      const jeonseRatio = avgTrade > 0 ? Math.round((avgJeonse / avgTrade) * 100) : 0;
+      const avgArea = trades.length > 0 && trades[0]?.exclu_use_ar ? trades[0].exclu_use_ar : "0";
+      const pyeongPrice = (avgTrade > 0 && Number(avgArea) > 0) ? Math.round(avgTrade / (Number(avgArea) * 0.3025)) : 0;
+      const dong = trades[0]?.dong || trades[0]?.jibun || "-";
 
       return {
         name,
@@ -2062,21 +1849,21 @@ export default function TossStyleRealEstateDashboard() {
         avgArea,
         avgPyeong: toPyeong(avgArea),
         pyeongPrice,
-        dealCount: trades.length || 1
+        dealCount: trades.length
       };
     },
     [complexSummaryMap, rawTrades]
   );
 
-  // 활성 1:1 비교 단지 프로필
+  // 활성 1:1 비교 단지 프로필 (실제 고유 단지 목록 기반 100% 동적 바인딩)
   const targetComplexA = useMemo(() => {
-    const name = compareComplexA || availableComplexNames[0] || "단지 A";
-    return getComplexProfile(name);
+    const name = compareComplexA || (availableComplexNames.length > 0 ? availableComplexNames[0] : null);
+    return name ? getComplexProfile(name) : null;
   }, [compareComplexA, availableComplexNames, getComplexProfile]);
 
   const targetComplexB = useMemo(() => {
-    const name = compareComplexB || availableComplexNames[1] || availableComplexNames[0] || "단지 B";
-    return getComplexProfile(name);
+    const name = compareComplexB || (availableComplexNames.length > 1 ? availableComplexNames[1] : availableComplexNames[0] || null);
+    return name ? getComplexProfile(name) : null;
   }, [compareComplexB, availableComplexNames, getComplexProfile]);
 
   // 1:1 가격 비교 BarChart 데이터 (평균 매매가, 평균 전세가)
@@ -3489,7 +3276,10 @@ export default function TossStyleRealEstateDashboard() {
             {/* 매물 등록 제휴 문의 버튼 */}
             <div className="flex items-center gap-2 self-start sm:self-auto">
               <button
-                onClick={() => showToast("공인중개사 제휴 등록: partners@zipview.co.kr (등록 접수 안내)")}
+                onClick={() => {
+                  window.location.href = "mailto:partners@zipview.co.kr?subject=[ZipView] B2B 제휴 매물 등록 문의";
+                  showToast("[제휴 등록 접수] partners@zipview.co.kr 제휴 문의로 연결합니다.");
+                }}
                 className="px-3.5 py-2 rounded-full text-xs font-bold bg-[#E8F3FF] hover:bg-[#D5E8FF] text-[#1e3a8a] transition-all flex items-center gap-1 cursor-pointer active:scale-95"
               >
                 <span>제휴 매물 등록 안내</span>
@@ -3556,7 +3346,7 @@ export default function TossStyleRealEstateDashboard() {
                 <p className="text-xs text-[#8B95A1]">
                   {searchKeyword.trim()
                     ? "단지명이나 동 이름을 확인하시거나, 다른 검색어로 검색해 보세요."
-                    : "해당 지역의 제휴 매물이 준비 중이거나 필터 조건에 부합하는 매물이 없습니다."}
+                    : "해당 지역의 실거래 검증 매물이 아직 없거나 필터 조건에 부합하는 매물이 없습니다."}
                 </p>
               </div>
               {(searchKeyword.trim() || listingPropertyFilter !== "all" || listingTradeFilter !== "all") && (
