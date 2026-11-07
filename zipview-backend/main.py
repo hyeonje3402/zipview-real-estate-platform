@@ -22,7 +22,7 @@ from sqlalchemy import func, desc, select, or_
 
 from database import engine, get_db, SessionLocal, Base
 from models import ApartmentTrade
-from ai_agent import ask_multi_llm_agent, LLMAgentFactory
+from ai_agent import run_ai_consultant, ask_multi_llm_agent
 from lawd_cd_registry import (
     resolve_lawd_cd,
     get_region_name,
@@ -707,25 +707,47 @@ async def get_trades(
 
     return response_payload
 
-# ==================== 7. AI 부동산 상담 챗봇 엔드포인트 ====================
+# ==================== 7. AI 부동산 상담 챗봇 엔드포인트 (Text-to-SQL & RAG 파이프라인) ====================
 class ChatRequest(BaseModel):
-    prompt: str
+    prompt: Optional[str] = None
+    query: Optional[str] = None
+    lawdCd: Optional[str] = None
+    regional_code: Optional[str] = None
+    regionLabel: Optional[str] = None
     model_choice: Optional[str] = "gpt"
 
 
 @app.post("/api/chat")
-def chat_with_multi_llm(req: ChatRequest):
-    if not req.prompt or not req.prompt.strip():
+@app.post("/api/ai/briefing")
+async def chat_with_multi_llm(req: ChatRequest, db: AsyncSession = Depends(get_db)):
+    """
+    자연어 기반 DB 필터링(Text-to-SQL / RAG) AI 상담 엔드포인트
+    - 프론트엔드 /api/chat 및 /api/ai/briefing 동시 호환
+    - 사용자 질의에서 조건 추출 후 Supabase DB 매물 실시간 검색
+    - 부합 매물 리스팅 브리핑 또는 '조건에 맞는 매물이 없습니다' 정확한 응답
+    """
+    user_prompt = (req.prompt or req.query or "").strip()
+    if not user_prompt:
         raise HTTPException(status_code=400, detail="질문 내용을 입력해 주세요.")
     
+    current_lawd_cd = req.lawdCd or req.regional_code or "11680"
     choice = req.model_choice or "gpt"
-    answer = ask_multi_llm_agent(prompt=req.prompt.strip(), model_choice=choice)
+    
+    answer = await run_ai_consultant(
+        prompt=user_prompt,
+        current_lawd_cd=current_lawd_cd,
+        region_label=req.regionLabel,
+        model_choice=choice,
+        db=db
+    )
     
     return {
         "status": "success",
         "model_choice": choice,
-        "prompt": req.prompt,
-        "reply": answer
+        "prompt": user_prompt,
+        "reply": answer,
+        "answer": answer,
+        "message": answer
     }
 
 

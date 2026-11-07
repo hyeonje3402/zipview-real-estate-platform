@@ -54,10 +54,15 @@ export default function GeminiChatModal({ isOpen, onClose }) {
         model_choice: modelChoice
       });
 
+      const rawText = res.data.reply || res.data.answer || res.data.message || "데이터를 조회할 수 없습니다.";
+      const cleanText = String(rawText)
+        .replace(/만원\s*만원/g, "만원")
+        .replace(/억\s*만원만원/g, "억 만원");
+
       const aiMsg = {
         id: Date.now() + 1,
         sender: "ai",
-        text: res.data.reply || "데이터를 조회할 수 없습니다.",
+        text: cleanText,
         timestamp: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
       };
 

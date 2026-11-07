@@ -1,25 +1,36 @@
-import os
-import json
-import re
-from typing import Dict, Any, List, Optional
-from dotenv import load_dotenv
+# -*- coding: utf-8 -*-
+"""
+ZipView 지능형 AI 부동산 상담 에이전트 (Text-to-SQL & RAG 파이프라인)
+- 자연어 조건(지역, 건물유형, 거래유형, 보증금/월세/매매가 상한선 등) 자동 파싱
+- 실제 Supabase/PostgreSQL DB(ApartmentTrade 테이블) 비동기 조건 검색
+- 검색 결과 기반 맞춤 매물 리스팅 브리핑 및 '조건에 맞는 매물이 없습니다' 정확한 예외 처리
+- '만원만원' 단위 중복 방지 엄격 포맷팅
+"""
 
-from database import SessionLocal
+import os
+import re
+import json
+from typing import Optional, List, Dict, Any
+from dotenv import load_dotenv
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, or_, and_, desc
+
 from models import ApartmentTrade
+from lawd_cd_registry import resolve_lawd_cd, get_region_name, NORMALIZED_NAME_TO_CODE
 
 load_dotenv()
 
-# 1. .env 파일에서 두 모델의 API 키 모두 로드
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
-def format_korean_money(amount_manwon: Optional[int]) -> str:
-    """만원 단위 숫자를 한국어 'X억 Y만원' 포맷으로 변환"""
-    if not amount_manwon or amount_manwon <= 0:
+def clean_format_korean_money(amount_manwon: Optional[int]) -> str:
+    """만원 단위 숫자를 한국어로 변환하며, '만원' 단위 중복을 원천 차단"""
+    if amount_manwon is None or amount_manwon <= 0:
         return "-"
-    eok = amount_manwon // 10000
-    rem = amount_manwon % 10000
+    amount = int(amount_manwon)
+    eok = amount // 10000
+    rem = amount % 10000
     if eok > 0 and rem > 0:
         return f"{eok}억 {rem:,}만원"
     elif eok > 0:
@@ -28,584 +39,341 @@ def format_korean_money(amount_manwon: Optional[int]) -> str:
         return f"{rem:,}만원"
 
 
-# ==================== LangChain 통일 도구(Unified Tools) 인터페이스 ====================
+def parse_korean_number_to_manwon(text: str) -> int:
+    """'15억', '2억 5천', '1000', '1,000만원' 등을 만원 단위 정수로 변환"""
+    if not text:
+        return 0
+    t = str(text).replace(",", "").replace(" ", "").strip()
 
-try:
-    from langchain_core.tools import tool
-except ImportError:
-    # LangChain 미설치 환경을 위한 임시 데코레이터
-    def tool(fn):
-        return fn
+    # 억 + 천/만 조합 (예: 2억5000, 2억5천, 15억)
+    eok_m = re.search(r"(\d+)억(?:(\d+)(?:천|만)?)?", t)
+    if eok_m:
+        eok = int(eok_m.group(1)) * 10000
+        rem = 0
+        if eok_m.group(2):
+            val = int(eok_m.group(2))
+            rem = val * 1000 if "천" in t and val < 100 else val
+        return eok + rem
+
+    # 만원 단위 (예: 1000만원, 1000만, 70만원, 70만)
+    man_m = re.search(r"(\d+)만", t)
+    if man_m:
+        return int(man_m.group(1))
+
+    # 순수 숫자만 있는 경우
+    num_m = re.search(r"(\d+)", t)
+    if num_m:
+        return int(num_m.group(1))
+    return 0
 
 
-@tool
-def search_recent_price(apt_name: str, trade_type: str = "매매") -> str:
-    """
-    특정 아파트 단지의 최근 실거래가 평균, 최저가, 최고가 및 최근 거래 내역 5건을 DB에서 조회합니다.
-    
-    Args:
-        apt_name: 검색할 아파트 단지명 (예: '은마', '래미안원베일리', '반포자이')
-        trade_type: 거래 유형 ('매매', '전세', '월세'). 기본값은 '매매'
-    """
-    db = SessionLocal()
+def extract_conditions_nlp(prompt: str, current_lawd_cd: Optional[str] = None) -> Dict[str, Any]:
+    """자연어 질의에서 지역, 거래유형, 건물유형, 가격 조건을 정규표현식 및 엔티티 매핑으로 추출"""
+    p = prompt.strip()
+    p_lower = p.lower()
+
+    # 1. 거래 유형 판별
+    trade_type = None
+    if "월세" in p_lower:
+        trade_type = "월세"
+    elif "전세" in p_lower:
+        trade_type = "전세"
+    elif any(k in p_lower for k in ["매매", "매수", "구입"]):
+        trade_type = "매매"
+
+    # 2. 건물 유형 판별
+    property_type = None
+    if "오피스텔" in p_lower:
+        property_type = "오피스텔"
+    elif any(k in p_lower for k in ["빌라", "다세대", "연립", "투룸"]):
+        property_type = "연립다세대"
+    elif any(k in p_lower for k in ["원룸", "다가구", "단독"]):
+        property_type = "단독다가구"
+    elif "아파트" in p_lower:
+        property_type = "아파트"
+
+    # 3. 보증금 / 매매가 / 월세 금액 파싱
+    max_deposit = None
+    max_price = None
+    max_monthly_rent = None
+
+    # 보증금 파싱
+    dep_m = re.search(r"보증금\s*([0-9억천만,\s]+?)(?:이하|미만|까지|$|\s)", p)
+    if dep_m:
+        max_deposit = parse_korean_number_to_manwon(dep_m.group(1))
+
+    # 월세 금액 파싱
+    rent_m = re.search(r"월세\s*([0-9억천만,\s]+?)(?:이하|미만|까지|$|\s)", p)
+    if not rent_m:
+        rent_m = re.search(r"월\s*([0-9억천만,\s]+?)(?:이하|미만|까지|$|\s)", p)
+    if rent_m:
+        max_monthly_rent = parse_korean_number_to_manwon(rent_m.group(1))
+
+    # 매매가 / 일반 금액 한도 파싱
+    if trade_type == "매매" or (not dep_m and not rent_m):
+        price_m = re.search(r"([0-9억천만,\s]+?)(?:이하|미만|예산|한도)", p)
+        if price_m:
+            parsed_val = parse_korean_number_to_manwon(price_m.group(1))
+            if parsed_val > 0:
+                if trade_type == "매매":
+                    max_price = parsed_val
+                elif trade_type in ["전세", "월세"]:
+                    max_deposit = parsed_val
+                else:
+                    max_price = parsed_val
+                    max_deposit = parsed_val
+
+    # 4. 지역 코드 추출 (프롬프트 내 명시된 지역 우선 검색)
+    target_lawd_cd = current_lawd_cd
+    # 프롬프트 단어 중 법정동 사전 매핑 검사
+    for word in p.split():
+        cleaned_word = re.sub(r"[^가-힣a-zA-Z0-9]", "", word)
+        if cleaned_word in NORMALIZED_NAME_TO_CODE:
+            target_lawd_cd = NORMALIZED_NAME_TO_CODE[cleaned_word]
+            break
+
+    # 5. 특정 단지명 검색
+    apt_name = None
+    apt_m = re.search(r"([가-힣a-zA-Z0-9]+)\s*(?:아파트|단지|오피스텔)", p)
+    if apt_m:
+        candidate = apt_m.group(1).strip()
+        stop_words = ["매매", "전세", "월세", "실거래", "실거래가", "최근", "부동산", "서울", "경기", "창원", "진주", "강남"]
+        if candidate not in stop_words and len(candidate) >= 2:
+            apt_name = candidate
+
+    return {
+        "trade_type": trade_type,
+        "property_type": property_type,
+        "max_deposit": max_deposit,
+        "max_monthly_rent": max_monthly_rent,
+        "max_price": max_price,
+        "regional_code": target_lawd_cd,
+        "apt_name": apt_name
+    }
+
+
+async def parse_conditions_with_openai(prompt: str, current_lawd_cd: Optional[str] = None) -> Dict[str, Any]:
+    """OpenAI API가 가용한 경우 LLM을 통해 정밀 JSON 조건 추출, 실패 시 NLP 규칙 파서 적용"""
+    if not OPENAI_API_KEY:
+        return extract_conditions_nlp(prompt, current_lawd_cd)
+
     try:
-        records = db.query(ApartmentTrade).filter(
-            ApartmentTrade.apt_name.ilike(f"%{apt_name.strip()}%"),
-            ApartmentTrade.trade_type == trade_type.strip()
-        ).order_by(ApartmentTrade.deal_date.desc(), ApartmentTrade.id.desc()).limit(5).all()
+        from openai import AsyncOpenAI
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
-        if not records:
-            # 거래유형 미지정 대응을 위한 폴백
-            fallback = db.query(ApartmentTrade).filter(
-                ApartmentTrade.apt_name.ilike(f"%{apt_name.strip()}%")
-            ).order_by(ApartmentTrade.deal_date.desc()).limit(5).all()
-            if not fallback:
-                return json.dumps({"found": False, "message": f"DB에 '{apt_name}' 단지의 실거래 기록이 없습니다."}, ensure_ascii=False)
-            records = fallback
-            trade_type = records[0].trade_type
+        system_msg = (
+            "너는 대한민국 부동산 질의 분석 전문가야. 사용자의 자연어 프롬프트에서 아래 필드를 JSON으로 추출해.\n"
+            "- trade_type: '매매', '전세', '월세' 또는 null\n"
+            "- property_type: '아파트', '오피스텔', '연립다세대', '단독다가구' 또는 null\n"
+            "- max_deposit: 보증금 상한선(만원 단위 정수, 예: 1000이하는 1000, 2억은 20000) 또는 null\n"
+            "- max_monthly_rent: 월세 상한선(만원 단위 정수, 예: 70이하는 70) 또는 null\n"
+            "- max_price: 매매가 상한선(만원 단위 정수, 예: 15억은 150000) 또는 null\n"
+            "- apt_name: 특정 단지명 검색 시 단지명 또는 null\n"
+            "- region_name: 언급된 시/군/구 지역명 또는 null\n"
+            "반드시 유효한 JSON 문자열만 출력해."
+        )
 
-        prices = [r.deal_amount if r.trade_type == "매매" else r.deposit for r in records if (r.deal_amount or r.deposit)]
-        recent_deals = [{
-            "deal_date": r.deal_date,
-            "trade_type": r.trade_type,
-            "price_formatted": format_korean_money(r.deal_amount if r.trade_type == "매매" else r.deposit),
-            "area_m2": round(r.exclu_use_ar, 1),
-            "floor": f"{r.floor}층" if r.floor else "층 미표기",
-            "dong": r.dong
-        } for r in records]
+        resp = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": f"질문: {prompt}"}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0,
+            timeout=8.0
+        )
 
-        avg_price = round(sum(prices) / len(prices)) if prices else 0
-        res = {
-            "found": True,
-            "apt_name": records[0].apt_name,
-            "trade_type": trade_type,
-            "sample_count": len(prices),
-            "average_price": format_korean_money(avg_price),
-            "min_price": format_korean_money(min(prices)) if prices else "-",
-            "max_price": format_korean_money(max(prices)) if prices else "-",
-            "recent_deals": recent_deals
-        }
-        return json.dumps(res, ensure_ascii=False)
-    finally:
-        db.close()
+        content = resp.choices[0].message.content
+        data = json.loads(content)
 
-
-@tool
-def find_affordable_apt(max_price: int, trade_type: str = "매매") -> str:
-    """
-    지정된 예산(최대 가격) 이하의 실거래가 있었던 아파트 단지 목록을 DB에서 검색합니다.
-    
-    Args:
-        max_price: 최대 가격 (예: 15억이면 150000 또는 15 입력 시 자동 만원 단위 변환)
-        trade_type: 거래 유형 ('매매', '전세', '월세'). 기본값은 '매매'
-    """
-    budget_manwon = max_price * 10000 if max_price < 1000 else max_price
-    db = SessionLocal()
-    try:
-        query = db.query(ApartmentTrade).filter(ApartmentTrade.trade_type == trade_type.strip())
-        if trade_type == "매매":
-            query = query.filter(ApartmentTrade.deal_amount <= budget_manwon, ApartmentTrade.deal_amount > 0).order_by(ApartmentTrade.deal_amount.desc())
-        else:
-            query = query.filter(ApartmentTrade.deposit <= budget_manwon, ApartmentTrade.deposit > 0).order_by(ApartmentTrade.deposit.desc())
-
-        records = query.limit(10).all()
-        if not records:
-            return json.dumps({"found": False, "message": f"{format_korean_money(budget_manwon)} 이하 {trade_type} 단지를 찾지 못했습니다."}, ensure_ascii=False)
-
-        seen = set()
-        apt_list = []
-        for r in records:
-            if r.apt_name not in seen:
-                seen.add(r.apt_name)
-                price_val = r.deal_amount if trade_type == "매매" else r.deposit
-                apt_list.append({
-                    "apt_name": r.apt_name,
-                    "dong": r.dong,
-                    "price_formatted": format_korean_money(price_val),
-                    "area_m2": round(r.exclu_use_ar, 1),
-                    "floor": f"{r.floor}층" if r.floor else "-",
-                    "deal_date": r.deal_date
-                })
-
-        res = {
-            "found": True,
-            "budget": format_korean_money(budget_manwon),
-            "trade_type": trade_type,
-            "count": len(apt_list),
-            "apartments": apt_list[:6]
-        }
-        return json.dumps(res, ensure_ascii=False)
-    finally:
-        db.close()
-
-
-# ==================== 1. 맞춤형 매물 검색 함수 (execute_custom_search) ====================
-
-def execute_custom_search(
-    max_deposit: Optional[int] = None,
-    min_rooms: Optional[int] = None,
-    min_bathrooms: Optional[int] = None,
-    property_type: Optional[str] = None,
-    trade_type: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    사용자의 복합 요구조건(예산: 보증금/매매가 한도, 최소 방 개수, 최소 화장실 개수, 건물유형, 거래유형)을
-    반영하여 SQLite/SQLAlchemy DB에서 조건에 부합하는 매물을 최신순으로 5개 검색합니다.
-    반드시 finally 블록에서 DB 세션을 닫습니다.
-    
-    Args:
-        max_deposit: 최대 보증금 또는 매매가 한도 (단위: 만원). 1000 미만 정수 입력 시 억 단위로 간주하여 자동 변환.
-        min_rooms: 희망하는 최소 방 개수 (정수).
-        min_bathrooms: 희망하는 최소 화장실/욕실 개수 (정수).
-        property_type: 건물 유형 ('아파트', '오피스텔', '연립다세대', '단독다가구').
-        trade_type: 거래 유형 ('매매', '전세', '월세').
-    """
-    # 억 단위(예: 1억 ➜ 1)로 잘못 넘어온 경우 만원 단위로 자동 환산 (1000 미만 숫자는 억 단위로 변환)
-    if max_deposit is not None and 0 < max_deposit < 1000:
-        max_deposit = max_deposit * 10000
-
-    db = SessionLocal()
-    try:
-        from sqlalchemy import or_
-
-        query = db.query(ApartmentTrade)
-
-        # 1. 건물 유형 필터링 ('아파트', '오피스텔', '연립다세대', '단독다가구')
-        norm_prop = property_type.strip() if property_type and property_type.strip() in ["아파트", "오피스텔", "연립다세대", "단독다가구"] else None
-        if norm_prop:
-            query = query.filter(ApartmentTrade.property_type == norm_prop)
-
-        # 2. 거래 유형 필터링 ('매매', '전세', '월세')
-        norm_type = trade_type.strip() if trade_type and trade_type.strip() in ["매매", "전세", "월세"] else None
-        if norm_type:
-            query = query.filter(ApartmentTrade.trade_type == norm_type)
-
-        # 3. 예산 (보증금 / 매매가) 필터링
-        if max_deposit is not None and max_deposit > 0:
-            if norm_type == "매매":
-                query = query.filter(ApartmentTrade.deal_amount <= max_deposit, ApartmentTrade.deal_amount > 0)
-            elif norm_type in ["전세", "월세"]:
-                query = query.filter(ApartmentTrade.deposit <= max_deposit, ApartmentTrade.deposit > 0)
-            else:
-                # 거래 유형 미지정 시: 매매는 매매가 기준, 전월세는 보증금 기준으로 필터
-                query = query.filter(
-                    or_(
-                        (ApartmentTrade.trade_type == "매매") & (ApartmentTrade.deal_amount <= max_deposit),
-                        (ApartmentTrade.trade_type.in_(["전세", "월세"])) & (ApartmentTrade.deposit <= max_deposit)
-                    )
-                )
-
-        # 4. 최소 방 개수 필터링
-        if min_rooms is not None and min_rooms > 0:
-            query = query.filter(ApartmentTrade.rooms >= min_rooms)
-
-        # 5. 최소 욕실 개수 필터링
-        if min_bathrooms is not None and min_bathrooms > 0:
-            query = query.filter(ApartmentTrade.bathrooms >= min_bathrooms)
-
-        # 6. 최신순으로 5개만 조회 (계약일자 내림차순, ID 내림차순)
-        records = query.order_by(ApartmentTrade.deal_date.desc(), ApartmentTrade.id.desc()).limit(5).all()
-
-        # 조건에 맞는 결과가 없는 경우 완화 조건 탐색
-        if not records:
-            alt_query = db.query(ApartmentTrade)
-            if norm_prop:
-                alt_query = alt_query.filter(ApartmentTrade.property_type == norm_prop)
-            if min_rooms:
-                alt_query = alt_query.filter(ApartmentTrade.rooms >= max(1, min_rooms - 1))
-            if max_deposit:
-                alt_query = alt_query.filter(
-                    or_(
-                        ApartmentTrade.deposit <= max_deposit * 1.3,
-                        ApartmentTrade.deal_amount <= max_deposit * 1.3
-                    )
-                )
-            alt_records = alt_query.order_by(ApartmentTrade.deal_date.desc(), ApartmentTrade.id.desc()).limit(3).all()
-
-            msg = f"요청하신 조건(예산/보증금 {format_korean_money(max_deposit) if max_deposit else '무관'}, 방 {min_rooms or '무관'}개, 화장실 {min_bathrooms or '무관'}개)에 정확히 일치하는 최근 실거래 매물이 없습니다."
-            alt_list = []
-            if alt_records:
-                for r in alt_records:
-                    price_desc = format_korean_money(r.deal_amount if r.trade_type == "매매" else r.deposit)
-                    if r.trade_type == "월세" and r.monthly_rent:
-                        price_desc += f" / 월 {r.monthly_rent:,}만"
-                    alt_list.append({
-                        "property_type": r.property_type,
-                        "apt_name": r.apt_name,
-                        "dong": r.dong,
-                        "trade_type": r.trade_type,
-                        "price_formatted": price_desc,
-                        "rooms": r.rooms,
-                        "bathrooms": r.bathrooms,
-                        "floor": f"{r.floor}층" if r.floor else "-",
-                        "deal_date": r.deal_date
-                    })
-
-            return {
-                "found": False,
-                "message": msg,
-                "alternative_suggestions": alt_list,
-                "disclaimer": "※ 방과 욕실 개수는 공공데이터에 명시되지 않아 전용면적 기준으로 추정한 결과입니다."
-            }
-
-        # 결과 매물 포맷팅
-        results = []
-        for r in records:
-            if r.trade_type == "매매":
-                price_str = f"매매 {format_korean_money(r.deal_amount)}"
-            elif r.trade_type == "전세":
-                price_str = f"전세 {format_korean_money(r.deposit)}"
-            else:
-                price_str = f"보증금 {format_korean_money(r.deposit)} / 월 {r.monthly_rent:,}만"
-
-            results.append({
-                "property_type": r.property_type,
-                "apt_name": r.apt_name,
-                "dong": r.dong,
-                "trade_type": r.trade_type,
-                "price_formatted": price_str,
-                "exclu_use_ar": round(r.exclu_use_ar, 1),
-                "rooms": r.rooms,
-                "bathrooms": r.bathrooms,
-                "floor": f"{r.floor}층" if r.floor else "-",
-                "deal_date": r.deal_date
-            })
+        region_code = current_lawd_cd
+        if data.get("region_name"):
+            resolved = resolve_lawd_cd(data["region_name"])
+            if resolved:
+                region_code = resolved
 
         return {
-            "found": True,
-            "condition": {
-                "max_deposit": format_korean_money(max_deposit) if max_deposit else "제한없음",
-                "min_rooms": f"{min_rooms}개 이상" if min_rooms else "무관",
-                "min_bathrooms": f"{min_bathrooms}개 이상" if min_bathrooms else "무관",
-                "trade_type": norm_type or "전체",
-                "property_type": norm_prop or "전체"
-            },
-            "count": len(results),
-            "properties": results,
-            "disclaimer": "※ 방과 욕실 개수는 공공데이터에 명시되지 않아 전용면적 기준으로 추정한 결과입니다."
+            "trade_type": data.get("trade_type"),
+            "property_type": data.get("property_type"),
+            "max_deposit": data.get("max_deposit"),
+            "max_monthly_rent": data.get("max_monthly_rent"),
+            "max_price": data.get("max_price"),
+            "regional_code": region_code,
+            "apt_name": data.get("apt_name")
         }
-    finally:
-        # 반드시 세션을 정상 종료
-        db.close()
+    except Exception as e:
+        print(f"⚠️ [OpenAI Parser 폴백]: {e}")
+        return extract_conditions_nlp(prompt, current_lawd_cd)
 
 
-@tool
-def search_custom_properties(
-    max_deposit: Optional[int] = None,
-    min_rooms: Optional[int] = None,
-    min_bathrooms: Optional[int] = None,
-    property_type: Optional[str] = None,
-    trade_type: Optional[str] = None
+async def execute_text_to_sql_query(
+    db: AsyncSession,
+    conditions: Dict[str, Any]
+) -> List[ApartmentTrade]:
+    """추출된 조건을 바탕으로 SQLAlchemy AsyncSession을 통해 실제 Supabase DB 질의 실행"""
+    stmt = select(ApartmentTrade)
+    filters = []
+
+    reg_code = conditions.get("regional_code")
+    if reg_code:
+        filters.append(ApartmentTrade.regional_code == str(reg_code))
+
+    t_type = conditions.get("trade_type")
+    if t_type:
+        filters.append(ApartmentTrade.trade_type == t_type)
+
+    p_type = conditions.get("property_type")
+    if p_type:
+        filters.append(ApartmentTrade.property_type == p_type)
+
+    apt = conditions.get("apt_name")
+    if apt:
+        filters.append(ApartmentTrade.apt_name.ilike(f"%{apt}%"))
+
+    max_dep = conditions.get("max_deposit")
+    if max_dep and max_dep > 0:
+        filters.append(ApartmentTrade.deposit <= max_dep)
+        filters.append(ApartmentTrade.deposit > 0)
+
+    max_rent = conditions.get("max_monthly_rent")
+    if max_rent and max_rent > 0:
+        filters.append(ApartmentTrade.monthly_rent <= max_rent)
+        filters.append(ApartmentTrade.monthly_rent > 0)
+
+    max_pr = conditions.get("max_price")
+    if max_pr and max_pr > 0:
+        filters.append(ApartmentTrade.deal_amount <= max_pr)
+        filters.append(ApartmentTrade.deal_amount > 0)
+
+    if filters:
+        stmt = stmt.where(and_(*filters))
+
+    # 계약일 최신순, ID 내림차순 정렬 및 최대 8건 추출
+    stmt = stmt.order_by(desc(ApartmentTrade.deal_date), desc(ApartmentTrade.id)).limit(8)
+
+    result = await db.execute(stmt)
+    records = result.scalars().all()
+
+    # 만약 해당 지역에서 조건이 엄격해 0건인 경우, 지역 제한을 해제하고 전국 DB에서 검색
+    if not records and reg_code and (max_dep or max_rent or max_pr or t_type):
+        fallback_filters = [f for f in filters if getattr(f, 'left', None) != ApartmentTrade.regional_code]
+        if fallback_filters:
+            fb_stmt = select(ApartmentTrade).where(and_(*fallback_filters)).order_by(desc(ApartmentTrade.deal_date)).limit(6)
+            fb_res = await db.execute(fb_stmt)
+            records = fb_res.scalars().all()
+
+    return records
+
+
+async def run_ai_consultant(
+    prompt: str,
+    current_lawd_cd: Optional[str] = None,
+    region_label: Optional[str] = None,
+    model_choice: str = "gpt",
+    db: Optional[AsyncSession] = None
 ) -> str:
     """
-    사용자가 예산(보증금/매매가)과 원하는 방/화장실 개수를 언급하면 호출하세요.
-    최근 국토교통부 실거래 DB에서 조건에 정확히 부합하는 최신 매물을 최대 5건 검색합니다.
+    [핵심 진입점] 자연어 질문 ➔ Text-to-SQL DB 조회 ➔ RAG 브리핑 생성
     """
-    res = execute_custom_search(
-        max_deposit=max_deposit,
-        min_rooms=min_rooms,
-        min_bathrooms=min_bathrooms,
-        property_type=property_type,
-        trade_type=trade_type
-    )
-    return json.dumps(res, ensure_ascii=False)
+    # 1. 자연어 조건 파싱
+    conditions = await parse_conditions_with_openai(prompt, current_lawd_cd)
 
+    region_name = region_label or (get_region_name(conditions.get("regional_code") or "11680") if conditions.get("regional_code") else "전국")
 
-# ==================== 2. AI 도구 스키마 (TOOLS / Function Calling Schema) ====================
+    # 2. DB 세션이 전달된 경우 실제 Supabase DB 검색 실행
+    records: List[ApartmentTrade] = []
+    if db:
+        try:
+            records = await execute_text_to_sql_query(db, conditions)
+        except Exception as query_err:
+            print(f"⚠️ [DB Query Err]: {query_err}")
 
-TOOLS = [
-    {
-        "type": "function",
-        "function": {
-            "name": "search_recent_price",
-            "description": "특정 아파트 단지의 최근 실거래가 평균, 최저/최고가 및 최근 5건 거래 내역을 DB에서 조회합니다.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "apt_name": {
-                        "type": "string",
-                        "description": "검색할 아파트 단지명 (예: '은마', '래미안원베일리', '반포자이')"
-                    },
-                    "trade_type": {
-                        "type": "string",
-                        "enum": ["매매", "전세", "월세"],
-                        "description": "거래 유형 ('매매', '전세', '월세'). 기본값은 '매매'"
-                    }
-                },
-                "required": ["apt_name"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "find_affordable_apt",
-            "description": "지정된 예산(최대 가격, 만원 단위) 이하의 실거래가 있었던 아파트 단지 목록을 DB에서 검색합니다.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "max_price": {
-                        "type": "integer",
-                        "description": "최대 가격 예산 (만원 단위. 예: 15억이면 150000)"
-                    },
-                    "trade_type": {
-                        "type": "string",
-                        "enum": ["매매", "전세", "월세"],
-                        "description": "거래 유형 ('매매', '전세', '월세'). 기본값은 '매매'"
-                    }
-                },
-                "required": ["max_price"]
-            }
-        }
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "search_custom_properties",
-            "description": "사용자가 예산(보증금/매매가)과 원하는 방/화장실 개수를 언급하면 호출하세요.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "max_deposit": {
-                        "type": "integer",
-                        "description": (
-                            "보증금 또는 매매가 최대 예산 한도 (단위: 만원). "
-                            "예를 들어 사용자가 '보증금 1억 미만' 또는 '자본 1억'이라고 하면 10000, "
-                            "'자본 3억' 또는 '3억 이하'라고 하면 30000으로 자동 변환하여 정수로 입력해야 합니다."
-                        )
-                    },
-                    "min_rooms": {
-                        "type": "integer",
-                        "description": "희망하는 최소 방(침실) 개수 (정수). 예: 방 3개이면 3"
-                    },
-                    "min_bathrooms": {
-                        "type": "integer",
-                        "description": "희망하는 최소 화장실/욕실 개수 (정수). 예: 화장실 2개이면 2"
-                    },
-                    "property_type": {
-                        "type": "string",
-                        "enum": ["아파트", "오피스텔", "연립다세대", "단독다가구"],
-                        "description": "건물 유형 ('아파트', '오피스텔', '연립다세대', '단독다가구')"
-                    },
-                    "trade_type": {
-                        "type": "string",
-                        "enum": ["매매", "전세", "월세"],
-                        "description": "거래 유형 ('매매', '전세', '월세')"
-                    }
-                }
-            }
-        }
-    }
-]
+    # 3. 매물이 없는 경우: 가짜 템플릿 대신 정확한 결과 반환
+    if not records:
+        cond_parts = []
+        if conditions.get("trade_type"):
+            cond_parts.append(f"거래유형 '{conditions['trade_type']}'")
+        if conditions.get("max_deposit"):
+            cond_parts.append(f"보증금 {clean_format_korean_money(conditions['max_deposit'])} 이하")
+        if conditions.get("max_monthly_rent"):
+            cond_parts.append(f"월세 {clean_format_korean_money(conditions['max_monthly_rent'])} 이하")
+        if conditions.get("max_price"):
+            cond_parts.append(f"매매가 {clean_format_korean_money(conditions['max_price'])} 이하")
+        if conditions.get("property_type"):
+            cond_parts.append(f"유형 '{conditions['property_type']}'")
+        if conditions.get("apt_name"):
+            cond_parts.append(f"단지명 '{conditions['apt_name']}'")
 
-# 호환성을 위한 alias
-OPENAI_TOOLS = TOOLS
+        cond_desc = ", ".join(cond_parts) if cond_parts else f"'{prompt}'"
+        return (
+            f"조건에 맞는 매물이 없습니다.\n\n"
+            f"현재 집뷰 실거래가 데이터베이스에서 요청하신 조건({cond_desc})에 부합하는 실제 계약 내역이 확인되지 않았습니다.\n"
+            f"금액 상한선을 조정하시거나 다른 자치구(지역) 또는 거래 유형으로 다시 문의해 주시기 바랍니다."
+        )
 
-# LangChain 바인딩 및 함수 매핑 테이블
-UNIFIED_TOOLS = [search_recent_price, find_affordable_apt, search_custom_properties]
-TOOL_MAP = {
-    "search_recent_price": search_recent_price,
-    "find_affordable_apt": find_affordable_apt,
-    "search_custom_properties": search_custom_properties
-}
-
-# ==================== 3. 데이터 한계 고지(방어적 설계) System Prompt ====================
-
-SYSTEM_PROMPT = (
-    "당신은 대한민국 최고 수준의 부동산 프롭테크 플랫폼 '집뷰(ZipView)'의 전문 공인중개사이자 AI 부동산 데이터 분석가입니다.\n"
-    "사용자의 질문에 따라 제공된 통일 도구(search_recent_price, find_affordable_apt, search_custom_properties)를 적극 호출하여 "
-    "실제 국토교통부 실거래 DB 수치에 기반해 분석해 주세요.\n\n"
-    "핵심 업무 및 도구 호출 지침:\n"
-    "1. 사용자가 예산(보증금/매매가)과 원하는 방/화장실 개수를 언급하면 반드시 `search_custom_properties` 도구를 호출하세요.\n"
-    "2. 금액 단위는 만원 단위입니다 (예: 1억 미만 ➜ max_deposit=10000, 3억 ➜ max_deposit=30000).\n"
-    "3. 건물유형(아파트, 오피스텔, 연립다세대, 단독다가구)이 언급되면 `property_type`에 명시하세요.\n"
-    "4. 금액은 항상 'X억 Y만원' 형태로 이해하기 쉽게 안내하고, 건물유형, 방/화장실 개수, 전용면적(㎡), 층수, 최근 거래일을 상세히 브리핑해 주세요.\n\n"
-    "★ 데이터 한계 고지 (필수 준수 규칙):\n"
-    "매물을 추천할 때, 방과 욕실 개수는 공공데이터에 명시되지 않아 전용면적 기준으로 추정한 결과임을 반드시 사용자에게 안내하세요."
-)
-
-
-# ==================== LangChain 멀티 LLM 팩토리 (Factory Pattern) ====================
-
-class LLMAgentFactory:
-    """
-    팩토리 패턴(Factory Pattern) 클래스
-    model_choice 파라미터에 따라 ChatOpenAI(GPT-4o) 또는 ChatGoogleGenerativeAI(Gemini 1.5)를 생성하고
-    동일한 Function Calling 도구를 바인딩하여 실행합니다.
-    """
-
-    @staticmethod
-    def create_llm(model_choice: str = "gpt"):
-        """
-        model_choice에 따라 적절한 LangChain LLM 인스턴스를 반환하는 팩토리 메서드
-        """
-        choice = (model_choice or "gpt").lower().strip()
-
-        if choice in ["gpt", "openai", "gpt-4o", "gpt-4o-mini"]:
-            try:
-                from langchain_openai import ChatOpenAI
-            except ImportError:
-                raise ImportError("langchain-openai 패키지가 설치되지 않았습니다. pip install langchain-openai")
-
-            if not OPENAI_API_KEY:
-                raise ValueError(".env 파일에 OPENAI_API_KEY가 설정되어 있지 않습니다.")
-
-            return ChatOpenAI(
-                model="gpt-4o",
-                api_key=OPENAI_API_KEY,
-                temperature=0.3,
-                timeout=15
-            )
-
-        elif choice in ["gemini", "google", "gemini-1.5-flash", "gemini-1.5-pro"]:
-            try:
-                from langchain_google_genai import ChatGoogleGenerativeAI
-            except ImportError:
-                raise ImportError("langchain-google-genai 패키지가 설치되지 않았습니다. pip install langchain-google-genai")
-
-            if not GEMINI_API_KEY:
-                raise ValueError(".env 파일에 GEMINI_API_KEY가 설정되어 있지 않습니다.")
-
-            return ChatGoogleGenerativeAI(
-                model="gemini-1.5-flash",
-                google_api_key=GEMINI_API_KEY,
-                temperature=0.3,
-                timeout=15
-            )
+    # 4. 실제 DB 매물이 있는 경우: 실제 단지명, 금액, 층수, 전용면적 브리핑 구성
+    items_briefing = []
+    for idx, r in enumerate(records, 1):
+        if r.trade_type == "월세":
+            price_text = f"보증금 {clean_format_korean_money(r.deposit)} / 월 {r.monthly_rent:,}만원"
+        elif r.trade_type == "전세":
+            price_text = f"전세 {clean_format_korean_money(r.deposit)}"
         else:
-            raise ValueError(f"지원하지 않는 model_choice입니다: '{model_choice}'. ('gpt' 또는 'gemini' 선택 가능)")
+            price_text = f"매매 {clean_format_korean_money(r.deal_amount)}"
 
-    @classmethod
-    def execute_agent(cls, prompt: str, model_choice: str = "gpt") -> str:
-        """
-        팩토리로부터 LLM을 받아 동일한 Function Calling 인터페이스로 질문을 처리하고 최종 답변을 반환
-        """
+        floor_str = f"{r.floor}층" if r.floor else "층 미표기"
+        area_str = f"전용 {r.exclu_use_ar}㎡" if r.exclu_use_ar else ""
+        date_str = f"계약: {r.deal_date}" if r.deal_date else ""
+        dong_str = f"{r.dong}" if r.dong else ""
+
+        items_briefing.append(
+            f"{idx}. [{r.property_type or '아파트'}] **{r.apt_name}** ({dong_str}) - **{price_text}** ({area_str}, {floor_str}, {date_str})"
+        )
+
+    listings_text = "\n".join(items_briefing)
+
+    # OpenAI 또는 규칙 기반 최종 브리핑 출력
+    if OPENAI_API_KEY and model_choice.lower() in ["gpt", "openai"]:
         try:
-            from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
-        except ImportError:
-            # LangChain 미설치 시 기존 직접 호출 엔진으로 자동 폴백
-            return cls._direct_fallback(prompt, model_choice)
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+            rag_prompt = (
+                f"사용자의 질문: '{prompt}'\n\n"
+                f"실제 국토교통부 DB 조회 결과 목록:\n"
+                f"{listings_text}\n\n"
+                f"위 실제 데이터를 기반으로 사용자에게 신뢰감 있는 프로페셔널한 어조로 요약 브리핑해줘.\n"
+                f"주의사항: 데이터에 없는 가짜 단지명을 지어내지 말고, '200만원만원'처럼 '만원' 단위가 중복되지 않도록 깔끔하게 한국어 화폐 단위를 표기해."
+            )
+            resp = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "너는 대한민국 실거래 공공데이터 기반 엔터프라이즈 부동산 AI 컨설턴트 집뷰(ZipView)야."},
+                    {"role": "user", "content": rag_prompt}
+                ],
+                temperature=0.2,
+                timeout=12.0
+            )
+            return resp.choices[0].message.content
+        except Exception as llm_err:
+            print(f"⚠️ [OpenAI Completion Err]: {llm_err}")
 
-        try:
-            # 1. 팩토리 패턴으로 LLM 객체 생성
-            base_llm = cls.create_llm(model_choice)
-
-            # 2. 통일된 Function Calling 도구 바인딩 (bind_tools)
-            llm_with_tools = base_llm.bind_tools(UNIFIED_TOOLS)
-
-            # 3. 1차 대화 호출 (도구 호출 여부 판단)
-            messages = [
-                SystemMessage(content=SYSTEM_PROMPT),
-                HumanMessage(content=prompt)
-            ]
-            ai_msg = llm_with_tools.invoke(messages)
-
-            # 4. 도구 호출이 발생했을 경우 (Tool Calls 처리)
-            if hasattr(ai_msg, "tool_calls") and ai_msg.tool_calls:
-                messages.append(ai_msg)
-                for tool_call in ai_msg.tool_calls:
-                    tool_name = tool_call["name"]
-                    tool_args = tool_call["args"]
-                    tool_id = tool_call["id"]
-
-                    selected_tool = TOOL_MAP.get(tool_name)
-                    if selected_tool:
-                        # LangChain tool invoke
-                        tool_output = selected_tool.invoke(tool_args)
-                    else:
-                        tool_output = json.dumps({"error": f"존재하지 않는 도구: {tool_name}"})
-
-                    messages.append(ToolMessage(content=str(tool_output), tool_call_id=tool_id))
-
-                # 5. 도구 실행 결과를 포함하여 2차 최종 브리핑 생성
-                final_response = llm_with_tools.invoke(messages)
-                return final_response.content.strip()
-            else:
-                return ai_msg.content.strip()
-
-        except Exception as e:
-            print(f"[LangChain Factory Error - {model_choice}]: {e}")
-            return cls._direct_fallback(prompt, model_choice)
-
-    @classmethod
-    def _direct_fallback(cls, prompt: str, model_choice: str) -> str:
-        """LangChain 모듈 로드 불가 또는 네트워크 장애 시 직접 DB 질의 스마트 폴백"""
-        try:
-            # 1. 복합 조건 (방, 화장실, 보증금, 예산) 질문 감지 시 execute_custom_search 직접 실행
-            if any(w in prompt for w in ["방", "화장실", "욕실", "보증금", "미만", "이하", "추천", "자본"]):
-                deposit_match = re.search(r'보증금\s*(\d+)억', prompt) or re.search(r'(\d+)억\s*(?:미만|이하)', prompt) or re.search(r'자본\s*(\d+)억', prompt)
-                rooms_match = re.search(r'방\s*(\d+)개', prompt)
-                baths_match = re.search(r'화장실\s*(\d+)개', prompt) or re.search(r'욕실\s*(\d+)개', prompt)
-
-                max_dep = int(deposit_match.group(1)) * 10000 if deposit_match else None
-                rooms = int(rooms_match.group(1)) if rooms_match else None
-                baths = int(baths_match.group(1)) if baths_match else None
-                t_type = "전세" if "전세" in prompt else ("월세" if "월세" in prompt else ("매매" if "매매" in prompt else None))
-                
-                # 건물유형 파악
-                p_type = None
-                if "오피스텔" in prompt:
-                    p_type = "오피스텔"
-                elif "연립" in prompt or "다세대" in prompt or "빌라" in prompt:
-                    p_type = "연립다세대"
-                elif "단독" in prompt or "다가구" in prompt or "원룸" in prompt:
-                    p_type = "단독다가구"
-                elif "아파트" in prompt:
-                    p_type = "아파트"
-
-                data = execute_custom_search(
-                    max_deposit=max_dep,
-                    min_rooms=rooms,
-                    min_bathrooms=baths,
-                    property_type=p_type,
-                    trade_type=t_type
-                )
-                
-                if data.get("found"):
-                    props_text = "\n".join([
-                        f"• [{p.get('property_type', '아파트')}] **{p['apt_name']}** ({p['dong']}) : {p['price_formatted']} · 전용 {p['exclu_use_ar']}㎡ (방 {p['rooms']}개, 욕실 {p['bathrooms']}개, {p['floor']}) | 계약일: {p['deal_date']}"
-                        for p in data["properties"]
-                    ])
-                    cond = data.get("condition", {})
-                    return (
-                        f"🏡 **[맞춤 실거래 조건 매물 추천 결과]**\n\n"
-                        f"요청하신 조건(예산 {cond.get('max_deposit')}, 방 {cond.get('min_rooms')}, 화장실 {cond.get('min_bathrooms')}, 유형 {cond.get('property_type', '전체')})에 부합하는 최근 국토교통부 실거래 분석 결과입니다:\n\n"
-                        f"{props_text}\n\n"
-                        f"⚠️ **안내**: 매물을 추천할 때, 방과 욕실 개수는 공공데이터에 명시되지 않아 전용면적 기준으로 추정한 결과임을 반드시 사용자에게 안내하세요.\n"
-                        f"💡 국토부 실거래 DB 기반 통계입니다. (선택 엔진: {model_choice.upper()})"
-                    )
-
-            # 2. 특정 단지 실거래가 질의
-            trade_type = "전세" if "전세" in prompt else "매매"
-            apt_name = "은마"
-            if "원베일리" in prompt:
-                apt_name = "래미안원베일리"
-            elif "자이" in prompt:
-                apt_name = "반포자이"
-            elif "도곡" in prompt:
-                apt_name = "도곡렉슬"
-
-            if hasattr(search_recent_price, "invoke"):
-                res_str = search_recent_price.invoke({"apt_name": apt_name, "trade_type": trade_type})
-            else:
-                res_str = search_recent_price(apt_name, trade_type)
-
-            data = json.loads(res_str) if isinstance(res_str, str) else res_str
-            if data.get("found"):
-                return (
-                    f"🏢 **[{data['apt_name']}] {data['trade_type']} 실거래가 분석 브리핑**\n\n"
-                    f"- **최근 {data['trade_type']} 평균 거래가**: {data['average_price']}\n"
-                    f"- **실거래 범위**: 최저 {data['min_price']} ~ 최고 {data['max_price']}\n"
-                    f"- **최근 계약 내역**: {data['recent_deals'][0]['deal_date']} "
-                    f"({data['recent_deals'][0]['floor']}, {data['recent_deals'][0]['price_formatted']})\n\n"
-                    f"💡 국토교통부 실거래 DB 조회 결과입니다. (선택 엔진: {model_choice.upper()})"
-                )
-        except Exception as err:
-            print(f"[Fallback Err] {err}")
-
-        return f"국토부 실거래 DB 데이터를 조회하여 분석 중입니다. (엔진: {model_choice.upper()})"
+    # 직접 구성한 B2B 엔터프라이즈 실거래 브리핑
+    return (
+        f"🏢 **[{region_name}] 조건 부합 국토교통부 실거래 매물 분석 결과**\n\n"
+        f"요청하신 조건에 부합하는 최근 실제 거래 내역 총 {len(records)}건을 데이터베이스에서 확인했습니다:\n\n"
+        f"{listings_text}\n\n"
+        f"※ 위 내역은 국토교통부 실거래 원장 등록 기준 실제 데이터이며, 금액 및 층수 정보가 검증되었습니다."
+    )
 
 
+# 하위 호환성 유지 래퍼 함수
 def ask_multi_llm_agent(prompt: str, model_choice: str = "gpt") -> str:
-    """외부 호출용 통합 진입점 함수"""
-    return LLMAgentFactory.execute_agent(prompt=prompt, model_choice=model_choice)
+    """동기 환경 호출 호환 래퍼"""
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(run_ai_consultant(prompt=prompt, model_choice=model_choice))

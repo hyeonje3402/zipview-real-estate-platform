@@ -1941,36 +1941,39 @@ export default function TossStyleRealEstateDashboard() {
 
     try {
       const res = await axios.post(
-        `${getApiBaseUrl()}/api/ai/briefing`,
+        `${getApiBaseUrl()}/api/chat`,
         {
           lawdCd,
+          regional_code: lawdCd,
           regionLabel: currentRegionLabel,
+          prompt: userText,
           query: userText,
-          summary: summaryInfo,
-          chartSample: chartData.slice(-6)
+          model_choice: "gpt"
         },
         { timeout: 35000 }
       );
 
-      const answer = res.data?.answer || res.data?.message || `[${currentRegionLabel}] 36개월 실거래 데이터를 분석한 결과, 매매가와 전세가 격차가 일정하게 유지되고 있습니다.`;
+      const rawAnswer = res.data?.reply || res.data?.answer || res.data?.message || "조건에 맞는 매물이 없습니다.";
+      // '만원만원' 단위 중복 방지 정제 필터
+      const cleanAnswer = String(rawAnswer)
+        .replace(/만원\s*만원/g, "만원")
+        .replace(/억\s*만원만원/g, "억 만원");
+
       setChatMessages((prev) => [
         ...prev,
         {
           sender: "ai",
-          text: answer,
+          text: cleanAnswer,
           time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
         }
       ]);
     } catch (err) {
+      console.error("[AI Chat Error]:", err);
       setChatMessages((prev) => [
         ...prev,
         {
           sender: "ai",
-          text: `[${currentRegionLabel}] 기준 최근 3년 실거래 분석 요약입니다:
-- 최신 매매 최고가: ${summaryInfo.latestTradePrice}만원
-- 최신 전세 보증금: ${summaryInfo.latestJeonsePrice}만원
-- 실거래 누적 데이터: ${summaryInfo.totalCount.toLocaleString()}건
-상세 단지별 전세가율 및 급매물 문의를 입력해 주시면 안내해 드립니다.`,
+          text: "국토교통부 데이터 서버 응답이 지연되었습니다. 잠시 후 다시 질문을 입력해 주시기 바랍니다.",
           time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
         }
       ]);
