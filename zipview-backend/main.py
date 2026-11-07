@@ -774,6 +774,10 @@ async def chat_with_multi_llm(req: ChatRequest, db: AsyncSession = Depends(get_d
         }
     
     reply_str = result["reply"] if isinstance(result, dict) else str(result)
+    is_override = result.get("override_region", False) if isinstance(result, dict) else False
+    new_code = result.get("new_regional_code") if isinstance(result, dict) else None
+    new_label = result.get("new_region_label") if isinstance(result, dict) else None
+
     return {
         "status": "success",
         "model_choice": choice,
@@ -781,7 +785,10 @@ async def chat_with_multi_llm(req: ChatRequest, db: AsyncSession = Depends(get_d
         "reply": reply_str,
         "answer": reply_str,
         "message": reply_str,
-        "disambiguation": None
+        "disambiguation": None,
+        "override_region": is_override,
+        "new_regional_code": new_code,
+        "new_region_label": new_label
     }
 
 

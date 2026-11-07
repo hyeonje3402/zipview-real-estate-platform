@@ -21,6 +21,7 @@ from lawd_cd_registry import (
     get_region_name,
     NORMALIZED_NAME_TO_CODE,
     check_dong_ambiguity,
+    check_global_ambiguity,
     resolve_disambiguation_choice
 )
 
@@ -29,7 +30,7 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# 다중 턴 세션 컨텍스트 캐시 (되묻기 및 원래 조건 유지)
+# 다중 턴 세션 컨텍스트 캐시 (되묻기, 이전 질의 조건 및 활성 타겟 지역 유지)
 SESSION_CONTEXT_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
@@ -145,12 +146,14 @@ def extract_conditions_nlp(prompt: str, current_lawd_cd: Optional[str] = None) -
                     max_price = parsed_val
                     max_deposit = parsed_val
 
-    # 5. 광역 시/군/구 지역 코드 추출
+    # 5. 광역 시/군/구 지역 코드 및 지역명 추출
     target_lawd_cd = current_lawd_cd
+    extracted_region = None
     for word in p.split():
         cleaned_word = re.sub(r"[^가-힣a-zA-Z0-9]", "", word)
         if cleaned_word in NORMALIZED_NAME_TO_CODE:
             target_lawd_cd = NORMALIZED_NAME_TO_CODE[cleaned_word]
+            extracted_region = cleaned_word
             break
 
     # 6. 특정 단지명 검색
@@ -164,6 +167,7 @@ def extract_conditions_nlp(prompt: str, current_lawd_cd: Optional[str] = None) -
 
     return {
         "dong_name": dong_name,
+        "region_name": extracted_region,
         "trade_type": trade_type,
         "property_type": property_type,
         "max_deposit": max_deposit,
@@ -229,6 +233,7 @@ async def parse_conditions_with_openai(prompt: str, current_lawd_cd: Optional[st
 
         return {
             "dong_name": final_dong,
+            "region_name": data.get("region_name") or nlp_cond.get("region_name"),
             "trade_type": final_trade,
             "property_type": final_prop,
             "max_deposit": final_deposit,
@@ -306,7 +311,8 @@ async def _format_briefing_response(
     region_name: str,
     conditions: Dict[str, Any],
     records: List[ApartmentTrade],
-    model_choice: str = "gpt"
+    model_choice: str = "gpt",
+    is_new_region_override: bool = False
 ) -> str:
     """실거래 목록을 기반으로 B2B 엔터프라이즈 RAG 브리핑 생성"""
     items_briefing = []
@@ -329,6 +335,10 @@ async def _format_briefing_response(
 
     listings_text = "\n".join(items_briefing)
 
+    dong_val = conditions.get("dong_name") or ""
+    dong_title = f" {dong_val}" if (dong_val and dong_val not in region_name) else ""
+    full_target_name = f"{region_name}{dong_title}".strip()
+
     if OPENAI_API_KEY and model_choice.lower() in ["gpt", "openai"]:
         try:
             from openai import AsyncOpenAI
@@ -336,13 +346,13 @@ async def _format_briefing_response(
             target_dong_str = f"법정동: {conditions.get('dong_name')}" if conditions.get('dong_name') else "전체 동"
             rag_prompt = (
                 f"사용자의 질문: '{prompt}'\n\n"
-                f"추출 조건: {target_dong_str}, 거래유형={conditions.get('trade_type') or '전체'}\n\n"
+                f"분석 지역: [{full_target_name}], 조건: {target_dong_str}, 거래유형={conditions.get('trade_type') or '전체'}\n\n"
                 f"국토교통부 실거래 DB 엄격 일치 조회 결과 (총 {len(records)}건):\n"
                 f"{listings_text}\n\n"
-                f"위 실제 데이터만을 근거로 사용자에게 신뢰감 있는 프로페셔널한 어조로 요약 브리핑해줘.\n"
+                f"위 실제 데이터만을 근거로 사용자에게 신뢰감 있는 프로페셔널한 B2B 어조로 요약 브리핑해줘.\n"
                 f"엄격한 규칙:\n"
-                f"1. 위 조회 결과에 포함된 매물만 언급하고, 다른 동네나 허위 단지명을 절대 추가하지 마.\n"
-                f"2. 사용자가 특정 법정동({conditions.get('dong_name') or ''})을 질문한 경우, 해당 동의 실거래 매물임을 명확히 안내해.\n"
+                f"1. 첫 문장은 반드시 '**요청하신 [{full_target_name}]의 거래 내역을 새로 분석했습니다.**'로 시작해.\n"
+                f"2. 위 조회 결과에 포함된 매물만 언급하고, 다른 동네나 허위 단지명을 절대 추가하지 마.\n"
                 f"3. '200만원만원'처럼 '만원' 단위가 중복되지 않도록 깔끔하게 한국어 화폐 단위를 표기해."
             )
             resp = await client.chat.completions.create(
@@ -358,11 +368,10 @@ async def _format_briefing_response(
         except Exception as llm_err:
             print(f"⚠️ [OpenAI Completion Err]: {llm_err}")
 
-    dong_val = conditions.get("dong_name") or ""
-    dong_title = f" {dong_val}" if (dong_val and dong_val not in region_name) else ""
+    header_title = f"**요청하신 [{full_target_name}]의 거래 내역을 새로 분석했습니다.**\n\n" if is_new_region_override else f"**[{full_target_name}] 조건 부합 국토교통부 실거래 매물 분석 결과**\n\n"
     return (
-        f"**[{region_name}{dong_title}] 조건 부합 국토교통부 실거래 매물 분석 결과**\n\n"
-        f"요청하신 조건에 부합하는 최근 실제 거래 내역 총 {len(records)}건을 데이터베이스에서 확인했습니다:\n\n"
+        f"{header_title}"
+        f"조건에 부합하는 최근 국토교통부 실제 거래 내역 총 {len(records)}건을 데이터베이스에서 확인했습니다:\n\n"
         f"{listings_text}\n\n"
         f"※ 위 내역은 국토교통부 실거래 원장 등록 기준 실제 데이터이며, 금액 및 층수 정보가 검증되었습니다."
     )
@@ -379,10 +388,11 @@ async def run_ai_consultant(
     session_id: Optional[str] = None
 ) -> Any:
     """
-    [핵심 진입점] 자연어 질문 ➔ 동음이의어 되묻기(Disambiguation) ➔ Text-to-SQL DB 조회 ➔ RAG 브리핑 생성
+    [핵심 진입점] 자연어 질문 ➔ 전국 중복 지명 범용 되묻기(Disambiguation) ➔ 자율 국토부 데이터 주입 ➔ Text-to-SQL DB 조회 ➔ RAG 브리핑
     """
     session_key = session_id or current_lawd_cd or "default_session"
-    pending_ctx = context or SESSION_CONTEXT_CACHE.get(session_key)
+    session_data = SESSION_CONTEXT_CACHE.setdefault(session_key, {})
+    pending_ctx = context or session_data.get("pending_disambiguation")
 
     # ---------------- 1단계: 되묻기 선택 응답 처리 (Context Retention & Disambiguation Resolution) ----------------
     chosen_option = None
@@ -392,91 +402,168 @@ async def run_ai_consultant(
         chosen_option = resolve_disambiguation_choice(prompt, pending_ctx["options"])
 
     if chosen_option:
-        # 사용자가 특정 지역을 선택한 경우 (예: "1번", "진주시 가좌동", 또는 버튼 클릭)
-        SESSION_CONTEXT_CACHE.pop(session_key, None)
+        # 사용자가 특정 지역을 최종 확정한 경우 (예: "1번", "대전 서구", 또는 선택지 버튼 클릭)
+        session_data.pop("pending_disambiguation", None)
         target_code = chosen_option.get("code")
-        resolved_label = chosen_option.get("label", region_label)
+        resolved_label = chosen_option.get("label") or get_region_name(target_code)
         resolved_dong = chosen_option.get("dong")
 
-        # 이전 대화의 원본 질문 조건(보증금, 월세, 거래유형 등) 복원 및 결합
+        # 이전 대화의 원본 질문 조건(보증금, 월세, 거래유형 등) 복원 및 결합 (맥락 유지)
         conditions = dict(pending_ctx.get("pending_conditions") or {}) if pending_ctx else {}
         conditions["regional_code"] = target_code
         if resolved_dong:
             conditions["dong_name"] = resolved_dong
 
-        region_name = resolved_label or get_region_name(target_code)
+        # 활성 타겟 지역 세션 메모리에 갱신 (프론트엔드 UI 지역 컨텍스트 오버라이드)
+        session_data["last_active_region"] = {
+            "code": target_code,
+            "label": resolved_label,
+            "dong": resolved_dong
+        }
 
-        # 확정된 지역 코드로 실제 DB 검색 실행
+        # 확정된 지역 코드로 실제 DB 검색 실행 (미존재 시 국토부 API 자율 실시간 동기화)
         records: List[ApartmentTrade] = []
         if db:
             try:
                 records = await execute_text_to_sql_query(db, conditions)
+                # 만약 DB에 매물이 없거나 최초 조회 신규 지역인 경우, 백엔드가 국토부 API에서 자율 데이터 주입(Sync) 실행
+                if not records and target_code:
+                    print(f"🔄 [Autonomous Data Injection] 타겟 지역({target_code} {resolved_label}) 국토부 API 자율 실시간 동기화 시작...")
+                    try:
+                        from main import execute_sync_for_region
+                        await execute_sync_for_region(target_code, deal_ymd="last6")
+                        records = await execute_text_to_sql_query(db, conditions)
+                        print(f"✅ [Autonomous Data Injection 완료] 총 {len(records)}건 매물 확보")
+                    except Exception as sync_err:
+                        print(f"⚠️ [Autonomous Data Injection 예외]: {sync_err}")
             except Exception as query_err:
                 print(f"⚠️ [DB Query Err]: {query_err}")
 
-        # 빈 결과 처리
-        if not records:
-            dong_label = conditions.get("dong_name") or resolved_label
-            return f"요청하신 조건({dong_label})에 해당하는 최근 실거래 내역이 데이터베이스에 없습니다."
+        dong_val = conditions.get("dong_name") or ""
+        dong_title = f" {dong_val}" if (dong_val and dong_val not in resolved_label) else ""
+        full_target_name = f"{resolved_label}{dong_title}".strip()
 
-        return await _format_briefing_response(
+        if not records:
+            cond_parts = []
+            if conditions.get("dong_name"):
+                cond_parts.append(conditions["dong_name"])
+            if conditions.get("property_type"):
+                cond_parts.append(conditions["property_type"])
+            if conditions.get("trade_type"):
+                cond_parts.append(conditions["trade_type"])
+            if conditions.get("max_deposit"):
+                cond_parts.append(f"보증금 {clean_format_korean_money(conditions['max_deposit'])} 이하")
+            if conditions.get("max_monthly_rent"):
+                cond_parts.append(f"월세 {clean_format_korean_money(conditions['max_monthly_rent'])} 이하")
+            if conditions.get("max_price"):
+                cond_parts.append(f"매매가 {clean_format_korean_money(conditions['max_price'])} 이하")
+            if conditions.get("apt_name"):
+                cond_parts.append(f"단지명 '{conditions['apt_name']}'")
+
+            cond_desc = ", ".join(cond_parts) if cond_parts else f"'{prompt}'"
+            empty_msg = f"**요청하신 [{full_target_name}]의 거래 내역을 새로 분석했습니다.**\n\n조건({cond_desc})에 부합하는 최근 국토교통부 실거래 내역이 데이터베이스에 없습니다."
+            return {
+                "status": "success",
+                "reply": empty_msg,
+                "override_region": True,
+                "new_regional_code": target_code,
+                "new_region_label": resolved_label
+            }
+
+        briefing_text = await _format_briefing_response(
             prompt=pending_ctx.get("original_prompt", prompt) if pending_ctx else prompt,
-            region_name=region_name,
+            region_name=resolved_label,
             conditions=conditions,
             records=records,
-            model_choice=model_choice
+            model_choice=model_choice,
+            is_new_region_override=True
         )
 
-    # ---------------- 2단계: 신규 질의 자연어 조건 파싱 ----------------
+        return {
+            "status": "success",
+            "reply": briefing_text,
+            "override_region": True,
+            "new_regional_code": target_code,
+            "new_region_label": resolved_label
+        }
+
+    # ---------------- 2단계: 신규 질의 자연어 조건 파싱 & 대명사/이전 맥락 복원 ----------------
     conditions = await parse_conditions_with_openai(prompt, current_lawd_cd)
     dong = conditions.get("dong_name")
+    extracted_reg = conditions.get("region_name")
 
-    # ---------------- 3단계: 동음이의어 지역명 감지 (Ambiguity Detection) ----------------
-    ambiguous_candidates = check_dong_ambiguity(prompt, dong)
-    if ambiguous_candidates and len(ambiguous_candidates) >= 2:
-        # 중복 지역 발견 시 즉시 조회를 보류하고 되묻기(Clarification Prompt) 실행
-        options = [
-            {
-                "index": idx + 1,
-                "label": cand["label"],
-                "code": cand["code"],
-                "dong": cand.get("dong", dong)
+    # '거기', '그곳', '이곳' 등 이전 지역 대명사 질의인 경우 세션 메모리에서 복원
+    p_lower = prompt.lower()
+    is_followup = any(kw in p_lower for kw in ["거기", "그곳", "이곳", "그지역", "해당지역", "해당 지역", "그 지역"])
+    last_active = session_data.get("last_active_region")
+    if is_followup and last_active:
+        conditions["regional_code"] = last_active["code"]
+        if not dong and last_active.get("dong"):
+            conditions["dong_name"] = last_active["dong"]
+            dong = last_active["dong"]
+
+    # ---------------- 3단계: 범용 중복 지명 탐지 (Global Ambiguity Detection) ----------------
+    if not is_followup:
+        ambig_res = check_global_ambiguity(prompt, region_name=extracted_reg, dong_name=dong)
+        if ambig_res and ambig_res.get("options") and len(ambig_res["options"]) >= 2:
+            kw = ambig_res["keyword"]
+            opts = ambig_res["options"]
+            sample_str = ", ".join([f"{o['label']}" for o in opts[:3]])
+            clarification_text = (
+                f"말씀하신 '{kw}'이(가) 여러 곳에 있습니다. 어느 지역을 원하시나요? (예: {sample_str})\n\n"
+                + "\n".join([f"{opt['index']}. {opt['label']}" for opt in opts])
+                + "\n\n원하시는 지역 번호(예: 1번)나 지역명을 말씀해주시거나 아래 선택지 버튼을 클릭해주세요."
+            )
+
+            disambiguation_payload = {
+                "keyword": kw,
+                "entity_type": ambig_res.get("entity_type"),
+                "original_prompt": prompt,
+                "pending_conditions": conditions,
+                "options": opts
             }
-            for idx, cand in enumerate(ambiguous_candidates)
-        ]
 
-        lines = [f"말씀하신 '{dong}'이(가) 여러 지역에 있습니다. 어느 지역을 조회할까요?\n"]
-        for opt in options:
-            lines.append(f"{opt['index']}. {opt['label']}")
-        clarification_text = "\n".join(lines)
+            session_data["pending_disambiguation"] = disambiguation_payload
 
-        disambiguation_payload = {
-            "keyword": dong,
-            "original_prompt": prompt,
-            "pending_conditions": conditions,
-            "options": options
-        }
+            return {
+                "status": "needs_clarification",
+                "reply": clarification_text,
+                "disambiguation": disambiguation_payload
+            }
 
-        # 세션 캐시에 보관
-        SESSION_CONTEXT_CACHE[session_key] = disambiguation_payload
+    # ---------------- 4단계: 단일 명확 지역 DB 실거래 검색 및 자율 데이터 주입 ----------------
+    target_code = conditions.get("regional_code") or current_lawd_cd or "11680"
+    is_new_override = bool(target_code != current_lawd_cd or extracted_reg or is_followup)
+    region_name = get_region_name(target_code)
 
-        return {
-            "status": "needs_clarification",
-            "reply": clarification_text,
-            "disambiguation": disambiguation_payload
-        }
-
-    # ---------------- 4단계: 단일 명확 지역 DB 실거래 검색 실행 ----------------
-    region_name = region_label or (get_region_name(conditions.get("regional_code") or "11680") if conditions.get("regional_code") else "전국")
+    session_data["last_active_region"] = {
+        "code": target_code,
+        "label": region_name,
+        "dong": dong
+    }
 
     records: List[ApartmentTrade] = []
     if db:
         try:
             records = await execute_text_to_sql_query(db, conditions)
+            # 신규 타겟 지역 데이터가 DB에 없는 경우 백엔드 자율 실시간 동기화
+            if not records and target_code and is_new_override:
+                print(f"🔄 [Autonomous Data Injection] {region_name}({target_code}) 최신 실거래 자율 수집 실행...")
+                try:
+                    from main import execute_sync_for_region
+                    await execute_sync_for_region(target_code, deal_ymd="last6")
+                    records = await execute_text_to_sql_query(db, conditions)
+                    print(f"✅ [Autonomous Data Injection 완료] 총 {len(records)}건 매물 확보")
+                except Exception as sync_err:
+                    print(f"⚠️ [Autonomous Data Injection 예외]: {sync_err}")
         except Exception as query_err:
             print(f"⚠️ [DB Query Err]: {query_err}")
 
     # ---------------- 5단계: 매물이 없는 경우 (Empty State) ----------------
+    dong_val = conditions.get("dong_name") or ""
+    dong_title = f" {dong_val}" if (dong_val and dong_val not in region_name) else ""
+    full_target_name = f"{region_name}{dong_title}".strip()
+
     if not records:
         cond_parts = []
         if dong:
@@ -495,16 +582,32 @@ async def run_ai_consultant(
             cond_parts.append(f"단지명 '{conditions['apt_name']}'")
 
         cond_desc = ", ".join(cond_parts) if cond_parts else f"'{prompt}'"
-        return f"요청하신 조건({cond_desc})에 해당하는 최근 실거래 내역이 데이터베이스에 없습니다."
+        empty_lead = f"**요청하신 [{full_target_name}]의 거래 내역을 새로 분석했습니다.**\n\n" if is_new_override else ""
+        return {
+            "status": "success",
+            "reply": f"{empty_lead}요청하신 조건({cond_desc})에 해당하는 최근 국토교통부 실거래 내역이 데이터베이스에 없습니다.",
+            "override_region": is_new_override,
+            "new_regional_code": target_code,
+            "new_region_label": region_name
+        }
 
     # ---------------- 6단계: 실제 데이터 브리핑 생성 ----------------
-    return await _format_briefing_response(
+    briefing_text = await _format_briefing_response(
         prompt=prompt,
         region_name=region_name,
         conditions=conditions,
         records=records,
-        model_choice=model_choice
+        model_choice=model_choice,
+        is_new_region_override=is_new_override
     )
+
+    return {
+        "status": "success",
+        "reply": briefing_text,
+        "override_region": is_new_override,
+        "new_regional_code": target_code,
+        "new_region_label": region_name
+    }
 
 
 # 하위 호환성 유지 래퍼 함수

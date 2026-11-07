@@ -1687,9 +1687,15 @@ def get_region_name(lawd_cd: str) -> str:
     return LAWD_CD_TO_NAME.get(str(lawd_cd).strip(), f"지역 ({lawd_cd})")
 
 
-# ==================== 7. 전국 주요 동음이의어(중복) 법정동 레지스트리 ====================
+# ==================== 7. 전국 주요 동음이의어(중복) 법정동 및 시/군/구 레지스트리 ====================
 # 전국 2개 이상의 서로 다른 시/군/구에 존재하는 대표적인 법정동 목록
 HOMONYM_DONG_REGISTRY: Dict[str, List[Dict[str, Any]]] = {
+    "구산동": [
+        {"index": 1, "label": "서울특별시 은평구 구산동", "code": "11380", "dong": "구산동"},
+        {"index": 2, "label": "인천광역시 부평구 구산동", "code": "28237", "dong": "구산동"},
+        {"index": 3, "label": "경기도 고양시 일산서구 구산동", "code": "41287", "dong": "구산동"},
+        {"index": 4, "label": "경상남도 김해시 구산동", "code": "48250", "dong": "구산동"}
+    ],
     "가좌동": [
         {"index": 1, "label": "경상남도 진주시 가좌동", "code": "48170", "dong": "가좌동"},
         {"index": 2, "label": "인천광역시 서구 가좌동", "code": "28260", "dong": "가좌동"},
@@ -1716,7 +1722,8 @@ HOMONYM_DONG_REGISTRY: Dict[str, List[Dict[str, Any]]] = {
     ],
     "상대동": [
         {"index": 1, "label": "경상남도 진주시 상대동", "code": "48170", "dong": "상대동"},
-        {"index": 2, "label": "대전광역시 유성구 상대동", "code": "30200", "dong": "상대동"}
+        {"index": 2, "label": "대전광역시 유성구 상대동", "code": "30200", "dong": "상대동"},
+        {"index": 3, "label": "경상북도 포항시 남구 상대동", "code": "47111", "dong": "상대동"}
     ],
     "하대동": [
         {"index": 1, "label": "경상남도 진주시 하대동", "code": "48170", "dong": "하대동"}
@@ -1746,7 +1753,8 @@ HOMONYM_DONG_REGISTRY: Dict[str, List[Dict[str, Any]]] = {
     ],
     "내동": [
         {"index": 1, "label": "경상남도 김해시 내동", "code": "48250", "dong": "내동"},
-        {"index": 2, "label": "대전광역시 서구 내동", "code": "30170", "dong": "내동"}
+        {"index": 2, "label": "대전광역시 서구 내동", "code": "30170", "dong": "내동"},
+        {"index": 3, "label": "경기도 부천시 오정구 내동", "code": "41195", "dong": "내동"}
     ],
     "외동": [
         {"index": 1, "label": "경상남도 김해시 외동", "code": "48250", "dong": "외동"},
@@ -1755,33 +1763,190 @@ HOMONYM_DONG_REGISTRY: Dict[str, List[Dict[str, Any]]] = {
     "장대동": [
         {"index": 1, "label": "경상남도 진주시 장대동", "code": "48170", "dong": "장대동"},
         {"index": 2, "label": "대전광역시 유성구 장대동", "code": "30200", "dong": "장대동"}
+    ],
+    "대흥동": [
+        {"index": 1, "label": "서울특별시 마포구 대흥동", "code": "11440", "dong": "대흥동"},
+        {"index": 2, "label": "대전광역시 중구 대흥동", "code": "30140", "dong": "대흥동"}
+    ],
+    "용현동": [
+        {"index": 1, "label": "인천광역시 미추홀구 용현동", "code": "28170", "dong": "용현동"},
+        {"index": 2, "label": "경기도 의정부시 용현동", "code": "41150", "dong": "용현동"}
+    ],
+    "송도동": [
+        {"index": 1, "label": "인천광역시 연수구 송도동", "code": "28185", "dong": "송도동"},
+        {"index": 2, "label": "부산광역시 서구 암남동(송도)", "code": "26140", "dong": "송도"}
+    ],
+    "도화동": [
+        {"index": 1, "label": "서울특별시 마포구 도화동", "code": "11440", "dong": "도화동"},
+        {"index": 2, "label": "인천광역시 미추홀구 도화동", "code": "28170", "dong": "도화동"}
+    ],
+    "사당동": [
+        {"index": 1, "label": "서울특별시 동작구 사당동", "code": "11590", "dong": "사당동"},
+        {"index": 2, "label": "서울특별시 관악구 남현동(사당)", "code": "11620", "dong": "사당"}
+    ],
+    "양평동": [
+        {"index": 1, "label": "서울특별시 영등포구 양평동", "code": "11560", "dong": "양평동"},
+        {"index": 2, "label": "경기도 양평군 양평읍", "code": "41830", "dong": "양평읍"}
+    ],
+    "평촌동": [
+        {"index": 1, "label": "경기도 안양시 동안구 평촌동", "code": "41173", "dong": "평촌동"},
+        {"index": 2, "label": "경기도 의왕시 포일동(평촌)", "code": "41430", "dong": "평촌"}
+    ],
+    "인동": [
+        {"index": 1, "label": "대전광역시 동구 인동", "code": "30110", "dong": "인동"},
+        {"index": 2, "label": "경상북도 구미시 인동", "code": "47190", "dong": "인동"}
+    ],
+    "학동": [
+        {"index": 1, "label": "광주광역시 동구 학동", "code": "29110", "dong": "학동"},
+        {"index": 2, "label": "전라남도 여수시 학동", "code": "46130", "dong": "학동"}
+    ],
+    "갈현동": [
+        {"index": 1, "label": "서울특별시 은평구 갈현동", "code": "11380", "dong": "갈현동"},
+        {"index": 2, "label": "경기도 과천시 갈현동", "code": "41290", "dong": "갈현동"}
+    ],
+    "원당동": [
+        {"index": 1, "label": "인천광역시 서구 원당동", "code": "28260", "dong": "원당동"},
+        {"index": 2, "label": "경기도 고양시 덕양구 원당동", "code": "41281", "dong": "원당동"}
+    ],
+    "부곡동": [
+        {"index": 1, "label": "부산광역시 금정구 부곡동", "code": "26410", "dong": "부곡동"},
+        {"index": 2, "label": "경기도 군포시 부곡동", "code": "41410", "dong": "부곡동"},
+        {"index": 3, "label": "경기도 안산시 상록구 부곡동", "code": "41271", "dong": "부곡동"},
+        {"index": 4, "label": "경상남도 김해시 부곡동", "code": "48250", "dong": "부곡동"}
+    ],
+    "송정동": [
+        {"index": 1, "label": "부산광역시 해운대구 송정동", "code": "26350", "dong": "송정동"},
+        {"index": 2, "label": "울산광역시 북구 송정동", "code": "31200", "dong": "송정동"},
+        {"index": 3, "label": "서울특별시 성동구 송정동", "code": "11200", "dong": "송정동"},
+        {"index": 4, "label": "광주광역시 광산구 송정동", "code": "29200", "dong": "송정동"},
+        {"index": 5, "label": "경상북도 구미시 송정동", "code": "47190", "dong": "송정동"}
     ]
 }
 
+# ==================== 8. 대한민국 시/군/구 전수 전수조사 기반 중복 지명 색인 ====================
+_temp_sigungu_ambig: Dict[str, List[Dict[str, Any]]] = {}
+
+for item in LAWD_CD_MASTER_LIST:
+    sido = item["sido"]
+    name = item["name"]
+    code = item["code"]
+    full_name = item["full_name"]
+
+    keys_to_index = [name]
+    if " " in name:
+        keys_to_index.append(name.split()[-1])
+
+    for k in keys_to_index:
+        clean_k = _clean_str(k)
+        if clean_k not in _temp_sigungu_ambig:
+            _temp_sigungu_ambig[clean_k] = []
+        if not any(x["code"] == code for x in _temp_sigungu_ambig[clean_k]):
+            _temp_sigungu_ambig[clean_k].append({
+                "code": code,
+                "label": full_name,
+                "sido": sido,
+                "name": name
+            })
+
+GLOBAL_AMBIGUOUS_SIGUNGU: Dict[str, List[Dict[str, Any]]] = {
+    k: [
+        {"index": idx + 1, "label": it["label"], "code": it["code"], "sido": it["sido"], "name": it["name"]}
+        for idx, it in enumerate(items)
+    ]
+    for k, items in _temp_sigungu_ambig.items() if len(items) > 1
+}
+
+# '강서', '고성' 등 축약어 형태도 색인에 등록
+for k in list(GLOBAL_AMBIGUOUS_SIGUNGU.keys()):
+    short = k.rstrip("구").rstrip("군")
+    if len(short) >= 2 and short not in GLOBAL_AMBIGUOUS_SIGUNGU:
+        GLOBAL_AMBIGUOUS_SIGUNGU[short] = GLOBAL_AMBIGUOUS_SIGUNGU[k]
+
+
+def check_global_ambiguity(
+    prompt: str,
+    region_name: Optional[str] = None,
+    dong_name: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    [핵심] 전국 단위 범용 중복 지명(시/군/구 및 읍/면/동) 모호성 전수조사 및 감지
+    - '서구', '중구', '강서구', '고성군' 등 2개 이상의 광역시/도에 존재하는 시/군/구
+    - '구산동', '신월동', '가좌동', '중앙동' 등 2개 이상의 시/군/구에 존재하는 법정동
+    - 사용자의 질문 텍스트에 이미 상위 시/도나 시/군/구가 포함되어 특정할 수 있는 경우는 모호하지 않음(None 반환)
+    """
+    if not prompt:
+        return None
+
+    p_clean = prompt.replace(" ", "")
+
+    # 1. 시/군/구 레벨 중복 지명 판별 (서구, 중구, 동구, 남구, 북구, 강서구, 고성군 등)
+    target_sigungu_key = None
+    if region_name and _clean_str(region_name) in GLOBAL_AMBIGUOUS_SIGUNGU:
+        target_sigungu_key = _clean_str(region_name)
+    else:
+        # 단어 길이가 긴 순서대로 매칭 (예: 강서구 > 서구)
+        for k in sorted(GLOBAL_AMBIGUOUS_SIGUNGU.keys(), key=lambda x: -len(x)):
+            if k in p_clean:
+                target_sigungu_key = k
+                break
+
+    if target_sigungu_key:
+        candidates = GLOBAL_AMBIGUOUS_SIGUNGU[target_sigungu_key]
+        # 질문 텍스트에 광역시/도 명칭(예: '인천', '대전', '광주', '부산', '대구', '서울')이 있는지 검사
+        matched = []
+        for c in candidates:
+            sido_short = c["sido"][:2]
+            if (sido_short in p_clean) or (c["sido"] in prompt):
+                matched.append(c)
+
+        # 사용자가 이미 상위 지역을 명시한 경우(예: '인천 서구', '대전 서구')는 단일 특정되므로 모호하지 않음
+        if len(matched) == 1:
+            pass
+        else:
+            return {
+                "keyword": target_sigungu_key,
+                "entity_type": "sigungu",
+                "options": candidates
+            }
+
+    # 2. 읍/면/동 레벨 중복 지명 판별 (구산동, 신월동, 가좌동, 중앙동, 상대동 등)
+    target_dong_key = None
+    if dong_name and _clean_str(dong_name) in HOMONYM_DONG_REGISTRY:
+        target_dong_key = _clean_str(dong_name)
+    else:
+        for k in HOMONYM_DONG_REGISTRY.keys():
+            if k in p_clean:
+                target_dong_key = k
+                break
+
+    if target_dong_key:
+        candidates = HOMONYM_DONG_REGISTRY[target_dong_key]
+        matched = []
+        for c in candidates:
+            tokens = c["label"].split()  # 예: ['경상남도', '진주시', '가좌동']
+            sido_token = tokens[0][:2]
+            sigungu_token = tokens[1].replace("시", "").replace("구", "").replace("군", "")
+            if (len(sido_token) >= 2 and sido_token in p_clean) or (len(sigungu_token) >= 2 and sigungu_token in p_clean):
+                matched.append(c)
+
+        if len(matched) == 1:
+            pass
+        else:
+            return {
+                "keyword": target_dong_key,
+                "entity_type": "dong",
+                "options": candidates
+            }
+
+    return None
+
 
 def check_dong_ambiguity(prompt: str, dong_name: Optional[str]) -> Optional[List[Dict[str, Any]]]:
-    """
-    사용자가 질문한 법정동이 전국 2개 이상의 시/군/구에 존재하는 동음이의어인지 판별.
-    사용자의 질문에 시/도나 시/군/구 명칭(예: '진주 가좌동', '인천 가좌동')이 명시된 경우 모호하지 않으므로 None 반환.
-    """
-    if not dong_name:
-        return None
-
-    clean_dong = str(dong_name).strip()
-    candidates = HOMONYM_DONG_REGISTRY.get(clean_dong)
-    if not candidates or len(candidates) < 2:
-        return None
-
-    # 질문 텍스트에 이미 시/도나 시/군/구가 포함되어 있는지 확인
-    p_clean = prompt.replace(" ", "")
-    for cand in candidates:
-        tokens = cand["label"].split()  # 예: ['경상남도', '진주시', '가좌동']
-        sido_token = tokens[0][:2]       # 예: '경남', '인천', '경기', '서울'
-        sigungu_token = tokens[1].replace("시", "").replace("구", "").replace("군", "")
-        if (len(sido_token) >= 2 and sido_token in p_clean) or (len(sigungu_token) >= 2 and sigungu_token in p_clean):
-            return None
-
-    return candidates
+    """하위 호환용 래퍼 함수"""
+    res = check_global_ambiguity(prompt, dong_name=dong_name)
+    if res and res.get("options"):
+        return res["options"]
+    return None
 
 
 def resolve_disambiguation_choice(
@@ -1789,23 +1954,54 @@ def resolve_disambiguation_choice(
     options: List[Dict[str, Any]]
 ) -> Optional[Dict[str, Any]]:
     """
-    사용자의 입력('1번', '1', '진주시 가좌동', '인천' 등)을 후보 목록과 매칭하여 선택된 지역 반환
+    사용자의 입력('1번', '1', '진주시 가좌동', '인천 서구', '대전 서구', '김해 구산동' 등)을 후보 목록과 매칭하여 선택된 지역 반환
     """
     choice = user_choice.strip()
+    if not choice or not options:
+        return None
 
-    # 1. 번호 선택 (예: "1", "1번", "1번으로", "2")
-    num_match = re.search(r"(\d+)", choice)
+    choice_clean = choice.replace(" ", "")
+
+    # 1. 번호 선택 우선 매칭 (예: "1", "1번", "1번으로", "2")
+    num_match = re.search(r"(\d+)(?:번)?", choice)
     if num_match:
         idx = int(num_match.group(1))
         for opt in options:
             if opt.get("index") == idx:
                 return opt
 
-    # 2. 지역명 직접 입력 (예: "진주시 가좌동", "진주", "인천", "고양시")
-    choice_clean = choice.replace(" ", "")
+    # 2. 지역 고유 명칭(시/도, 시/군/구) 차별성 기반 점수제 매칭
+    # 예: '대전 서구' 입력 시, 공통어 '서구'가 아닌 고유어 '대전'을 보유한 대전광역시 서구로 정확히 라우팅
+    best_match = None
+    best_score = 0
+
     for opt in options:
-        label_clean = opt.get("label", "").replace(" ", "")
-        if choice_clean in label_clean or any(part in choice_clean for part in opt.get("label", "").split() if len(part) >= 2):
-            return opt
+        score = 0
+        label = opt.get("label", "")
+        tokens = label.split()
+        sido = opt.get("sido") or (tokens[0] if tokens else "")
+        sido_short = sido[:2]
+
+        # 2-1. 시/도 명칭 일치 (예: '대전', '인천', '부산', '광주', '서울', '경기', '경남')
+        if sido_short and sido_short in choice_clean:
+            score += 10
+
+        # 2-2. 상위 시/군/구 명칭 일치 (예: '진주', '김해', '은평', '부평', '고양', '창원')
+        if len(tokens) > 1:
+            for tok in tokens[1:-1] if len(tokens) > 2 else tokens[1:]:
+                clean_tok = tok.replace("시", "").replace("구", "").replace("군", "")
+                if len(clean_tok) >= 2 and clean_tok in choice_clean:
+                    score += 10
+
+        # 2-3. 전체 라벨 포함 여부
+        if choice_clean in label.replace(" ", "") or label.replace(" ", "") in choice_clean:
+            score += 5
+
+        if score > best_score:
+            best_score = score
+            best_match = opt
+
+    if best_match and best_score > 0:
+        return best_match
 
     return None

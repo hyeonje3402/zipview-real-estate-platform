@@ -2004,6 +2004,22 @@ export default function TossStyleRealEstateDashboard() {
         setPendingDisambiguation(null);
       }
 
+      // 프론트엔드 종속성 완전 차단: 백엔드 챗봇에서 확정/전환된 타겟 지역으로 대시보드 상태 자율 오버라이드
+      if (res.data?.override_region && res.data?.new_regional_code) {
+        const newCode = res.data.new_regional_code;
+        const newLabel = res.data.new_region_label;
+        if (newCode !== lawdCd) {
+          console.log(`[Region Override] 챗봇 질의에 따라 대시보드 지역을 ${newLabel}(${newCode})로 전환합니다.`);
+          setLawdCd(newCode);
+          if (newLabel) {
+            setCurrentRegionLabel(newLabel);
+          }
+          if (typeof showToast === "function") {
+            showToast(`[${newLabel}] 분석 데이터로 전환되었습니다.`);
+          }
+        }
+      }
+
       setChatMessages((prev) => [
         ...prev,
         {
