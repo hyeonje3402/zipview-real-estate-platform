@@ -1532,24 +1532,7 @@ LAWD_CD_TO_NAME: Dict[str, str] = {
 # 3. 유효한 5자리 법정동 코드 집합 (O(1) 검증)
 VALID_LAWD_CODES = set(LAWD_CD_TO_NAME.keys())
 
-# 4. 통합시/특례시 전체 코드 (0으로 끝남) -> 대표 구 매핑 테이블
-# 국토부 API는 시 전체 코드로 조회 시 0건을 반환하므로 대표 자치구로 자동 연결
-INTEGRATED_CITY_CODE_MAPPING: Dict[str, str] = {
-    "48120": "48121",  # 경남 창원시 전체 -> 의창구
-    "41110": "41111",  # 경기 수원시 전체 -> 장안구
-    "41130": "41135",  # 경기 성남시 전체 -> 분당구
-    "41170": "41173",  # 경기 안양시 전체 -> 동안구
-    "41190": "41192",  # 경기 부천시 전체 -> 원미구
-    "41270": "41271",  # 경기 안산시 전체 -> 상록구
-    "41280": "41285",  # 경기 고양시 전체 -> 일산동구
-    "41460": "41465",  # 경기 용인시 전체 -> 수지구
-    "43110": "43111",  # 충북 청주시 전체 -> 상당구
-    "44130": "44133",  # 충남 천안시 전체 -> 서북구
-    "45110": "45111",  # 전북 전주시 전체 -> 완산구
-    "47110": "47111"   # 경북 포항시 전체 -> 남구
-}
-
-# 5. 광역시/도 별칭 매핑
+# 4. 광역시/도 별칭 매핑
 SIDO_SHORT_ALIASES = {
     "서울특별시": ["서울", "서울시"],
     "경기도": ["경기"],
@@ -1576,59 +1559,64 @@ def _clean_str(text: str) -> str:
         return ""
     return re.sub(r"[\s\-_/(),]+", "", str(text)).strip().lower()
 
-# 6. 정규화된 텍스트 -> 5자리 LAWD_CD 역색인 딕셔너리 구축
+# 5. [전국 전수 100% 동적 구축] 정규화된 텍스트 -> 5자리 LAWD_CD 역색인 & 0번 통합코드 매핑
+# 특정 테스트 지역(진주, 김해, 창원 등)에 한정된 하드코딩 딕셔너리를 전면 폐기하고
+# 대한민국 252개 전수 표준 마스터 테이블을 기반으로 완전 동적 역색인 구축
 NORMALIZED_NAME_TO_CODE: Dict[str, str] = {}
+INTEGRATED_CITY_CODE_MAPPING: Dict[str, str] = {}
 
 for item in LAWD_CD_MASTER_LIST:
     code = item["code"]
     sido = item["sido"]
-    name = item["name"]  # 예: "창원시 의창구" 또는 "강남구"
-    full_name = item["full_name"]  # 예: "경상남도 창원시 의창구"
+    name = item["name"]        # 예: "창원시 의창구", "진주시", "강남구", "고성군"
+    full_name = item["full_name"]  # 예: "경상남도 창원시 의창구", "경상남도 진주시"
 
     # (1) 전체 표준 풀네임
     NORMALIZED_NAME_TO_CODE[_clean_str(full_name)] = code
-    # (2) 시도 제외 시/군/구명
+    # (2) 시도 제외 시/군/구 정식 명칭
     NORMALIZED_NAME_TO_CODE[_clean_str(name)] = code
-    # (3) 구 단위만 있는 경우 (예: "수원시 장안구" -> "장안구", "창원시 성산구" -> "성산구")
+
+    # (3) 단일 시/군/구 단위 '시'/'군'/'구' 생략 약칭 자동 색인 (예: "진주", "김해", "강릉", "원주", "서귀포")
+    name_short = name.rstrip("시").rstrip("군").rstrip("구")
+    if len(name_short) >= 2 and _clean_str(name_short) not in NORMALIZED_NAME_TO_CODE:
+        NORMALIZED_NAME_TO_CODE[_clean_str(name_short)] = code
+
+    # (4) 통합시/특례시 산하 구가 있는 경우 (예: "수원시 장안구", "창원시 의창구")
     if " " in name:
         parts = name.split(" ")
-        city_part = parts[0]
-        sub_district = parts[-1]
-        NORMALIZED_NAME_TO_CODE[_clean_str(sub_district)] = code
-        # 시+구 붙여쓴 형태 (예: "창원시성산구")
-        NORMALIZED_NAME_TO_CODE[_clean_str("".join(parts))] = code
-        
-        # '시'/'구' 생략 및 변형 형태 자동 등록 (예: "창원성산", "창원성산구", "성산")
-        city_short = city_part.rstrip("시")
-        sub_short = sub_district.rstrip("구")
-        NORMALIZED_NAME_TO_CODE[_clean_str(f"{city_short}{sub_district}")] = code
-        NORMALIZED_NAME_TO_CODE[_clean_str(f"{city_short}{sub_short}")] = code
-        NORMALIZED_NAME_TO_CODE[_clean_str(sub_short)] = code
+        city_part = parts[0]      # 예: "창원시", "수원시", "고양시"
+        sub_district = parts[-1]   # 예: "의창구", "장안구", "일산서구"
 
-    # (4) 시도 약칭 조합 (예: "경남 창원시 의창구", "경남의창구", "서울강남구")
+        # 4-1. 0으로 끝나는 통합시 대표 코드 자동 연결 (예: 48120 -> 48121, 41110 -> 41111)
+        base_code = code[:4] + "0"
+        if base_code not in INTEGRATED_CITY_CODE_MAPPING:
+            INTEGRATED_CITY_CODE_MAPPING[base_code] = code
+
+        # 4-2. 구 단위 단독 명칭 (예: "의창구", "장안구", "분당구", "수지구")
+        NORMALIZED_NAME_TO_CODE[_clean_str(sub_district)] = code
+        # 4-3. 시+구 붙여쓴 형태 (예: "창원시의창구", "수원시장안구")
+        NORMALIZED_NAME_TO_CODE[_clean_str("".join(parts))] = code
+
+        # 4-4. 통합시 전체 명칭 -> 대표 구 자동 연결 (예: "창원시", "창원", "수원시", "수원")
+        if _clean_str(city_part) not in NORMALIZED_NAME_TO_CODE:
+            NORMALIZED_NAME_TO_CODE[_clean_str(city_part)] = code
+        city_short = city_part.rstrip("시")
+        if len(city_short) >= 2 and _clean_str(city_short) not in NORMALIZED_NAME_TO_CODE:
+            NORMALIZED_NAME_TO_CODE[_clean_str(city_short)] = code
+
+        # 4-5. '시'/'구' 생략 및 변형 형태 자동 등록 (예: "창원의창", "수원장안")
+        NORMALIZED_NAME_TO_CODE[_clean_str(f"{city_short}{sub_district}")] = code
+        NORMALIZED_NAME_TO_CODE[_clean_str(f"{city_short}{sub_district.rstrip('구')}")] = code
+        NORMALIZED_NAME_TO_CODE[_clean_str(sub_district.rstrip("구"))] = code
+
+    # (5) 시도 약칭 조합 (예: "경남 창원시 의창구", "경남진주", "서울강남", "경기수원")
     aliases = SIDO_SHORT_ALIASES.get(sido, [])
     for alias in aliases:
         NORMALIZED_NAME_TO_CODE[_clean_str(f"{alias}{name}")] = code
+        NORMALIZED_NAME_TO_CODE[_clean_str(f"{alias}{name_short}")] = code
         if " " in name:
             NORMALIZED_NAME_TO_CODE[_clean_str(f"{alias}{name.split()[-1]}")] = code
-
-# 통합시 대표 명칭 매핑
-INTEGRATED_CITY_NAME_MAPPINGS = {
-    "창원시": "48121", "창원": "48121", "경남창원시": "48121", "경상남도창원시": "48121",
-    "수원시": "41111", "수원": "41111", "경기수원시": "41111",
-    "성남시": "41135", "성남": "41135", "경기성남시": "41135",
-    "안양시": "41173", "안양": "41173", "경기안양시": "41173",
-    "부천시": "41192", "부천": "41192", "경기부천시": "41192",
-    "안산시": "41271", "안산": "41271", "경기안산시": "41271",
-    "고양시": "41285", "고양": "41285", "기고양시": "41285",
-    "용인시": "41465", "용인": "41465", "경기용인시": "41465",
-    "청주시": "43111", "청주": "43111", "충북청주시": "43111",
-    "천안시": "44133", "천안": "44133", "충남천안시": "44133",
-    "전주시": "45111", "전주": "45111", "전북전주시": "45111",
-    "포항시": "47111", "포항": "47111", "경북포항시": "47111",
-}
-for k, v in INTEGRATED_CITY_NAME_MAPPINGS.items():
-    NORMALIZED_NAME_TO_CODE[_clean_str(k)] = v
+            NORMALIZED_NAME_TO_CODE[_clean_str(f"{alias}{name.split()[0]}")] = code
 
 
 # ==================== 핵심 식별 및 검증 함수 ====================

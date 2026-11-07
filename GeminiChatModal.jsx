@@ -6,12 +6,14 @@ import axios from "axios";
  * - 국토교통부 실거래 원장 데이터 및 시장 분석 LLM 연동
  * - 간결하고 정제된 실무 인터페이스 및 타이포그래피 정보 위계 적용
  */
-export default function GeminiChatModal({ isOpen, onClose }) {
+export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegionLabel, onRegionOverride }) {
+  const activeRegion = currentRegionLabel || "현재 지역";
+
   const [messages, setMessages] = useState([
     {
       id: 1,
       sender: "ai",
-      text: "집뷰(ZipView) 부동산 시장 분석 어시스턴트입니다.\n국토교통부 실거래 원장 데이터 및 시장 지표를 기반으로 단지별 거래가 추이, 갭 비율, 신고가 내역 등을 분석하여 제공합니다.",
+      text: `집뷰(ZipView) 부동산 시장 분석 어시스턴트입니다.\n현재 선택된 [${activeRegion}]의 국토교통부 실거래 원장 데이터 및 시장 지표를 기반으로 단지별 거래가 추이, 전세가율, 신고가 내역 등을 분석하여 제공합니다.`,
       timestamp: "시스템 초기화"
     }
   ]);
@@ -22,10 +24,10 @@ export default function GeminiChatModal({ isOpen, onClose }) {
   const messagesEndRef = useRef(null);
 
   const promptChips = [
-    "은마아파트 최근 1년 전세 실거래 추이",
-    "강남구 30평형대 최고가 거래 분석",
+    `${activeRegion} 최근 전세 실거래 추이`,
+    `${activeRegion} 30평형대 실거래가 분석`,
     "최근 매매 대비 전세가율 현황",
-    "분기별 신고가 거래 단지 목록"
+    "신고가 거래 단지 분석"
   ];
 
   useEffect(() => {
@@ -53,10 +55,13 @@ export default function GeminiChatModal({ isOpen, onClose }) {
 
     try {
       const payload = {
+        lawdCd: lawdCd || undefined,
+        regional_code: lawdCd || undefined,
+        regionLabel: activeRegion,
         prompt: userMsg.text,
         query: userMsg.text,
         model_choice: modelChoice,
-        session_id: "zipview-user-session",
+        session_id: `zipview-session-${lawdCd || "default"}`,
         context: pendingDisambiguation || undefined,
         selected_option: selectedOption || undefined
       };
@@ -74,6 +79,10 @@ export default function GeminiChatModal({ isOpen, onClose }) {
         setPendingDisambiguation(disambiguation);
       } else {
         setPendingDisambiguation(null);
+      }
+
+      if (res.data?.override_region && res.data?.new_regional_code && typeof onRegionOverride === "function") {
+        onRegionOverride(res.data.new_regional_code, res.data.new_region_label);
       }
 
       const aiMsg = {

@@ -748,13 +748,18 @@ async def chat_with_multi_llm(req: ChatRequest, db: AsyncSession = Depends(get_d
     if not user_prompt:
         raise HTTPException(status_code=400, detail="질문 내용을 입력해 주세요.")
     
-    current_lawd_cd = req.lawdCd or req.regional_code or "11680"
+    # 프론트엔드에서 전달된 실제 선택 지역을 100% 동적으로 바인딩 (강남구 하드코딩 디폴트 원천 제거)
+    current_lawd_cd = req.lawdCd or req.regional_code
+    if not current_lawd_cd and req.regionLabel:
+        current_lawd_cd = resolve_lawd_cd(req.regionLabel)
+
+    region_label_resolved = req.regionLabel or (get_region_name(current_lawd_cd) if current_lawd_cd else None)
     choice = req.model_choice or "gpt"
-    
+
     result = await run_ai_consultant(
         prompt=user_prompt,
         current_lawd_cd=current_lawd_cd,
-        region_label=req.regionLabel,
+        region_label=region_label_resolved,
         model_choice=choice,
         db=db,
         context=req.context,

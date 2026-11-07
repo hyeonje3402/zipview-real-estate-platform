@@ -353,7 +353,7 @@ async def _format_briefing_response(
                 f"엄격한 규칙:\n"
                 f"1. 첫 문장은 반드시 '**요청하신 [{full_target_name}]의 거래 내역을 새로 분석했습니다.**'로 시작해.\n"
                 f"2. 위 조회 결과에 포함된 매물만 언급하고, 다른 동네나 허위 단지명을 절대 추가하지 마.\n"
-                f"3. '200만원만원'처럼 '만원' 단위가 중복되지 않도록 깔끔하게 한국어 화폐 단위를 표기해."
+                f"3. 금액 표기 시 '만원' 단위가 중복되지 않도록 '보증금 1,000만원 / 월 70만원' 형태로 정갈하게 표기해."
             )
             resp = await client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -364,7 +364,10 @@ async def _format_briefing_response(
                 temperature=0.2,
                 timeout=12.0
             )
-            return resp.choices[0].message.content
+            raw_text = resp.choices[0].message.content or ""
+            clean_text = re.sub(r"만원\s*만원+", "만원", raw_text)
+            clean_text = re.sub(r"억\s*만원\s*만원+", "억 만원", clean_text)
+            return clean_text
         except Exception as llm_err:
             print(f"⚠️ [OpenAI Completion Err]: {llm_err}")
 
@@ -532,8 +535,18 @@ async def run_ai_consultant(
             }
 
     # ---------------- 4단계: 단일 명확 지역 DB 실거래 검색 및 자율 데이터 주입 ----------------
-    target_code = conditions.get("regional_code") or current_lawd_cd or "11680"
-    is_new_override = bool(target_code != current_lawd_cd or extracted_reg or is_followup)
+    target_code = conditions.get("regional_code") or current_lawd_cd
+    if not target_code:
+        # 지역 정보가 질문 및 컨텍스트에 모두 없는 경우 사용자에게 지역 입력 유도 (강남구 하드코딩 기본값 원천 제거)
+        return {
+            "status": "success",
+            "reply": "조회하고자 하시는 지역(예: 진주시, 창원시 성산구, 대전 서구 등)이나 단지명을 함께 말씀해 주시면 국토교통부 실거래 원장 데이터를 즉각 분석해 드립니다.",
+            "override_region": False,
+            "new_regional_code": None,
+            "new_region_label": None
+        }
+
+    is_new_override = bool((current_lawd_cd and target_code != current_lawd_cd) or extracted_reg or is_followup)
     region_name = get_region_name(target_code)
 
     session_data["last_active_region"] = {

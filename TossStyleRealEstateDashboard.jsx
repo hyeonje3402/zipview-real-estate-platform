@@ -943,7 +943,7 @@ export default function TossStyleRealEstateDashboard() {
     return generateListingsFromTrades(rawTrades, center.lat, center.lng, currentRegionLabel);
   }, [rawTrades, lawdCd, regionCoords, currentRegionLabel]);
 
-  const filteredMockListings = useMemo(() => {
+  const filteredRealListings = useMemo(() => {
     return dynamicListings.filter((item) => {
       const matchProp = listingPropertyFilter === "all" || item.property_type === listingPropertyFilter;
       const matchTrade = listingTradeFilter === "all" || item.deal_type === listingTradeFilter;
@@ -1614,12 +1614,12 @@ export default function TossStyleRealEstateDashboard() {
       // 영역 하이라이트 Circle 렌더링
       drawHighlightCircle(map, coords, 40);
 
-      const marker = listingMarkersRef.current.find((_, idx) => filteredMockListings[idx]?.id === item.id);
+      const marker = listingMarkersRef.current.find((_, idx) => filteredRealListings[idx]?.id === item.id);
       if (marker) {
         openListingInfoWindow(map, marker, item);
       }
     }
-  }, [filteredMockListings, openListingInfoWindow, drawHighlightCircle]);
+  }, [filteredRealListings, openListingInfoWindow, drawHighlightCircle]);
 
   // [B2B 모드 동기화] viewMode 변경 시 지도 마커 전환
   useEffect(() => {
@@ -1636,7 +1636,7 @@ export default function TossStyleRealEstateDashboard() {
       listingMarkersRef.current = [];
 
       // 신규 매물 마커 일괄 배치
-      const newMarkers = filteredMockListings.map((item) => {
+      const newMarkers = filteredRealListings.map((item) => {
         const pos = new window.kakao.maps.LatLng(item.lat, item.lng);
         const marker = new window.kakao.maps.Marker({
           map: map,
@@ -1659,9 +1659,9 @@ export default function TossStyleRealEstateDashboard() {
       listingMarkersRef.current = newMarkers;
 
       // 초기 선택 매물 포커스
-      const target = selectedListing || (filteredMockListings.length > 0 ? filteredMockListings[0] : null);
+      const target = selectedListing || (filteredRealListings.length > 0 ? filteredRealListings[0] : null);
       if (target && newMarkers.length > 0) {
-        const targetMarker = newMarkers.find((_, idx) => filteredMockListings[idx]?.id === target.id) || newMarkers[0];
+        const targetMarker = newMarkers.find((_, idx) => filteredRealListings[idx]?.id === target.id) || newMarkers[0];
         const coords = new window.kakao.maps.LatLng(target.lat, target.lng);
         map.panTo(coords);
         map.setLevel(4);
@@ -1682,12 +1682,13 @@ export default function TossStyleRealEstateDashboard() {
         searchAndPinAddress(currentRegionLabel, currentRegionLabel, null, false, currentRegionLabel);
       }
     }
-  }, [viewMode, filteredMockListings, selectedListing, rawTrades, selectedMapTarget, buildPropertyAddressAndTitle, searchAndPinAddress, currentRegionLabel, openListingInfoWindow]);
+  }, [viewMode, filteredRealListings, selectedListing, rawTrades, selectedMapTarget, buildPropertyAddressAndTitle, searchAndPinAddress, currentRegionLabel, openListingInfoWindow]);
 
   // 시/도 드롭다운 변경 핸들러 (상태 불일치 방지 및 로딩 상태 즉시 활성화)
   const handleSidoChange = (e) => {
     const newSido = e.target.value;
     setSelectedSido(newSido);
+    setPendingDisambiguation(null);
     const districts = REGION_DATA[newSido] || [];
     if (districts.length > 0) {
       const newCode = districts[0].code;
@@ -1722,6 +1723,7 @@ export default function TossStyleRealEstateDashboard() {
   // 시/군/구 드롭다운 변경 핸들러 (상태 불일치 방지 및 로딩 상태 즉시 활성화)
   const handleLawdCdChange = (e) => {
     const newCode = e.target.value;
+    setPendingDisambiguation(null);
     // 상태 불일치 즉시 해소 및 로딩 스켈레톤 활성화
     setSelectedMapTarget(null);
     setSelectedListing(null);
@@ -1979,7 +1981,7 @@ export default function TossStyleRealEstateDashboard() {
         prompt: userText,
         query: userText,
         model_choice: "gpt",
-        session_id: "zipview-user-session",
+        session_id: `zipview-session-${lawdCd || "default"}`,
         context: pendingDisambiguation || undefined,
         selected_option: selectedOption || undefined
       };
@@ -2010,10 +2012,15 @@ export default function TossStyleRealEstateDashboard() {
         const newLabel = res.data.new_region_label;
         if (newCode !== lawdCd) {
           console.log(`[Region Override] 챗봇 질의에 따라 대시보드 지역을 ${newLabel}(${newCode})로 전환합니다.`);
-          setLawdCd(newCode);
-          if (newLabel) {
-            setCurrentRegionLabel(newLabel);
+          for (const [sido, dists] of Object.entries(REGION_DATA)) {
+            const found = dists.find((d) => d.code === newCode);
+            if (found) {
+              setSelectedSido(sido);
+              break;
+            }
           }
+          setPendingDisambiguation(null);
+          setLawdCd(newCode);
           if (typeof showToast === "function") {
             showToast(`[${newLabel}] 분석 데이터로 전환되었습니다.`);
           }
@@ -2204,7 +2211,7 @@ export default function TossStyleRealEstateDashboard() {
             <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
               <span className="text-xs font-bold text-[#4E5968] bg-[#F2F4F6] px-3 py-2 rounded-xl">
                 {viewMode === "listing"
-                  ? `검증 매물 ${filteredMockListings.length}건`
+                  ? `검증 매물 ${filteredRealListings.length}건`
                   : `실거래 ${filteredTrades.length.toLocaleString()}건`}
               </span>
               {searchKeyword && (
@@ -2297,7 +2304,7 @@ export default function TossStyleRealEstateDashboard() {
               <p className="text-2xl font-black text-slate-400 mt-1">-</p>
             ) : (
               <p className="text-2xl font-black text-[#191F28] mt-1 tracking-tight">
-                {viewMode === "listing" ? filteredMockListings.length : availableComplexNames.length}
+                {viewMode === "listing" ? filteredRealListings.length : availableComplexNames.length}
                 <span className="text-sm font-bold text-[#8B95A1] ml-1">
                   {viewMode === "listing" ? "개 매물" : "개 단지"}
                 </span>
@@ -2663,7 +2670,7 @@ export default function TossStyleRealEstateDashboard() {
           ) : !targetComplexA || !targetComplexB ? (
             <div className="py-12 text-center text-[#64748B] text-xs font-medium space-y-1">
               <p className="font-bold text-[#0F172A]">{currentRegionLabel}에 비교 가능한 단지 정보가 충분하지 않습니다.</p>
-              <p className="text-[11px] text-[#64748B]">다른 지역을 선택하시면 실거래 단지 데이터가 자동으로 동기화됩니다.</p>
+              <p className="text-[11px] text-[#64748B]">해당 조건의 실거래 데이터가 없습니다. 다른 지역을 선택하시면 실거래 단지 데이터가 자동으로 동기화됩니다.</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -2877,7 +2884,7 @@ export default function TossStyleRealEstateDashboard() {
                 <span className="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded tracking-wide">Kakao Map GIS</span>
                 <h3 className="text-lg font-black text-[#191F28] tracking-tight">
                   {viewMode === "listing"
-                    ? (selectedListing ? `${selectedListing.title}` : `${currentRegionLabel} B2B 제휴 매물 지도 (총 ${filteredMockListings.length}건)`)
+                    ? (selectedListing ? `${selectedListing.title}` : `${currentRegionLabel} B2B 제휴 매물 지도 (총 ${filteredRealListings.length}건)`)
                     : (selectedMapTarget ? `${selectedMapTarget.apt_name} 실거래 위치 지도` : `${currentRegionLabel} 단지 & 매물 위치 지도`)}
                 </h3>
               </div>
@@ -3366,7 +3373,7 @@ export default function TossStyleRealEstateDashboard() {
                   <span>B2B 제휴 검증 매물</span>
                 </span>
                 <h3 className="text-lg font-black text-[#191F28] tracking-tight">
-                  {currentRegionLabel} 제휴 공인중개사 실시간 매물 ({filteredMockListings.length}건)
+                  {currentRegionLabel} 제휴 공인중개사 실시간 매물 ({filteredRealListings.length}건)
                 </h3>
               </div>
               <p className="text-xs text-[#8B95A1] font-medium mt-1">
@@ -3437,7 +3444,7 @@ export default function TossStyleRealEstateDashboard() {
           </div>
 
           {/* 직방/다방 스타일 매물 카드 그리드 (반응형 3열) */}
-          {filteredMockListings.length === 0 ? (
+          {filteredRealListings.length === 0 ? (
             <div className="py-16 text-center space-y-3 bg-white rounded-xl border border-[#E5E8EB]">
               
               <div className="space-y-1">
@@ -3447,7 +3454,7 @@ export default function TossStyleRealEstateDashboard() {
                 <p className="text-xs text-[#8B95A1]">
                   {searchKeyword.trim()
                     ? "단지명이나 동 이름을 확인하시거나, 다른 검색어로 검색해 보세요."
-                    : "해당 지역의 실거래 검증 매물이 아직 없거나 필터 조건에 부합하는 매물이 없습니다."}
+                    : "해당 조건의 실거래 데이터가 없습니다. 해당 지역의 실거래 검증 매물이 아직 없거나 필터 조건에 부합하는 매물이 없습니다."}
                 </p>
               </div>
               {(searchKeyword.trim() || listingPropertyFilter !== "all" || listingTradeFilter !== "all") && (
@@ -3465,7 +3472,7 @@ export default function TossStyleRealEstateDashboard() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4.5">
-              {filteredMockListings.map((item) => {
+              {filteredRealListings.map((item) => {
                 const isSelected = selectedListing?.id === item.id;
                 const priceColor = item.deal_type === "매매" ? "text-[#F04452]" : item.deal_type === "전세" ? "text-[#1e3a8a]" : "text-[#00B493]";
 
