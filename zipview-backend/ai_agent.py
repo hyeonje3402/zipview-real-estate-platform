@@ -16,12 +16,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, desc
 
 from models import ApartmentTrade
-from lawd_cd_registry import resolve_lawd_cd, get_region_name, NORMALIZED_NAME_TO_CODE
+from lawd_cd_registry import (
+    resolve_lawd_cd,
+    get_region_name,
+    NORMALIZED_NAME_TO_CODE,
+    check_dong_ambiguity,
+    resolve_disambiguation_choice
+)
 
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+# 다중 턴 세션 컨텍스트 캐시 (되묻기 및 원래 조건 유지)
+SESSION_CONTEXT_CACHE: Dict[str, Dict[str, Any]] = {}
 
 
 def clean_format_korean_money(amount_manwon: Optional[int]) -> str:
@@ -292,52 +301,14 @@ async def execute_text_to_sql_query(
     return records
 
 
-async def run_ai_consultant(
+async def _format_briefing_response(
     prompt: str,
-    current_lawd_cd: Optional[str] = None,
-    region_label: Optional[str] = None,
-    model_choice: str = "gpt",
-    db: Optional[AsyncSession] = None
+    region_name: str,
+    conditions: Dict[str, Any],
+    records: List[ApartmentTrade],
+    model_choice: str = "gpt"
 ) -> str:
-    """
-    [핵심 진입점] 자연어 질문 ➔ Text-to-SQL DB 조회 ➔ RAG 브리핑 생성
-    """
-    # 1. 자연어 조건 파싱
-    conditions = await parse_conditions_with_openai(prompt, current_lawd_cd)
-
-    region_name = region_label or (get_region_name(conditions.get("regional_code") or "11680") if conditions.get("regional_code") else "전국")
-
-    # 2. DB 세션이 전달된 경우 실제 Supabase DB 검색 실행
-    records: List[ApartmentTrade] = []
-    if db:
-        try:
-            records = await execute_text_to_sql_query(db, conditions)
-        except Exception as query_err:
-            print(f"⚠️ [DB Query Err]: {query_err}")
-
-    # 3. 매물이 없는 경우: 명확하고 정확한 팩트 기반 빈 결과(Empty State) 응답
-    if not records:
-        dong = conditions.get("dong_name")
-        cond_parts = []
-        if dong:
-            cond_parts.append(dong)
-        if conditions.get("property_type"):
-            cond_parts.append(conditions["property_type"])
-        if conditions.get("trade_type"):
-            cond_parts.append(conditions["trade_type"])
-        if conditions.get("max_deposit"):
-            cond_parts.append(f"보증금 {clean_format_korean_money(conditions['max_deposit'])} 이하")
-        if conditions.get("max_monthly_rent"):
-            cond_parts.append(f"월세 {clean_format_korean_money(conditions['max_monthly_rent'])} 이하")
-        if conditions.get("max_price"):
-            cond_parts.append(f"매매가 {clean_format_korean_money(conditions['max_price'])} 이하")
-        if conditions.get("apt_name"):
-            cond_parts.append(f"단지명 '{conditions['apt_name']}'")
-
-        cond_desc = ", ".join(cond_parts) if cond_parts else f"'{prompt}'"
-        return f"요청하신 조건({cond_desc})에 해당하는 최근 실거래 내역이 데이터베이스에 없습니다."
-
-    # 4. 실제 DB 매물이 있는 경우: 실제 단지명, 법정동, 금액, 층수, 전용면적 브리핑 구성
+    """실거래 목록을 기반으로 B2B 엔터프라이즈 RAG 브리핑 생성"""
     items_briefing = []
     for idx, r in enumerate(records, 1):
         if r.trade_type == "월세":
@@ -358,7 +329,6 @@ async def run_ai_consultant(
 
     listings_text = "\n".join(items_briefing)
 
-    # OpenAI 또는 규칙 기반 최종 브리핑 출력
     if OPENAI_API_KEY and model_choice.lower() in ["gpt", "openai"]:
         try:
             from openai import AsyncOpenAI
@@ -388,13 +358,152 @@ async def run_ai_consultant(
         except Exception as llm_err:
             print(f"⚠️ [OpenAI Completion Err]: {llm_err}")
 
-    # 직접 구성한 B2B 엔터프라이즈 실거래 브리핑
-    dong_title = f" {conditions['dong_name']}" if conditions.get("dong_name") else ""
+    dong_val = conditions.get("dong_name") or ""
+    dong_title = f" {dong_val}" if (dong_val and dong_val not in region_name) else ""
     return (
         f"**[{region_name}{dong_title}] 조건 부합 국토교통부 실거래 매물 분석 결과**\n\n"
         f"요청하신 조건에 부합하는 최근 실제 거래 내역 총 {len(records)}건을 데이터베이스에서 확인했습니다:\n\n"
         f"{listings_text}\n\n"
         f"※ 위 내역은 국토교통부 실거래 원장 등록 기준 실제 데이터이며, 금액 및 층수 정보가 검증되었습니다."
+    )
+
+
+async def run_ai_consultant(
+    prompt: str,
+    current_lawd_cd: Optional[str] = None,
+    region_label: Optional[str] = None,
+    model_choice: str = "gpt",
+    db: Optional[AsyncSession] = None,
+    context: Optional[Dict[str, Any]] = None,
+    selected_option: Optional[Dict[str, Any]] = None,
+    session_id: Optional[str] = None
+) -> Any:
+    """
+    [핵심 진입점] 자연어 질문 ➔ 동음이의어 되묻기(Disambiguation) ➔ Text-to-SQL DB 조회 ➔ RAG 브리핑 생성
+    """
+    session_key = session_id or current_lawd_cd or "default_session"
+    pending_ctx = context or SESSION_CONTEXT_CACHE.get(session_key)
+
+    # ---------------- 1단계: 되묻기 선택 응답 처리 (Context Retention & Disambiguation Resolution) ----------------
+    chosen_option = None
+    if selected_option:
+        chosen_option = selected_option
+    elif pending_ctx and pending_ctx.get("options"):
+        chosen_option = resolve_disambiguation_choice(prompt, pending_ctx["options"])
+
+    if chosen_option:
+        # 사용자가 특정 지역을 선택한 경우 (예: "1번", "진주시 가좌동", 또는 버튼 클릭)
+        SESSION_CONTEXT_CACHE.pop(session_key, None)
+        target_code = chosen_option.get("code")
+        resolved_label = chosen_option.get("label", region_label)
+        resolved_dong = chosen_option.get("dong")
+
+        # 이전 대화의 원본 질문 조건(보증금, 월세, 거래유형 등) 복원 및 결합
+        conditions = dict(pending_ctx.get("pending_conditions") or {}) if pending_ctx else {}
+        conditions["regional_code"] = target_code
+        if resolved_dong:
+            conditions["dong_name"] = resolved_dong
+
+        region_name = resolved_label or get_region_name(target_code)
+
+        # 확정된 지역 코드로 실제 DB 검색 실행
+        records: List[ApartmentTrade] = []
+        if db:
+            try:
+                records = await execute_text_to_sql_query(db, conditions)
+            except Exception as query_err:
+                print(f"⚠️ [DB Query Err]: {query_err}")
+
+        # 빈 결과 처리
+        if not records:
+            dong_label = conditions.get("dong_name") or resolved_label
+            return f"요청하신 조건({dong_label})에 해당하는 최근 실거래 내역이 데이터베이스에 없습니다."
+
+        return await _format_briefing_response(
+            prompt=pending_ctx.get("original_prompt", prompt) if pending_ctx else prompt,
+            region_name=region_name,
+            conditions=conditions,
+            records=records,
+            model_choice=model_choice
+        )
+
+    # ---------------- 2단계: 신규 질의 자연어 조건 파싱 ----------------
+    conditions = await parse_conditions_with_openai(prompt, current_lawd_cd)
+    dong = conditions.get("dong_name")
+
+    # ---------------- 3단계: 동음이의어 지역명 감지 (Ambiguity Detection) ----------------
+    ambiguous_candidates = check_dong_ambiguity(prompt, dong)
+    if ambiguous_candidates and len(ambiguous_candidates) >= 2:
+        # 중복 지역 발견 시 즉시 조회를 보류하고 되묻기(Clarification Prompt) 실행
+        options = [
+            {
+                "index": idx + 1,
+                "label": cand["label"],
+                "code": cand["code"],
+                "dong": cand.get("dong", dong)
+            }
+            for idx, cand in enumerate(ambiguous_candidates)
+        ]
+
+        lines = [f"말씀하신 '{dong}'이(가) 여러 지역에 있습니다. 어느 지역을 조회할까요?\n"]
+        for opt in options:
+            lines.append(f"{opt['index']}. {opt['label']}")
+        clarification_text = "\n".join(lines)
+
+        disambiguation_payload = {
+            "keyword": dong,
+            "original_prompt": prompt,
+            "pending_conditions": conditions,
+            "options": options
+        }
+
+        # 세션 캐시에 보관
+        SESSION_CONTEXT_CACHE[session_key] = disambiguation_payload
+
+        return {
+            "status": "needs_clarification",
+            "reply": clarification_text,
+            "disambiguation": disambiguation_payload
+        }
+
+    # ---------------- 4단계: 단일 명확 지역 DB 실거래 검색 실행 ----------------
+    region_name = region_label or (get_region_name(conditions.get("regional_code") or "11680") if conditions.get("regional_code") else "전국")
+
+    records: List[ApartmentTrade] = []
+    if db:
+        try:
+            records = await execute_text_to_sql_query(db, conditions)
+        except Exception as query_err:
+            print(f"⚠️ [DB Query Err]: {query_err}")
+
+    # ---------------- 5단계: 매물이 없는 경우 (Empty State) ----------------
+    if not records:
+        cond_parts = []
+        if dong:
+            cond_parts.append(dong)
+        if conditions.get("property_type"):
+            cond_parts.append(conditions["property_type"])
+        if conditions.get("trade_type"):
+            cond_parts.append(conditions["trade_type"])
+        if conditions.get("max_deposit"):
+            cond_parts.append(f"보증금 {clean_format_korean_money(conditions['max_deposit'])} 이하")
+        if conditions.get("max_monthly_rent"):
+            cond_parts.append(f"월세 {clean_format_korean_money(conditions['max_monthly_rent'])} 이하")
+        if conditions.get("max_price"):
+            cond_parts.append(f"매매가 {clean_format_korean_money(conditions['max_price'])} 이하")
+        if conditions.get("apt_name"):
+            cond_parts.append(f"단지명 '{conditions['apt_name']}'")
+
+        cond_desc = ", ".join(cond_parts) if cond_parts else f"'{prompt}'"
+        return f"요청하신 조건({cond_desc})에 해당하는 최근 실거래 내역이 데이터베이스에 없습니다."
+
+    # ---------------- 6단계: 실제 데이터 브리핑 생성 ----------------
+    return await _format_briefing_response(
+        prompt=prompt,
+        region_name=region_name,
+        conditions=conditions,
+        records=records,
+        model_choice=model_choice
     )
 
 

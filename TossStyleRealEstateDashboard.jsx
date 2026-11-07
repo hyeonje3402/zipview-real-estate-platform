@@ -987,6 +987,7 @@ export default function TossStyleRealEstateDashboard() {
   const [isAiOpen, setIsAiOpen] = useState(false);
   const [chatPrompt, setChatPrompt] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [pendingDisambiguation, setPendingDisambiguation] = useState(null);
   const [chatMessages, setChatMessages] = useState([
     {
       sender: "ai",
@@ -1952,13 +1953,15 @@ export default function TossStyleRealEstateDashboard() {
 
   const paginatedTrades = filteredTrades;
 
-  // AI 부동산 상담 질문 전송
-  const handleAiSubmit = async (e) => {
+  // AI 부동산 상담 질문 전송 (다중 턴 되묻기 & 컨텍스트 유지 지원)
+  const handleAiSubmit = async (e, directText = null, selectedOption = null) => {
     e?.preventDefault();
-    if (!chatPrompt.trim() || aiLoading) return;
+    const userText = directText ? String(directText).trim() : chatPrompt.trim();
+    if (!userText || aiLoading) return;
 
-    const userText = chatPrompt.trim();
-    setChatPrompt("");
+    if (!directText) {
+      setChatPrompt("");
+    }
 
     const newMsg = {
       sender: "user",
@@ -1969,31 +1972,45 @@ export default function TossStyleRealEstateDashboard() {
     setAiLoading(true);
 
     try {
+      const payload = {
+        lawdCd,
+        regional_code: lawdCd,
+        regionLabel: currentRegionLabel,
+        prompt: userText,
+        query: userText,
+        model_choice: "gpt",
+        session_id: "zipview-user-session",
+        context: pendingDisambiguation || undefined,
+        selected_option: selectedOption || undefined
+      };
+
       const res = await axios.post(
         `${getApiBaseUrl()}/api/chat`,
-        {
-          lawdCd,
-          regional_code: lawdCd,
-          regionLabel: currentRegionLabel,
-          prompt: userText,
-          query: userText,
-          model_choice: "gpt"
-        },
+        payload,
         { timeout: 35000 }
       );
 
+      const status = res.data?.status;
+      const disambiguation = res.data?.disambiguation;
       const rawAnswer = res.data?.reply || res.data?.answer || res.data?.message || "조건에 맞는 매물이 없습니다.";
       // '만원만원' 단위 중복 방지 정제 필터
       const cleanAnswer = String(rawAnswer)
         .replace(/만원\s*만원/g, "만원")
         .replace(/억\s*만원만원/g, "억 만원");
 
+      if (status === "needs_clarification" && disambiguation) {
+        setPendingDisambiguation(disambiguation);
+      } else {
+        setPendingDisambiguation(null);
+      }
+
       setChatMessages((prev) => [
         ...prev,
         {
           sender: "ai",
           text: cleanAnswer,
-          time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
+          time: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
+          options: disambiguation?.options || null
         }
       ]);
     } catch (err) {
@@ -3591,6 +3608,23 @@ export default function TossStyleRealEstateDashboard() {
                   >
                     {m.text}
                   </div>
+                  {/* 동음이의어 되묻기 선택지 버튼 목록 */}
+                  {m.options && m.options.length > 0 && (
+                    <div className="flex flex-col gap-1.5 mt-2 w-full max-w-[85%]">
+                      {m.options.map((opt) => (
+                        <button
+                          key={opt.index}
+                          type="button"
+                          onClick={() => handleAiSubmit(null, `${opt.index}번 ${opt.label}`, opt)}
+                          disabled={aiLoading}
+                          className="w-full text-left px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 hover:border-[#0f172a] rounded-lg text-xs font-semibold text-[#0f172a] transition-all shadow-2xs flex items-center justify-between group cursor-pointer disabled:opacity-50"
+                        >
+                          <span>{opt.index}. {opt.label}</span>
+                          <span className="text-[10px] text-slate-400 group-hover:text-[#0f172a] font-bold">선택 →</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <span className="text-[10px] text-[#8B95A1] mt-1 px-1">{m.time}</span>
                 </div>
               ))}

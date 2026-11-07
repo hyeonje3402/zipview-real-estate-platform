@@ -1685,3 +1685,127 @@ def resolve_lawd_cd(input_val: Optional[str]) -> Optional[str]:
 def get_region_name(lawd_cd: str) -> str:
     """5자리 법정동 코드로부터 표준 지역명 반환 (예: '경상남도 창원시 의창구')"""
     return LAWD_CD_TO_NAME.get(str(lawd_cd).strip(), f"지역 ({lawd_cd})")
+
+
+# ==================== 7. 전국 주요 동음이의어(중복) 법정동 레지스트리 ====================
+# 전국 2개 이상의 서로 다른 시/군/구에 존재하는 대표적인 법정동 목록
+HOMONYM_DONG_REGISTRY: Dict[str, List[Dict[str, Any]]] = {
+    "가좌동": [
+        {"index": 1, "label": "경상남도 진주시 가좌동", "code": "48170", "dong": "가좌동"},
+        {"index": 2, "label": "인천광역시 서구 가좌동", "code": "28260", "dong": "가좌동"},
+        {"index": 3, "label": "경기도 고양시 일산서구 가좌동", "code": "41287", "dong": "가좌동"}
+    ],
+    "신월동": [
+        {"index": 1, "label": "서울특별시 양천구 신월동", "code": "11470", "dong": "신월동"},
+        {"index": 2, "label": "경상남도 창원시 의창구 신월동", "code": "48121", "dong": "신월동"}
+    ],
+    "중앙동": [
+        {"index": 1, "label": "부산광역시 중구 중앙동", "code": "26110", "dong": "중앙동"},
+        {"index": 2, "label": "경상남도 창원시 성산구 중앙동", "code": "48123", "dong": "중앙동"},
+        {"index": 3, "label": "경기도 안산시 단원구 중앙동", "code": "41273", "dong": "중앙동"},
+        {"index": 4, "label": "강원특별자치도 원주시 중앙동", "code": "42130", "dong": "중앙동"}
+    ],
+    "상남동": [
+        {"index": 1, "label": "경상남도 창원시 성산구 상남동", "code": "48123", "dong": "상남동"},
+        {"index": 2, "label": "경상남도 밀양시 상남면", "code": "48270", "dong": "상남면"}
+    ],
+    "봉곡동": [
+        {"index": 1, "label": "경상남도 창원시 의창구 봉곡동", "code": "48121", "dong": "봉곡동"},
+        {"index": 2, "label": "경상남도 진주시 봉곡동", "code": "48170", "dong": "봉곡동"},
+        {"index": 3, "label": "경상북도 구미시 봉곡동", "code": "47190", "dong": "봉곡동"}
+    ],
+    "상대동": [
+        {"index": 1, "label": "경상남도 진주시 상대동", "code": "48170", "dong": "상대동"},
+        {"index": 2, "label": "대전광역시 유성구 상대동", "code": "30200", "dong": "상대동"}
+    ],
+    "하대동": [
+        {"index": 1, "label": "경상남도 진주시 하대동", "code": "48170", "dong": "하대동"}
+    ],
+    "삼성동": [
+        {"index": 1, "label": "서울특별시 강남구 삼성동", "code": "11680", "dong": "삼성동"},
+        {"index": 2, "label": "서울특별시 관악구 삼성동", "code": "11620", "dong": "삼성동"},
+        {"index": 3, "label": "대전광역시 동구 삼성동", "code": "30110", "dong": "삼성동"}
+    ],
+    "신사동": [
+        {"index": 1, "label": "서울특별시 강남구 신사동", "code": "11680", "dong": "신사동"},
+        {"index": 2, "label": "서울특별시 은평구 신사동", "code": "11380", "dong": "신사동"}
+    ],
+    "신흥동": [
+        {"index": 1, "label": "경기도 성남시 수정구 신흥동", "code": "41131", "dong": "신흥동"},
+        {"index": 2, "label": "인천광역시 중구 신흥동", "code": "28110", "dong": "신흥동"},
+        {"index": 3, "label": "대전광역시 동구 신흥동", "code": "30110", "dong": "신흥동"}
+    ],
+    "역삼동": [
+        {"index": 1, "label": "서울특별시 강남구 역삼동", "code": "11680", "dong": "역삼동"},
+        {"index": 2, "label": "경기도 용인시 처인구 역삼동", "code": "41461", "dong": "역삼동"}
+    ],
+    "중동": [
+        {"index": 1, "label": "경기도 부천시 원미구 중동", "code": "41192", "dong": "중동"},
+        {"index": 2, "label": "부산광역시 해운대구 중동", "code": "26350", "dong": "중동"},
+        {"index": 3, "label": "경상남도 창원시 의창구 중동", "code": "48121", "dong": "중동"}
+    ],
+    "내동": [
+        {"index": 1, "label": "경상남도 김해시 내동", "code": "48250", "dong": "내동"},
+        {"index": 2, "label": "대전광역시 서구 내동", "code": "30170", "dong": "내동"}
+    ],
+    "외동": [
+        {"index": 1, "label": "경상남도 김해시 외동", "code": "48250", "dong": "외동"},
+        {"index": 2, "label": "경상북도 경주시 외동읍", "code": "47130", "dong": "외동읍"}
+    ],
+    "장대동": [
+        {"index": 1, "label": "경상남도 진주시 장대동", "code": "48170", "dong": "장대동"},
+        {"index": 2, "label": "대전광역시 유성구 장대동", "code": "30200", "dong": "장대동"}
+    ]
+}
+
+
+def check_dong_ambiguity(prompt: str, dong_name: Optional[str]) -> Optional[List[Dict[str, Any]]]:
+    """
+    사용자가 질문한 법정동이 전국 2개 이상의 시/군/구에 존재하는 동음이의어인지 판별.
+    사용자의 질문에 시/도나 시/군/구 명칭(예: '진주 가좌동', '인천 가좌동')이 명시된 경우 모호하지 않으므로 None 반환.
+    """
+    if not dong_name:
+        return None
+
+    clean_dong = str(dong_name).strip()
+    candidates = HOMONYM_DONG_REGISTRY.get(clean_dong)
+    if not candidates or len(candidates) < 2:
+        return None
+
+    # 질문 텍스트에 이미 시/도나 시/군/구가 포함되어 있는지 확인
+    p_clean = prompt.replace(" ", "")
+    for cand in candidates:
+        tokens = cand["label"].split()  # 예: ['경상남도', '진주시', '가좌동']
+        sido_token = tokens[0][:2]       # 예: '경남', '인천', '경기', '서울'
+        sigungu_token = tokens[1].replace("시", "").replace("구", "").replace("군", "")
+        if (len(sido_token) >= 2 and sido_token in p_clean) or (len(sigungu_token) >= 2 and sigungu_token in p_clean):
+            return None
+
+    return candidates
+
+
+def resolve_disambiguation_choice(
+    user_choice: str,
+    options: List[Dict[str, Any]]
+) -> Optional[Dict[str, Any]]:
+    """
+    사용자의 입력('1번', '1', '진주시 가좌동', '인천' 등)을 후보 목록과 매칭하여 선택된 지역 반환
+    """
+    choice = user_choice.strip()
+
+    # 1. 번호 선택 (예: "1", "1번", "1번으로", "2")
+    num_match = re.search(r"(\d+)", choice)
+    if num_match:
+        idx = int(num_match.group(1))
+        for opt in options:
+            if opt.get("index") == idx:
+                return opt
+
+    # 2. 지역명 직접 입력 (예: "진주시 가좌동", "진주", "인천", "고양시")
+    choice_clean = choice.replace(" ", "")
+    for opt in options:
+        label_clean = opt.get("label", "").replace(" ", "")
+        if choice_clean in label_clean or any(part in choice_clean for part in opt.get("label", "").split() if len(part) >= 2):
+            return opt
+
+    return None

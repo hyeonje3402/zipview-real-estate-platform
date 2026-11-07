@@ -729,6 +729,9 @@ class ChatRequest(BaseModel):
     regional_code: Optional[str] = None
     regionLabel: Optional[str] = None
     model_choice: Optional[str] = "gpt"
+    context: Optional[Dict[str, Any]] = None            # 다중 턴 질의 컨텍스트 (Disambiguation 상태)
+    selected_option: Optional[Dict[str, Any]] = None    # 선택지 직접 선택 객체
+    session_id: Optional[str] = None                    # 사용자 세션 식별자
 
 
 @app.post("/api/chat")
@@ -737,7 +740,8 @@ async def chat_with_multi_llm(req: ChatRequest, db: AsyncSession = Depends(get_d
     """
     자연어 기반 DB 필터링(Text-to-SQL / RAG) AI 상담 엔드포인트
     - 프론트엔드 /api/chat 및 /api/ai/briefing 동시 호환
-    - 사용자 질의에서 조건 추출 후 Supabase DB 매물 실시간 검색
+    - 동음이의어 지역명 감지 시 다중 턴 되묻기(Disambiguation) 및 선택지 목록 반환
+    - 선택지 확정 시 이전 질의 조건 결합(Context Retention) 및 즉각 실거래 DB 검색
     - 부합 매물 리스팅 브리핑 또는 '조건에 맞는 매물이 없습니다' 정확한 응답
     """
     user_prompt = (req.prompt or req.query or "").strip()
@@ -747,21 +751,37 @@ async def chat_with_multi_llm(req: ChatRequest, db: AsyncSession = Depends(get_d
     current_lawd_cd = req.lawdCd or req.regional_code or "11680"
     choice = req.model_choice or "gpt"
     
-    answer = await run_ai_consultant(
+    result = await run_ai_consultant(
         prompt=user_prompt,
         current_lawd_cd=current_lawd_cd,
         region_label=req.regionLabel,
         model_choice=choice,
-        db=db
+        db=db,
+        context=req.context,
+        selected_option=req.selected_option,
+        session_id=req.session_id
     )
+
+    if isinstance(result, dict) and result.get("status") == "needs_clarification":
+        return {
+            "status": "needs_clarification",
+            "model_choice": choice,
+            "prompt": user_prompt,
+            "reply": result["reply"],
+            "answer": result["reply"],
+            "message": result["reply"],
+            "disambiguation": result.get("disambiguation")
+        }
     
+    reply_str = result["reply"] if isinstance(result, dict) else str(result)
     return {
         "status": "success",
         "model_choice": choice,
         "prompt": user_prompt,
-        "reply": answer,
-        "answer": answer,
-        "message": answer
+        "reply": reply_str,
+        "answer": reply_str,
+        "message": reply_str,
+        "disambiguation": None
     }
 
 

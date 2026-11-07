@@ -18,6 +18,7 @@ export default function GeminiChatModal({ isOpen, onClose }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [modelChoice, setModelChoice] = useState("gpt");
+  const [pendingDisambiguation, setPendingDisambiguation] = useState(null);
   const messagesEndRef = useRef(null);
 
   const promptChips = [
@@ -33,7 +34,7 @@ export default function GeminiChatModal({ isOpen, onClose }) {
 
   if (!isOpen) return null;
 
-  const sendMessage = async (userText) => {
+  const sendMessage = async (userText, selectedOption = null) => {
     const textToSend = userText || input;
     if (!textToSend.trim() || loading) return;
 
@@ -45,25 +46,42 @@ export default function GeminiChatModal({ isOpen, onClose }) {
     };
 
     setMessages((prev) => [...prev, userMsg]);
-    setInput("");
+    if (!userText) {
+      setInput("");
+    }
     setLoading(true);
 
     try {
-      const res = await axios.post("https://zipview-real-estate-platform.onrender.com/api/chat", {
+      const payload = {
         prompt: userMsg.text,
-        model_choice: modelChoice
-      });
+        query: userMsg.text,
+        model_choice: modelChoice,
+        session_id: "zipview-user-session",
+        context: pendingDisambiguation || undefined,
+        selected_option: selectedOption || undefined
+      };
 
+      const res = await axios.post("https://zipview-real-estate-platform.onrender.com/api/chat", payload);
+
+      const status = res.data?.status;
+      const disambiguation = res.data?.disambiguation;
       const rawText = res.data.reply || res.data.answer || res.data.message || "데이터를 조회할 수 없습니다.";
       const cleanText = String(rawText)
         .replace(/만원\s*만원/g, "만원")
         .replace(/억\s*만원만원/g, "억 만원");
 
+      if (status === "needs_clarification" && disambiguation) {
+        setPendingDisambiguation(disambiguation);
+      } else {
+        setPendingDisambiguation(null);
+      }
+
       const aiMsg = {
         id: Date.now() + 1,
         sender: "ai",
         text: cleanText,
-        timestamp: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })
+        timestamp: new Date().toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
+        options: disambiguation?.options || null
       };
 
       setMessages((prev) => [...prev, aiMsg]);
@@ -283,6 +301,45 @@ export default function GeminiChatModal({ isOpen, onClose }) {
                     {msg.text}
                   </div>
                 </div>
+                {/* 되묻기(Disambiguation) 선택지 UI 버튼 목록 */}
+                {msg.options && msg.options.length > 0 && (
+                  <div style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                    marginTop: "8px",
+                    marginLeft: isUser ? "0" : "34px",
+                    maxWidth: "400px",
+                    width: "100%"
+                  }}>
+                    {msg.options.map((opt) => (
+                      <button
+                        key={opt.index}
+                        onClick={() => sendMessage(`${opt.index}번 ${opt.label}`, opt)}
+                        disabled={loading}
+                        style={{
+                          textAlign: "left",
+                          padding: "8px 12px",
+                          background: "#ffffff",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "6px",
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          color: "#0f172a",
+                          cursor: loading ? "not-allowed" : "pointer",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          transition: "all 0.15s ease",
+                          boxShadow: "0 1px 2px rgba(0,0,0,0.04)"
+                        }}
+                      >
+                        <span>{opt.index}. {opt.label}</span>
+                        <span style={{ fontSize: "10px", color: "#64748b" }}>선택 →</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <span style={{
                   fontSize: "10px",
                   color: "#94a3b8",
