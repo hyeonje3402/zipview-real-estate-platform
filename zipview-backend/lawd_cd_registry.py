@@ -1589,13 +1589,21 @@ for item in LAWD_CD_MASTER_LIST:
     NORMALIZED_NAME_TO_CODE[_clean_str(full_name)] = code
     # (2) 시도 제외 시/군/구명
     NORMALIZED_NAME_TO_CODE[_clean_str(name)] = code
-    # (3) 구 단위만 있는 경우 (예: "수원시 장안구" -> "장안구", "창원시 의창구" -> "의창구")
+    # (3) 구 단위만 있는 경우 (예: "수원시 장안구" -> "장안구", "창원시 성산구" -> "성산구")
     if " " in name:
         parts = name.split(" ")
+        city_part = parts[0]
         sub_district = parts[-1]
         NORMALIZED_NAME_TO_CODE[_clean_str(sub_district)] = code
-        # 시+구 붙여쓴 형태
+        # 시+구 붙여쓴 형태 (예: "창원시성산구")
         NORMALIZED_NAME_TO_CODE[_clean_str("".join(parts))] = code
+        
+        # '시'/'구' 생략 및 변형 형태 자동 등록 (예: "창원성산", "창원성산구", "성산")
+        city_short = city_part.rstrip("시")
+        sub_short = sub_district.rstrip("구")
+        NORMALIZED_NAME_TO_CODE[_clean_str(f"{city_short}{sub_district}")] = code
+        NORMALIZED_NAME_TO_CODE[_clean_str(f"{city_short}{sub_short}")] = code
+        NORMALIZED_NAME_TO_CODE[_clean_str(sub_short)] = code
 
     # (4) 시도 약칭 조합 (예: "경남 창원시 의창구", "경남의창구", "서울강남구")
     aliases = SIDO_SHORT_ALIASES.get(sido, [])

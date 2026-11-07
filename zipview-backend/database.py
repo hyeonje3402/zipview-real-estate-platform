@@ -10,12 +10,16 @@ DB_URL = os.getenv(
     "DATABASE_URL",
     "postgresql+asyncpg://postgres:postgres@localhost:5432/postgres"
 )
-# 2. 비동기 엔진 생성
+# 2. 비동기 엔진 생성 (연결 풀 고갈 방지 및 타임아웃 방어)
 engine = create_async_engine(
     DB_URL,
     echo=False,
     future=True,
-    pool_pre_ping=True
+    pool_pre_ping=True,
+    pool_size=15,
+    max_overflow=20,
+    pool_timeout=30,
+    pool_recycle=1800
 )
 
 # 3. 비동기 세션 팩토리 생성

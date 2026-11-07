@@ -192,7 +192,7 @@ async def execute_sync_for_region_chunked(
 
     try:
         # aiohttp 고성능 연결 풀 생성 (Keep-Alive 활성화)
-        connector = aiohttp.TCPConnector(limit=50, ttl_dns_roundrobin=300)
+        connector = aiohttp.TCPConnector(limit=30, ttl_dns_cache=300)
         async with aiohttp.ClientSession(connector=connector) as session:
             for idx, chunk in enumerate(chunks):
                 chunk_label = f"{chunk[0]}~{chunk[-1]}" if len(chunk) > 1 else chunk[0]
@@ -361,10 +361,12 @@ async def get_trades(
             detail=f"[Mapping Error] 요청된 지역명: \"{raw_input}\"을(를) 찾을 수 없습니다."
         )
 
-    calc_offset = offset if offset is not None else (page - 1) * limit
+    real_page = int(page) if (isinstance(page, (int, str)) and str(page).isdigit()) else 1
+    real_limit = int(limit) if (isinstance(limit, (int, str)) and str(limit).isdigit()) else 20
+    calc_offset = int(offset) if (isinstance(offset, (int, str)) and str(offset).isdigit()) else (real_page - 1) * real_limit
 
     # ---------------- 1단계: 인메모리 고속 캐시 확인 ----------------
-    cache_key = f"{target_code}:{property_type or 'all'}:{trade_type or 'all'}:{apt_name or 'all'}:{page}:{limit}:{calc_offset}"
+    cache_key = f"{target_code}:{property_type or 'all'}:{trade_type or 'all'}:{apt_name or 'all'}:{real_page}:{real_limit}:{calc_offset}"
     now_ts = datetime.now().timestamp()
 
     if cache_key in IN_MEMORY_CACHE:
@@ -386,26 +388,28 @@ async def get_trades(
     missing_months = [ym for ym in all_36_months if ym not in existing_ym_set]
     missing_months.sort(reverse=True)  # 최신 데이터 우선 동기화
 
-    # 빈 구간(누락된 월)만 선별하여 병렬 청크로 국토부 API 호출 (최신 3개월 즉시 처리, 나머지 백그라운드)
+    # 빈 구간(누락된 월)만 선별하여 병렬 청크로 국토부 API 호출
+    # 최초 동기화 시 3~4초 내 무조건 응답할 수 있도록 최신 1개월을 즉시 동기화하고, 나머지 35개월은 백그라운드 태스크로 자동 적재
     if missing_months and auto_sync:
         try:
             print(f"⚡ [스마트 캐싱] 지역({target_code}) 36개월 중 {len(existing_ym_set)}개월 DB 보유 ➜ 누락된 {len(missing_months)}개월 수집 시작")
-            if len(missing_months) > 3:
-                first_batch = missing_months[:3]
-                remaining_batch = missing_months[3:]
-                await execute_sync_for_region_chunked(target_code, first_batch, chunk_size=3)
+            first_batch_size = 1 if len(existing_ym_set) == 0 else 2
+            if len(missing_months) > first_batch_size:
+                first_batch = missing_months[:first_batch_size]
+                remaining_batch = missing_months[first_batch_size:]
+                await execute_sync_for_region_chunked(target_code, first_batch, chunk_size=first_batch_size)
                 if background_tasks:
-                    background_tasks.add_task(execute_sync_for_region_chunked, target_code, remaining_batch, 6)
+                    background_tasks.add_task(execute_sync_for_region_chunked, target_code, remaining_batch, 3)
             else:
-                await execute_sync_for_region_chunked(target_code, missing_months, chunk_size=3)
+                await execute_sync_for_region_chunked(target_code, missing_months, chunk_size=len(missing_months))
         except Exception as sync_err:
             print(f"⚠️ [자동 동기화 경고]: {sync_err}")
 
     # ---------------- 3단계: 기본 검색 필터 구성 (원룸/투룸/빌라 포괄 확장) ----------------
     base_filter = [ApartmentTrade.regional_code == target_code]
 
-    if property_type and property_type.strip() and property_type != "all":
-        p_clean = property_type.strip()
+    p_clean = property_type.strip() if (isinstance(property_type, str) and property_type.strip() and property_type != "all") else ""
+    if p_clean:
         if any(k in p_clean for k in ("연립", "다세대", "빌라", "투룸")):
             base_filter.append(ApartmentTrade.property_type.in_(["연립다세대", "연립", "다세대", "빌라"]))
         elif any(k in p_clean for k in ("단독", "다가구", "원룸")):
@@ -417,8 +421,9 @@ async def get_trades(
         else:
             base_filter.append(ApartmentTrade.property_type == p_clean)
 
-    if apt_name and apt_name.strip():
-        search_term = f"%{apt_name.strip()}%"
+    a_name = apt_name.strip() if isinstance(apt_name, str) else ""
+    if a_name:
+        search_term = f"%{a_name}%"
         # 단지명뿐만 아니라 법정동 및 지번 주소까지 통합 검색 지원
         base_filter.append(
             or_(
@@ -443,7 +448,7 @@ async def get_trades(
             detail="국토부 서버 응답 지연 또는 해당 지역 데이터를 불러오지 못했습니다."
         )
 
-    total_pages = math.ceil(total_count / limit) if total_count > 0 else 1
+    total_pages = math.ceil(total_count / real_limit) if total_count > 0 else 1
 
     # ---------------- 5단계: 최신 매매/전세 최고가 단일 조회 ----------------
     latest_trade_stmt = (
@@ -626,7 +631,7 @@ async def get_trades(
             desc(ApartmentTrade.id)
         )
         .offset(calc_offset)
-        .limit(limit)
+        .limit(real_limit)
     )
     query_res = await db.execute(stmt)
     trades_records = query_res.scalars().all()

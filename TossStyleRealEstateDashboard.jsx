@@ -1161,8 +1161,20 @@ export default function TossStyleRealEstateDashboard() {
         }
 
         console.warn(`[ZipView] 백엔드(${getApiBaseUrl()}) 연결/데이터 확인:`, err.message);
-        // 즉시 에러 상태 활성화하여 0건짜리 빈 대시보드 렌더링 차단
+        // 즉시 에러 상태 활성화하여 0건짜리 빈 대시보드 및 이전 데이터 잔존 차단
         setFetchError("공공데이터 응답이 지연되었습니다. 잠시 후 다시 시도해주세요.");
+        setRawTrades([]);
+        setChartData([]);
+        setTotalCount(0);
+        setTotalPages(1);
+        setAllBuildings([]);
+        setComplexSummaryMap({});
+        setSummaryInfo({
+          totalCount: 0,
+          latestTradePrice: "-",
+          latestJeonsePrice: "-",
+          lastSyncedAt: "-"
+        });
         showToast(`[${currentRegionLabel}] 공공데이터 서버 응답이 지연되었습니다. [다시 시도]를 눌러주세요.`);
       } finally {
         if (!signal?.aborted) {
@@ -1691,6 +1703,13 @@ export default function TossStyleRealEstateDashboard() {
       setChartData([]);
       setTotalCount(0);
       setAllBuildings([]);
+      setComplexSummaryMap({});
+      setSummaryInfo({
+        totalCount: 0,
+        latestTradePrice: "-",
+        latestJeonsePrice: "-",
+        lastSyncedAt: "-"
+      });
       setTablePage(1);
       if (REGION_CENTERS[newCode]) {
         setRegionCoords(REGION_CENTERS[newCode]);
@@ -1711,6 +1730,13 @@ export default function TossStyleRealEstateDashboard() {
     setChartData([]);
     setTotalCount(0);
     setAllBuildings([]);
+    setComplexSummaryMap({});
+    setSummaryInfo({
+      totalCount: 0,
+      latestTradePrice: "-",
+      latestJeonsePrice: "-",
+      lastSyncedAt: "-"
+    });
     setTablePage(1);
     if (REGION_CENTERS[newCode]) {
       setRegionCoords(REGION_CENTERS[newCode]);
@@ -2114,34 +2140,6 @@ export default function TossStyleRealEstateDashboard() {
       {/* 2. 대시보드 메인 본문                                                     */}
       {/* ========================================================================= */}
       <main className="w-full max-w-6xl mx-auto px-3.5 sm:px-6 pt-4 sm:pt-6 space-y-4 sm:space-y-6 box-border min-w-0">
-        {fetchError ? (
-          <div className="w-full bg-white rounded-2xl border border-red-200 p-8 sm:p-16 shadow-xs text-center flex flex-col items-center justify-center space-y-4 my-8">
-            <div className="w-16 h-16 rounded-full bg-red-50 border border-red-200 text-red-600 flex items-center justify-center mb-2">
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div className="space-y-2 max-w-lg">
-              <h2 className="text-xl sm:text-2xl font-black text-[#0F172A] tracking-tight">
-                공공데이터 응답이 지연되었습니다
-              </h2>
-              <p className="text-xs sm:text-sm text-[#64748B] leading-relaxed">
-                국토부 공공데이터 서버 응답이 지연되어 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                setFetchError(null);
-                fetchData(lawdCd, 1);
-              }}
-              className="mt-4 px-6 py-3 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs active:scale-95 flex items-center gap-2 cursor-pointer"
-            >
-              <span>다시 시도</span>
-            </button>
-          </div>
-        ) : (
-          <>
         {/* ========================================================================= */}
         {/* [스마트 자동완성 검색] 단지명/건물명 실시간 통합 검색 바                  */}
         {/* ========================================================================= */}
@@ -2212,7 +2210,7 @@ export default function TossStyleRealEstateDashboard() {
             {isLoading ? (
               <div className="h-8 bg-[#E5E8EB] rounded-lg w-24 animate-pulse mt-1"></div>
             ) : fetchError ? (
-              <p className="text-xl font-bold text-red-500 mt-1">응답 지연</p>
+              <p className="text-2xl font-black text-slate-400 mt-1">-</p>
             ) : (
               <p className="text-2xl font-black text-[#191F28] mt-1 tracking-tight">
                 {totalCount.toLocaleString()}
@@ -2220,7 +2218,7 @@ export default function TossStyleRealEstateDashboard() {
               </p>
             )}
             <p className="text-[11px] text-[#64748B] font-medium mt-1">
-              {fetchError ? "공공데이터 통신 지연 발생" : "36개월 전수 수집 데이터 검증 완료"}
+              {fetchError ? "공공데이터 통신 지연" : "36개월 전수 수집 데이터 검증 완료"}
             </p>
           </div>
 
@@ -2228,13 +2226,15 @@ export default function TossStyleRealEstateDashboard() {
             <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">최신 매매 최고 거래가</span>
             {isLoading ? (
               <div className="h-8 bg-[#E5E8EB] rounded-lg w-28 animate-pulse mt-1"></div>
+            ) : fetchError ? (
+              <p className="text-2xl font-black text-slate-400 mt-1">-</p>
             ) : (
               <p className="text-2xl font-black text-[#F04452] mt-1 tracking-tight">
-                {summaryInfo.latestTradePrice}
+                {summaryInfo.latestTradePrice || "-"}
               </p>
             )}
             <p className="text-[11px] text-[#8B95A1] font-medium mt-1">
-              {currentRegionLabel} 기준
+              {fetchError ? "데이터 수신 대기" : `${currentRegionLabel} 기준`}
             </p>
           </div>
 
@@ -2242,13 +2242,15 @@ export default function TossStyleRealEstateDashboard() {
             <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">최신 전세 최고 보증금</span>
             {isLoading ? (
               <div className="h-8 bg-[#E5E8EB] rounded-lg w-28 animate-pulse mt-1"></div>
+            ) : fetchError ? (
+              <p className="text-2xl font-black text-slate-400 mt-1">-</p>
             ) : (
               <p className="text-2xl font-black text-[#1e3a8a] mt-1 tracking-tight">
-                {summaryInfo.latestJeonsePrice}
+                {summaryInfo.latestJeonsePrice || "-"}
               </p>
             )}
             <p className="text-[11px] text-[#8B95A1] font-medium mt-1">
-              순수 전세 계약 기준
+              {fetchError ? "데이터 수신 대기" : "순수 전세 계약 기준"}
             </p>
           </div>
 
@@ -2258,6 +2260,8 @@ export default function TossStyleRealEstateDashboard() {
             </span>
             {isLoading ? (
               <div className="h-8 bg-[#E5E8EB] rounded-lg w-20 animate-pulse mt-1"></div>
+            ) : fetchError ? (
+              <p className="text-2xl font-black text-slate-400 mt-1">-</p>
             ) : (
               <p className="text-2xl font-black text-[#191F28] mt-1 tracking-tight">
                 {viewMode === "listing" ? filteredMockListings.length : availableComplexNames.length}
@@ -2266,11 +2270,41 @@ export default function TossStyleRealEstateDashboard() {
                 </span>
               </p>
             )}
-            <p className="text-[11px] text-[#00A455] font-semibold mt-1">
-              {viewMode === "listing" ? "현장 검증 B2B 네트워크" : "1:1 막대그래프 대조 가능"}
+            <p className="text-[11px] text-[#64748B] font-semibold mt-1">
+              {fetchError ? "데이터 수신 대기" : (viewMode === "listing" ? "현장 검증 B2B 네트워크" : "1:1 막대그래프 대조 가능")}
             </p>
           </div>
         </section>
+
+        {/* 에러 발생 시 차트 및 원장 영역 차단 및 재시도 UI 독립 렌더링 */}
+        {fetchError ? (
+          <div className="w-full bg-white rounded-2xl border border-red-200 p-8 sm:p-16 shadow-xs text-center flex flex-col items-center justify-center space-y-4 my-8">
+            <div className="w-16 h-16 rounded-full bg-red-50 border border-red-200 text-red-600 flex items-center justify-center mb-2">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="space-y-2 max-w-lg">
+              <h2 className="text-xl sm:text-2xl font-black text-[#0F172A] tracking-tight">
+                공공데이터 응답이 지연되었습니다
+              </h2>
+              <p className="text-xs sm:text-sm text-[#64748B] leading-relaxed">
+                국토부 공공데이터 서버 응답이 지연되어 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setFetchError(null);
+                fetchData(lawdCd, 1);
+              }}
+              className="mt-4 px-6 py-3 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs active:scale-95 flex items-center gap-2 cursor-pointer"
+            >
+              <span>다시 시도</span>
+            </button>
+          </div>
+        ) : (
+          <>
 
         {/* ========================================================================= */}
         {/* [실거래가 모드] 주식형 ComposedChart & 1:1 비교 매트릭스 (과거 분석용)      */}
