@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any, Set
 from collections import defaultdict
 import math
+from cachetools import TTLCache
 
 # Windows 콘솔 cp949 인코딩 에러 방지
 if hasattr(sys.stdout, "reconfigure"):
@@ -100,9 +101,10 @@ def get_last_36_months(base_y: int = 2024, base_m: int = 10) -> List[str]:
     return target_ymds
 
 
-# ==================== 1. 인메모리 캐시 및 동기화 상태 관리 ====================
-IN_MEMORY_CACHE: Dict[str, tuple[dict, float]] = {}
-CACHE_TTL_SECONDS = 300  # 5분간 인메모리 즉시 반환 (0.01초)
+# ==================== 1. [초고속 1시간 TTL] 인메모리 엔터프라이즈 캐시 및 동기화 상태 관리 ====================
+# 동일한 LAWD_CD 및 검색 조건 요청은 1시간(3600초) 동안 DB 및 외부 API 호출 없이 0.01초 내 즉시 반환 (Render 서버 부하 차단)
+TRADES_CACHE: TTLCache = TTLCache(maxsize=4096, ttl=3600)
+REGION_STATS_CACHE: TTLCache = TTLCache(maxsize=1024, ttl=3600)
 
 SYNC_STATUS = {
     "last_synced_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -221,11 +223,12 @@ async def execute_sync_for_region_chunked(
             total_db_count = cnt_res.scalar() or 0
 
         # 해당 지역 인메모리 캐시 무효화하여 최신 데이터가 반영되도록 처리
-        keys_to_clear = [k for k in IN_MEMORY_CACHE if k.startswith(f"{regional_code}:")]
+        keys_to_clear = [k for k in list(TRADES_CACHE.keys()) if k.startswith(f"{regional_code}:")]
         for k in keys_to_clear:
-            IN_MEMORY_CACHE.pop(k, None)
+            TRADES_CACHE.pop(k, None)
+        REGION_STATS_CACHE.pop(regional_code, None)
 
-        print(f"🎉 [병렬 청크 완료] 지역({regional_code}) +{total_added}건 신규 적재 완료!")
+        print(f"🎉 [병렬 청크 완료] 지역({regional_code}) +{total_added}건 신규 적재 완료! (캐시 무효화 완료)")
         return {
             "status": "success",
             "regional_code": regional_code,
@@ -256,9 +259,10 @@ async def execute_sync_for_region(regional_code: str, deal_ymd: Optional[str] = 
 def read_root():
     return {
         "status": "online",
-        "service": "ZipView Real Estate Fast API (2-Tier Caching & Async Gather)",
+        "service": "ZipView Real Estate Fast API (TTLCache 3600s & Async Gather)",
         "docs": "/docs",
-        "cache_entries": len(IN_MEMORY_CACHE),
+        "cache_entries": len(TRADES_CACHE),
+        "region_stats_cached": len(REGION_STATS_CACHE),
         "sync_status": SYNC_STATUS
     }
 
@@ -292,7 +296,9 @@ async def get_sync_status(db: AsyncSession = Depends(get_db)):
         "status": "online",
         "realtime_sync_active": True,
         "sync_info": SYNC_STATUS,
-        "in_memory_cached_regions": len(IN_MEMORY_CACHE),
+        "cached_queries_count": len(TRADES_CACHE),
+        "cached_regions_stats_count": len(REGION_STATS_CACHE),
+        "cache_ttl_seconds": 3600,
         "database_stats": {
             "total_records": total_count
         }
@@ -365,14 +371,11 @@ async def get_trades(
     real_limit = int(limit) if (isinstance(limit, (int, str)) and str(limit).isdigit()) else 20
     calc_offset = int(offset) if (isinstance(offset, (int, str)) and str(offset).isdigit()) else (real_page - 1) * real_limit
 
-    # ---------------- 1단계: 인메모리 고속 캐시 확인 ----------------
+    # ---------------- 1단계: 1시간(3600s) 인메모리 고속 캐시 확인 (0.01초 즉시 반환) ----------------
     cache_key = f"{target_code}:{property_type or 'all'}:{trade_type or 'all'}:{apt_name or 'all'}:{real_page}:{real_limit}:{calc_offset}"
-    now_ts = datetime.now().timestamp()
 
-    if cache_key in IN_MEMORY_CACHE:
-        cached_data, cached_at = IN_MEMORY_CACHE[cache_key]
-        if now_ts - cached_at < CACHE_TTL_SECONDS:
-            return cached_data
+    if cache_key in TRADES_CACHE:
+        return TRADES_CACHE[cache_key]
 
     # ---------------- 2단계: Supabase DB의 '빈 구간(누락 월)' 정밀 분석 ----------------
     existing_yms_res = await db.execute(
@@ -716,8 +719,8 @@ async def get_trades(
         "last_synced_at": SYNC_STATUS["last_synced_at"]
     }
 
-    # 1단계 인메모리 캐시 저장
-    IN_MEMORY_CACHE[cache_key] = (response_payload, now_ts)
+    # 1단계 인메모리 캐시 저장 (1시간 TTL)
+    TRADES_CACHE[cache_key] = response_payload
 
     return response_payload
 
@@ -729,6 +732,7 @@ class ChatRequest(BaseModel):
     regional_code: Optional[str] = None
     regionLabel: Optional[str] = None
     model_choice: Optional[str] = "gpt"
+    history: Optional[List[Dict[str, Any]]] = None      # 클라이언트 대화 히스토리 (Multi-turn Memory)
     context: Optional[Dict[str, Any]] = None            # 다중 턴 질의 컨텍스트 (Disambiguation 상태)
     selected_option: Optional[Dict[str, Any]] = None    # 선택지 직접 선택 객체
     session_id: Optional[str] = None                    # 사용자 세션 식별자
@@ -764,7 +768,8 @@ async def chat_with_multi_llm(req: ChatRequest, db: AsyncSession = Depends(get_d
         db=db,
         context=req.context,
         selected_option=req.selected_option,
-        session_id=req.session_id
+        session_id=req.session_id,
+        history=req.history
     )
 
     if isinstance(result, dict) and result.get("status") == "needs_clarification":

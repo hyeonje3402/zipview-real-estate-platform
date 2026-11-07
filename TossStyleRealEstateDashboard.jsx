@@ -997,6 +997,7 @@ export default function TossStyleRealEstateDashboard() {
   ]);
   const chatBottomRef = useRef(null);
   const abortControllerRef = useRef(null);
+  const chatSessionIdRef = useRef(`zipview-user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
 
   // 토스트 메시지
   const [toastMessage, setToastMessage] = useState("");
@@ -1981,7 +1982,11 @@ export default function TossStyleRealEstateDashboard() {
         prompt: userText,
         query: userText,
         model_choice: "gpt",
-        session_id: `zipview-session-${lawdCd || "default"}`,
+        session_id: chatSessionIdRef.current,
+        history: chatMessages.slice(-6).map((m) => ({
+          role: m.sender === "user" ? "user" : "assistant",
+          content: m.text
+        })),
         context: pendingDisambiguation || undefined,
         selected_option: selectedOption || undefined
       };

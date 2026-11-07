@@ -22,6 +22,7 @@ export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegion
   const [modelChoice, setModelChoice] = useState("gpt");
   const [pendingDisambiguation, setPendingDisambiguation] = useState(null);
   const messagesEndRef = useRef(null);
+  const chatSessionIdRef = useRef(`zipview-user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
 
   const promptChips = [
     `${activeRegion} 최근 전세 실거래 추이`,
@@ -61,7 +62,11 @@ export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegion
         prompt: userMsg.text,
         query: userMsg.text,
         model_choice: modelChoice,
-        session_id: `zipview-session-${lawdCd || "default"}`,
+        session_id: chatSessionIdRef.current,
+        history: messages.slice(-6).map((m) => ({
+          role: m.sender === "user" ? "user" : "assistant",
+          content: m.text
+        })),
         context: pendingDisambiguation || undefined,
         selected_option: selectedOption || undefined
       };

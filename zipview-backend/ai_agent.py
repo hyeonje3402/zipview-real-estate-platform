@@ -12,6 +12,7 @@ import re
 import json
 from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
+from cachetools import TTLCache
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, desc
 
@@ -30,8 +31,8 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-# 다중 턴 세션 컨텍스트 캐시 (되묻기, 이전 질의 조건 및 활성 타겟 지역 유지)
-SESSION_CONTEXT_CACHE: Dict[str, Dict[str, Any]] = {}
+# 다중 턴 세션 컨텍스트 캐시 (1시간 TTL, 최대 2048개 동시 세션 메모리 보존)
+SESSION_CONTEXT_CACHE: TTLCache = TTLCache(maxsize=2048, ttl=3600)
 
 
 def clean_format_korean_money(amount_manwon: Optional[int]) -> str:
@@ -77,7 +78,11 @@ def parse_korean_number_to_manwon(text: str) -> int:
     return 0
 
 
-def extract_conditions_nlp(prompt: str, current_lawd_cd: Optional[str] = None) -> Dict[str, Any]:
+def extract_conditions_nlp(
+    prompt: str,
+    current_lawd_cd: Optional[str] = None,
+    session_context: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """자연어 질의에서 법정동, 지역, 거래유형, 건물유형, 가격 조건을 정규표현식 및 엔티티 매핑으로 정밀 추출"""
     p = prompt.strip()
     p_lower = p.lower()
@@ -165,6 +170,21 @@ def extract_conditions_nlp(prompt: str, current_lawd_cd: Optional[str] = None) -
         if candidate not in stop_words and len(candidate) >= 2:
             apt_name = candidate
 
+    # 7. [맥락 복원] 직전 세션 컨텍스트 복원 ('그 단지', '아까 거기', '그 아파트' 등)
+    if session_context:
+        has_followup_apt = any(kw in p_lower for kw in ["그 단지", "그단지", "그 아파트", "그아파트", "아까 그", "해당 단지", "해당단지", "그곳"])
+        if has_followup_apt and not apt_name and session_context.get("last_apt_name"):
+            apt_name = session_context["last_apt_name"]
+
+        has_followup_dong = any(kw in p_lower for kw in ["거기", "그곳", "이곳", "그지역", "아까", "방금"])
+        if has_followup_dong and not dong_name and session_context.get("last_dong_name"):
+            dong_name = session_context["last_dong_name"]
+
+        if not target_lawd_cd and session_context.get("last_active_region"):
+            last_reg = session_context["last_active_region"]
+            if isinstance(last_reg, dict) and last_reg.get("code"):
+                target_lawd_cd = last_reg["code"]
+
     return {
         "dong_name": dong_name,
         "region_name": extracted_region,
@@ -178,9 +198,13 @@ def extract_conditions_nlp(prompt: str, current_lawd_cd: Optional[str] = None) -
     }
 
 
-async def parse_conditions_with_openai(prompt: str, current_lawd_cd: Optional[str] = None) -> Dict[str, Any]:
+async def parse_conditions_with_openai(
+    prompt: str,
+    current_lawd_cd: Optional[str] = None,
+    session_context: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     """OpenAI API를 통한 지능형 엔티티 추출(JSON) 및 NLP 규칙 파서 이중 교차 검증"""
-    nlp_cond = extract_conditions_nlp(prompt, current_lawd_cd)
+    nlp_cond = extract_conditions_nlp(prompt, current_lawd_cd, session_context=session_context)
 
     if not OPENAI_API_KEY:
         return nlp_cond
@@ -189,8 +213,24 @@ async def parse_conditions_with_openai(prompt: str, current_lawd_cd: Optional[st
         from openai import AsyncOpenAI
         client = AsyncOpenAI(api_key=OPENAI_API_KEY)
 
+        context_hint = ""
+        if session_context:
+            last_apt = session_context.get("last_apt_name")
+            last_dong = session_context.get("last_dong_name")
+            last_reg = session_context.get("last_active_region") or {}
+            reg_lbl = last_reg.get("label") if isinstance(last_reg, dict) else str(last_reg or "")
+            if last_apt or last_dong or reg_lbl:
+                context_hint = (
+                    f"\n[직전 대화 맥락 정보]:\n"
+                    f"- 직전 언급 단지명: {last_apt or '없음'}\n"
+                    f"- 직전 법정동: {last_dong or '없음'}\n"
+                    f"- 직전 지역: {reg_lbl or '없음'}\n"
+                    f"사용자가 '그 단지', '아까 거기', '그 아파트', '전세는 얼마야?' 등 맥락 기반 후속 질문을 할 경우 위 직전 정보(단지명/법정동/지역)를 조건으로 자동 바인딩해.\n"
+                )
+
         system_msg = (
             "너는 대한민국 부동산 질의 엔티티 추출(Named Entity Recognition) 전문가야. 사용자의 자연어 질문에서 검색 조건을 분석하여 반드시 유효한 JSON 형식으로만 추출해.\n"
+            f"{context_hint}"
             "- dong_name: 읍/면/동/리 단위의 세부 법정동 명칭 (예: '가좌동에 있어?' -> '가좌동', '대치동', '상남동', '문산읍'). 언급되지 않았으면 null.\n"
             "- trade_type: 거래 유형 ('매매', '전세', '월세') 또는 null\n"
             "- property_type: 주택 유형 ('아파트', '오피스텔', '연립다세대', '단독다가구'). '빌라'나 '투룸'은 '연립다세대', '원룸'은 '단독다가구'로 매핑. 없으면 null.\n"
@@ -312,9 +352,10 @@ async def _format_briefing_response(
     conditions: Dict[str, Any],
     records: List[ApartmentTrade],
     model_choice: str = "gpt",
-    is_new_region_override: bool = False
+    is_new_region_override: bool = False,
+    history: Optional[List[Dict[str, Any]]] = None
 ) -> str:
-    """실거래 목록을 기반으로 B2B 엔터프라이즈 RAG 브리핑 생성"""
+    """실거래 목록을 기반으로 B2B 엔터프라이즈 RAG 브리핑 생성 (직전 대화 맥락 주입)"""
     items_briefing = []
     for idx, r in enumerate(records, 1):
         if r.trade_type == "월세":
@@ -344,9 +385,10 @@ async def _format_briefing_response(
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=OPENAI_API_KEY)
             target_dong_str = f"법정동: {conditions.get('dong_name')}" if conditions.get('dong_name') else "전체 동"
+            target_apt_str = f", 단지명={conditions.get('apt_name')}" if conditions.get('apt_name') else ""
             rag_prompt = (
                 f"사용자의 질문: '{prompt}'\n\n"
-                f"분석 지역: [{full_target_name}], 조건: {target_dong_str}, 거래유형={conditions.get('trade_type') or '전체'}\n\n"
+                f"분석 지역: [{full_target_name}], 조건: {target_dong_str}{target_apt_str}, 거래유형={conditions.get('trade_type') or '전체'}\n\n"
                 f"국토교통부 실거래 DB 엄격 일치 조회 결과 (총 {len(records)}건):\n"
                 f"{listings_text}\n\n"
                 f"위 실제 데이터만을 근거로 사용자에게 신뢰감 있는 프로페셔널한 B2B 어조로 요약 브리핑해줘.\n"
@@ -355,12 +397,22 @@ async def _format_briefing_response(
                 f"2. 위 조회 결과에 포함된 매물만 언급하고, 다른 동네나 허위 단지명을 절대 추가하지 마.\n"
                 f"3. 금액 표기 시 '만원' 단위가 중복되지 않도록 '보증금 1,000만원 / 월 70만원' 형태로 정갈하게 표기해."
             )
+
+            chat_messages = [
+                {"role": "system", "content": "너는 대한민국 실거래 공공데이터 기반 엔터프라이즈 부동산 AI 컨설턴트 집뷰(ZipView)야. 질문에 주어진 실제 데이터만을 바탕으로 정직하고 명확하게 답변해. 직전 대화 맥락이 주어지면 자연스럽게 연결해서 답변해."}
+            ]
+            if history:
+                # 최근 4개 턴만 맥락으로 전달하여 토큰 절약 및 집중도 유지
+                for h in history[-4:]:
+                    r = h.get("role") or ("user" if h.get("sender") == "user" else "assistant")
+                    c = h.get("content") or h.get("text") or ""
+                    if c:
+                        chat_messages.append({"role": r, "content": c})
+            chat_messages.append({"role": "user", "content": rag_prompt})
+
             resp = await client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[
-                    {"role": "system", "content": "너는 대한민국 실거래 공공데이터 기반 엔터프라이즈 부동산 AI 컨설턴트 집뷰(ZipView)야. 질문에 주어진 데이터만을 바탕으로 정직하고 명확하게 답변해."},
-                    {"role": "user", "content": rag_prompt}
-                ],
+                messages=chat_messages,
                 temperature=0.2,
                 timeout=12.0
             )
@@ -388,13 +440,29 @@ async def run_ai_consultant(
     db: Optional[AsyncSession] = None,
     context: Optional[Dict[str, Any]] = None,
     selected_option: Optional[Dict[str, Any]] = None,
-    session_id: Optional[str] = None
+    session_id: Optional[str] = None,
+    history: Optional[List[Dict[str, Any]]] = None
 ) -> Any:
     """
     [핵심 진입점] 자연어 질문 ➔ 전국 중복 지명 범용 되묻기(Disambiguation) ➔ 자율 국토부 데이터 주입 ➔ Text-to-SQL DB 조회 ➔ RAG 브리핑
+    - Multi-turn 대화 세션 메모리(단지명, 법정동, 지역명 등) 자동 보존 및 복원
     """
     session_key = session_id or current_lawd_cd or "default_session"
-    session_data = SESSION_CONTEXT_CACHE.setdefault(session_key, {})
+    if session_key not in SESSION_CONTEXT_CACHE:
+        SESSION_CONTEXT_CACHE[session_key] = {
+            "history": [],
+            "last_active_region": None,
+            "last_apt_name": None,
+            "last_dong_name": None,
+            "last_conditions": None,
+            "pending_disambiguation": None
+        }
+    session_data = SESSION_CONTEXT_CACHE[session_key]
+
+    # 클라이언트에서 넘긴 대화 히스토리 병합
+    if history and isinstance(history, list):
+        session_data["history"] = history[-10:]
+
     pending_ctx = context or session_data.get("pending_disambiguation")
 
     # ---------------- 1단계: 되묻기 선택 응답 처리 (Context Retention & Disambiguation Resolution) ----------------
@@ -479,8 +547,23 @@ async def run_ai_consultant(
             conditions=conditions,
             records=records,
             model_choice=model_choice,
-            is_new_region_override=True
+            is_new_region_override=True,
+            history=session_data.get("history")
         )
+
+        # 세션 메모리 갱신
+        if records:
+            first_apt = records[0].apt_name
+            if first_apt and first_apt not in ("연립다세대", "단독주택", "다가구주택", "원룸"):
+                session_data["last_apt_name"] = first_apt
+            if records[0].dong:
+                session_data["last_dong_name"] = records[0].dong
+        elif conditions.get("apt_name"):
+            session_data["last_apt_name"] = conditions["apt_name"]
+
+        session_data["last_conditions"] = conditions
+        session_data.setdefault("history", []).append({"role": "user", "content": prompt})
+        session_data.setdefault("history", []).append({"role": "assistant", "content": briefing_text})
 
         return {
             "status": "success",
@@ -491,19 +574,29 @@ async def run_ai_consultant(
         }
 
     # ---------------- 2단계: 신규 질의 자연어 조건 파싱 & 대명사/이전 맥락 복원 ----------------
-    conditions = await parse_conditions_with_openai(prompt, current_lawd_cd)
+    conditions = await parse_conditions_with_openai(prompt, current_lawd_cd, session_context=session_data)
     dong = conditions.get("dong_name")
     extracted_reg = conditions.get("region_name")
 
-    # '거기', '그곳', '이곳' 등 이전 지역 대명사 질의인 경우 세션 메모리에서 복원
+    # '그 단지', '아까 그 아파트', '거기', '그곳', '이곳' 등 이전 맥락/대명사 질의인 경우 세션 메모리에서 복원
     p_lower = prompt.lower()
-    is_followup = any(kw in p_lower for kw in ["거기", "그곳", "이곳", "그지역", "해당지역", "해당 지역", "그 지역"])
+    is_followup = any(kw in p_lower for kw in [
+        "거기", "그곳", "이곳", "그지역", "해당지역", "해당 지역", "그 지역",
+        "그 단지", "그단지", "그 아파트", "그아파트", "그 매물", "아까", "방금", "얼마야", "얼마인가요", "시세는"
+    ])
     last_active = session_data.get("last_active_region")
-    if is_followup and last_active:
-        conditions["regional_code"] = last_active["code"]
-        if not dong and last_active.get("dong"):
-            conditions["dong_name"] = last_active["dong"]
-            dong = last_active["dong"]
+    if is_followup:
+        if last_active:
+            if not conditions.get("regional_code"):
+                conditions["regional_code"] = last_active.get("code")
+            if not dong and last_active.get("dong"):
+                conditions["dong_name"] = last_active["dong"]
+                dong = last_active["dong"]
+        if not conditions.get("apt_name") and session_data.get("last_apt_name"):
+            conditions["apt_name"] = session_data["last_apt_name"]
+        if not dong and session_data.get("last_dong_name"):
+            conditions["dong_name"] = session_data["last_dong_name"]
+            dong = session_data["last_dong_name"]
 
     # ---------------- 3단계: 범용 중복 지명 탐지 (Global Ambiguity Detection) ----------------
     if not is_followup:
@@ -611,8 +704,23 @@ async def run_ai_consultant(
         conditions=conditions,
         records=records,
         model_choice=model_choice,
-        is_new_region_override=is_new_override
+        is_new_region_override=is_new_override,
+        history=session_data.get("history")
     )
+
+    # 세션 메모리 갱신 (다음 턴에서 '아까 그 단지' 질의 시 참조)
+    if records:
+        first_apt = records[0].apt_name
+        if first_apt and first_apt not in ("연립다세대", "단독주택", "다가구주택", "원룸"):
+            session_data["last_apt_name"] = first_apt
+        if records[0].dong:
+            session_data["last_dong_name"] = records[0].dong
+    elif conditions.get("apt_name"):
+        session_data["last_apt_name"] = conditions["apt_name"]
+
+    session_data["last_conditions"] = conditions
+    session_data.setdefault("history", []).append({"role": "user", "content": prompt})
+    session_data.setdefault("history", []).append({"role": "assistant", "content": briefing_text})
 
     return {
         "status": "success",
