@@ -284,6 +284,34 @@ async def get_sync_status(db: AsyncSession = Depends(get_db)):
     }
 
 
+# ==================== 5-1. 통합시/특례시 구 단위 5자리 법정동코드 매핑 ====================
+# 국토부 실거래가 Open API는 시 전체 코드(0으로 끝나는 코드)가 아닌 구 단위 5자리(LAWD_CD)로만 데이터를 반환합니다.
+INTEGRATED_CITY_CODE_MAPPING = {
+    # 경남 창원시 전체(48120) -> 기본값 창원시 의창구(48121)
+    "48120": "48121",
+    # 경기 수원시 전체(41110) -> 기본값 장안구(41111)
+    "41110": "41111",
+    # 경기 성남시 전체(41130) -> 기본값 분당구(41135)
+    "41130": "41135",
+    # 경기 안양시 전체(41170) -> 기본값 동안구(41173)
+    "41170": "41173",
+    # 경기 안산시 전체(41270) -> 기본값 상록구(41271)
+    "41270": "41271",
+    # 경기 고양시 전체(41280) -> 기본값 일산동구(41285)
+    "41280": "41285",
+    # 경기 용인시 전체(41460) -> 기본값 수지구(41465)
+    "41460": "41465",
+    # 충북 청주시 전체(43110) -> 기본값 상당구(43111)
+    "43110": "43111",
+    # 충남 천안시 전체(44130) -> 기본값 서북구(44133)
+    "44130": "44133",
+    # 전북 전주시 전체(45110) -> 기본값 완산구(45111)
+    "45110": "45111",
+    # 경북 포항시 전체(47110) -> 기본값 남구(47111)
+    "47110": "47111"
+}
+
+
 # ==================== 6. [핵심] 초고속 실거래가 조회 (2단계 스마트 캐싱 & 서버사이드 페이징) ====================
 @app.get("/api/trades/{regional_code}")
 async def get_trades(
@@ -297,6 +325,7 @@ async def get_trades(
     page: int = Query(1, ge=1, description="페이지 번호 (기본 1)"),
     limit: int = Query(20, ge=1, le=50000, description="한 페이지당 항목 수 (기본 20)"),
     offset: Optional[int] = Query(None, ge=0, description="오프셋 (지정 시 page 대신 계산)"),
+    background_tasks: BackgroundTasks = None,
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -307,8 +336,9 @@ async def get_trades(
     4. 테이블 상세 목록은 offset/limit 기반 안전 페이징으로 전달하여 브라우저 DOM 과부하 차단
     5. 2단계 스마트 캐싱: 인메모리 TTL 캐시(5ms) + PostgreSQL 누락월 자동 병렬 보충
     """
-    # 동적 파라미터 매핑
-    target_code = lawdCd or LAWD_CD or regional_code
+    # 동적 파라미터 매핑 및 통합시 코드 예외 자동 정규화
+    raw_code = str(lawdCd or LAWD_CD or regional_code).strip()
+    target_code = INTEGRATED_CITY_CODE_MAPPING.get(raw_code, raw_code)
     calc_offset = offset if offset is not None else (page - 1) * limit
 
     # ---------------- 1단계: 인메모리 고속 캐시 확인 ----------------
@@ -333,11 +363,18 @@ async def get_trades(
     all_36_months = get_last_36_months(2024, 10)
     missing_months = [ym for ym in all_36_months if ym not in existing_ym_set]
 
-    # 빈 구간(누락된 월)만 선별하여 병렬 청크로 국토부 API 호출
+    # 빈 구간(누락된 월)만 선별하여 병렬 청크로 국토부 API 호출 (타임아웃 방지: 최초 6개월 즉시 처리, 나머지 백그라운드)
     if missing_months and auto_sync:
         try:
-            print(f"⚡ [스마트 캐싱] 지역({target_code}) 36개월 중 {len(existing_ym_set)}개월 DB 보유 ➜ 누락된 {len(missing_months)}개월만 병렬 청크 수집")
-            await execute_sync_for_region_chunked(target_code, missing_months, chunk_size=6)
+            print(f"⚡ [스마트 캐싱] 지역({target_code}) 36개월 중 {len(existing_ym_set)}개월 DB 보유 ➜ 누락된 {len(missing_months)}개월 수집 시작")
+            if len(missing_months) > 6:
+                first_batch = missing_months[:6]
+                remaining_batch = missing_months[6:]
+                await execute_sync_for_region_chunked(target_code, first_batch, chunk_size=6)
+                if background_tasks:
+                    background_tasks.add_task(execute_sync_for_region_chunked, target_code, remaining_batch, 6)
+            else:
+                await execute_sync_for_region_chunked(target_code, missing_months, chunk_size=6)
         except Exception as sync_err:
             print(f"⚠️ [자동 동기화 경고]: {sync_err}")
 

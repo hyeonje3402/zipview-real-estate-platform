@@ -1134,6 +1134,7 @@ export default function TossStyleRealEstateDashboard() {
   // ==================== 2. 데이터 및 로딩 상태 ====================
   const [loading, setLoading] = useState(false);
   const isLoading = loading;
+  const [fetchError, setFetchError] = useState(null);
   const [apiPort, setApiPort] = useState(8001);
   const [rawTrades, setRawTrades] = useState([]);
   const [chartData, setChartData] = useState([]);
@@ -1240,6 +1241,9 @@ export default function TossStyleRealEstateDashboard() {
     async (targetLawdCd = null, targetPage = 1, signal = null, isRetry = false) => {
       const currentLawdCd = targetLawdCd || lawdCd;
       setLoading(true);
+      if (!isRetry) {
+        setFetchError(null);
+      }
 
       const targetPort = isRetry ? (apiPort === 8001 ? 8000 : 8001) : apiPort;
 
@@ -1267,12 +1271,13 @@ export default function TossStyleRealEstateDashboard() {
         const response = await axios.get(url, {
           params,
           signal,
-          timeout: 25000
+          timeout: 45000
         });
 
         if (signal?.aborted) return;
 
         if (response.data) {
+          setFetchError(null);
           const fetchedTrades = response.data.trades || (Array.isArray(response.data) ? response.data : []);
           
           // 36개월 전수 통계 차트: 백엔드 집계 데이터 우선 적용
@@ -1366,7 +1371,8 @@ export default function TossStyleRealEstateDashboard() {
         if (!isRetry) {
           fetchData(currentLawdCd, targetPage, signal, true);
         } else {
-          showToast(`[${currentRegionLabel}] 데이터 통신 중입니다. 잠시 후 다시 시도해 주십시오.`);
+          setFetchError("국토부 공공데이터 서버 응답이 지연되어 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
+          showToast(`[${currentRegionLabel}] 공공데이터 서버 응답이 지연되었습니다. [다시 시도]를 눌러주세요.`);
         }
       } finally {
         if (!signal?.aborted) {
@@ -1890,6 +1896,7 @@ export default function TossStyleRealEstateDashboard() {
       setSelectedMapTarget(null);
       setSelectedListing(null);
       setLoading(true);
+      setFetchError(null);
       setRawTrades([]);
       setChartData([]);
       setTotalCount(0);
@@ -1909,6 +1916,7 @@ export default function TossStyleRealEstateDashboard() {
     setSelectedMapTarget(null);
     setSelectedListing(null);
     setLoading(true);
+    setFetchError(null);
     setRawTrades([]);
     setChartData([]);
     setTotalCount(0);
@@ -2382,13 +2390,17 @@ export default function TossStyleRealEstateDashboard() {
             <span className="text-xs font-semibold text-[#64748B] uppercase tracking-wider">누적 실거래 원장</span>
             {isLoading ? (
               <div className="h-8 bg-[#E5E8EB] rounded-lg w-24 animate-pulse mt-1"></div>
+            ) : fetchError ? (
+              <p className="text-xl font-bold text-red-500 mt-1">응답 지연</p>
             ) : (
               <p className="text-2xl font-black text-[#191F28] mt-1 tracking-tight">
                 {totalCount.toLocaleString()}
                 <span className="text-sm font-bold text-[#8B95A1] ml-1">건</span>
               </p>
             )}
-            <p className="text-[11px] text-[#64748B] font-medium mt-1">36개월 전수 수집 데이터 검증 완료</p>
+            <p className="text-[11px] text-[#64748B] font-medium mt-1">
+              {fetchError ? "공공데이터 통신 지연 발생" : "36개월 전수 수집 데이터 검증 완료"}
+            </p>
           </div>
 
           <div className="bg-white p-5 rounded-xl border border-[#F2F4F6] shadow-2xs">
@@ -2545,7 +2557,33 @@ export default function TossStyleRealEstateDashboard() {
             className="w-full h-80 min-h-[320px] pt-1 relative flex items-center justify-center touch-pan-y"
             style={{ height: "340px", minHeight: "340px", width: "100%", touchAction: "pan-y" }}
           >
-            {isLoading ? (
+            {fetchError ? (
+              <div className="flex flex-col items-center justify-center h-full p-6 text-center space-y-3">
+                <div className="w-10 h-10 rounded-full bg-red-50 border border-red-200 text-red-600 flex items-center justify-center">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div className="space-y-1 max-w-md">
+                  <p className="text-xs sm:text-sm font-bold text-[#0F172A]">
+                    국토부 공공데이터 서버 응답이 지연되어 데이터를 불러오지 못했습니다.
+                  </p>
+                  <p className="text-[11px] text-[#64748B]">
+                    잠시 후 다시 시도해주세요.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFetchError(null);
+                    fetchData(lawdCd, 1);
+                  }}
+                  className="mt-1 px-4 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>다시 시도</span>
+                </button>
+              </div>
+            ) : isLoading ? (
               <ChartSkeleton regionLabel={currentRegionLabel} />
             ) : enrichedStockChartData.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-xs text-[#64748B] font-medium space-y-2 p-6 text-center">
@@ -2716,7 +2754,23 @@ export default function TossStyleRealEstateDashboard() {
           </div>
 
           {/* 1:1 비교 Recharts BarChart 시각화 영역 */}
-          {isLoading ? (
+          {fetchError ? (
+            <div className="py-12 text-center space-y-2">
+              <p className="text-xs font-bold text-red-600">
+                국토부 공공데이터 서버 응답이 지연되어 비교 분석 데이터를 불러오지 못했습니다.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setFetchError(null);
+                  fetchData(lawdCd, 1);
+                }}
+                className="px-3.5 py-1.5 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-md text-xs font-bold transition-all shadow-xs"
+              >
+                다시 시도
+              </button>
+            </div>
+          ) : isLoading ? (
             <MatrixSkeleton regionLabel={currentRegionLabel} />
           ) : !targetComplexA || !targetComplexB ? (
             <div className="py-12 text-center text-[#64748B] text-xs font-medium space-y-1">
@@ -3182,8 +3236,26 @@ export default function TossStyleRealEstateDashboard() {
             </div>
           </div>
 
-          {/* [스켈레톤 렌더링]: 로딩 중일 때는 TableSkeleton 렌더링 */}
-          {isLoading ? (
+          {/* [스켈레톤 및 에러 렌더링] */}
+          {fetchError ? (
+            <div className="py-14 px-6 flex flex-col items-center justify-center text-center bg-red-50/40 rounded-xl border border-red-200">
+              <svg className="w-8 h-8 text-red-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              <h3 className="text-sm font-bold text-slate-900 mb-1">
+                실거래가 원장 조회 지연
+              </h3>
+              <p className="text-xs text-slate-600 mb-4 max-w-md">
+                {fetchError}
+              </p>
+              <button
+                onClick={() => fetchData()}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-md transition-colors shadow-xs"
+              >
+                다시 시도
+              </button>
+            </div>
+          ) : isLoading ? (
             <TableSkeleton regionLabel={currentRegionLabel} />
           ) : (
             <div className="overflow-x-auto rounded-xl border border-[#F2F4F6]">
