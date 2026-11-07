@@ -985,11 +985,11 @@ const generateListingsFromTrades = (trades, centerLat, centerLng, regionName) =>
       dong: t.dong || "",
       price_summary: `${t.trade_type || "실거래"} ${formattedPrice}`,
       raw_price: t.deal_amount || t.deposit || 0,
-      floor: t.floor ? `${t.floor}층` : "중간층",
-      area: t.exclu_use_ar ? `${t.exclu_use_ar}㎡ (${toPyeong(t.exclu_use_ar)}평)` : "84.9㎡",
+      floor: t.floor ? `${t.floor}층` : "-",
+      area: t.exclu_use_ar ? `${t.exclu_use_ar}㎡ (${toPyeong(t.exclu_use_ar)}평)` : "-",
       maintenance_fee: "관리비 실비 정산",
-      tags: ["실거래검증", t.trade_type || "매매", t.property_type || "아파트", t.dong || "역세권"].filter(Boolean),
-      contact: "1588-0000",
+      tags: ["실거래검증", t.trade_type || "매매", t.property_type || "아파트", t.dong].filter(Boolean),
+      contact: "집뷰 공인중개 네트워크",
       agency_name: `집뷰 B2B 파트너스 (${reg})`,
       agent_name: "공인중개사 네트워크",
       description: `국토교통부 실거래 원장 연동 검증 매물 (${t.deal_date || "최근 실거래"}), 전용 ${t.exclu_use_ar || "-"}㎡`,
@@ -1017,12 +1017,41 @@ export default function TossStyleRealEstateDashboard() {
   const [selectedListing, setSelectedListing] = useState(null);
   const [listingPropertyFilter, setListingPropertyFilter] = useState("all");
   const [listingTradeFilter, setListingTradeFilter] = useState("all");
-  const [regionCoords, setRegionCoords] = useState({ lat: 37.4979, lng: 127.0276 });
-  const listingMarkersRef = useRef([]);
+  // URL 쿼리 파라미터(?lawdCd=... 또는 ?region=... 등)에서 실시간 초기화하거나 REGION_DATA 기반 동적 바인딩
+  const initialRegion = useMemo(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const urlCode = params.get("lawdCd") || params.get("code");
+      const urlSido = params.get("sido") || params.get("city");
+      const urlDist = params.get("district") || params.get("dist");
+      const urlRegion = params.get("region") || params.get("q");
 
-  // 전국 지역 상태 (lawdCd 필수 바인딩)
-  const [selectedSido, setSelectedSido] = useState("서울특별시");
-  const [lawdCd, setLawdCd] = useState("11680"); // 기본값: 서울 강남구
+      const resolved = resolveRegionFromData({
+        code: urlCode,
+        sidoName: urlSido,
+        districtName: urlDist || urlRegion,
+        label: urlRegion
+      });
+
+      if (resolved) {
+        return resolved;
+      }
+    }
+    const firstSido = Object.keys(REGION_DATA)[0] || "서울특별시";
+    const firstDist = REGION_DATA[firstSido]?.[0] || { name: "강남구", code: "11680" };
+    return {
+      sido: firstSido,
+      districtName: firstDist.name,
+      code: firstDist.code,
+      label: `${firstSido} ${firstDist.name}`
+    };
+  }, []);
+
+  // 전국 지역 상태 (URL 및 실시간 동적 바인딩)
+  const [selectedSido, setSelectedSido] = useState(initialRegion.sido);
+  const [lawdCd, setLawdCd] = useState(initialRegion.code);
+  const [regionCoords, setRegionCoords] = useState(REGION_CENTERS[initialRegion.code] || { lat: 37.4979, lng: 127.0276 });
+  const listingMarkersRef = useRef([]);
 
   // 필터 및 검색
   const [propertyTypeFilter, setPropertyTypeFilter] = useState("all");
@@ -1339,6 +1368,55 @@ export default function TossStyleRealEstateDashboard() {
       controller.abort();
     };
   }, [selectedSido, lawdCd, propertyTypeFilter, tradeTypeFilter, debouncedSearch, fetchData]);
+
+  // =========================================================================
+  // [상용화 2] URL 및 동적 메타데이터 동기화 (SEO, 구글/네이버 검색 엔진 및 봇 대응)
+  // =========================================================================
+  useEffect(() => {
+    if (typeof window === "undefined" || !currentRegionLabel || !lawdCd) return;
+
+    // 1) 브라우저 URL 쿼리 파라미터 실시간 동기화 (SEO 딥링크 및 크롤러 대응)
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("lawdCd") !== lawdCd) {
+        url.searchParams.set("lawdCd", lawdCd);
+        url.searchParams.set("region", currentRegionLabel);
+        window.history.replaceState({ lawdCd, region: currentRegionLabel }, "", url.toString());
+      }
+    } catch (_) {}
+
+    // 2) 동적 페이지 타이틀(Title) 최적화
+    const pageTitle = `${currentRegionLabel} 아파트 실거래가 및 시세 분석 | 집뷰(ZipView)`;
+    document.title = pageTitle;
+
+    // 3) 검색엔진 크롤러용 동적 메타 태그(Description, OG, Twitter) 동기화
+    const metaDescContent = `${currentRegionLabel} 최근 3개년 아파트·부동산 국토교통부 실거래가 원장, 매매·전세 시세 변동 추이 및 AI 단지 분석 리포트.`;
+
+    let metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc) {
+      metaDesc.setAttribute("content", metaDescContent);
+    } else {
+      metaDesc = document.createElement("meta");
+      metaDesc.name = "description";
+      metaDesc.content = metaDescContent;
+      document.head.appendChild(metaDesc);
+    }
+
+    let ogTitle = document.querySelector('meta[property="og:title"]');
+    if (ogTitle) ogTitle.setAttribute("content", pageTitle);
+    let ogDesc = document.querySelector('meta[property="og:description"]');
+    if (ogDesc) ogDesc.setAttribute("content", metaDescContent);
+
+    let twitterTitle = document.querySelector('meta[name="twitter:title"]');
+    if (twitterTitle) twitterTitle.setAttribute("content", pageTitle);
+    let twitterDesc = document.querySelector('meta[name="twitter:description"]');
+    if (twitterDesc) twitterDesc.setAttribute("content", metaDescContent);
+
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (canonical) {
+      canonical.setAttribute("href", window.location.href);
+    }
+  }, [lawdCd, currentRegionLabel]);
 
   // 법정동 코드(5자리)로부터 [시/도 시/군/구] 실제 행정구역명 역추출
   const getRegionLabelByCode = useCallback((code) => {

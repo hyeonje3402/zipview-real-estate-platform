@@ -17,7 +17,9 @@ const requiredFiles = [
   'index.html',
   'TossStyleRealEstateDashboard.jsx',
   'App.jsx',
-  'styles.css'
+  'styles.css',
+  'robots.txt',
+  'sitemap.xml'
 ];
 
 let copiedCount = 0;
