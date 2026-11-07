@@ -1064,15 +1064,21 @@ export default function TossStyleRealEstateDashboard() {
         if (signal?.aborted) return;
 
         if (response.data) {
-          setFetchError(null);
           const fetchedTrades = response.data.trades || (Array.isArray(response.data) ? response.data : []);
+          const serverTotalCount = response.data.total_count ?? response.data.totalCount ?? fetchedTrades.length;
+
+          // [침묵의 에러(Silent Fail) 원천 방어]: 0건 응답 시 즉시 에러 발생시켜 Error State 활성화
+          if (serverTotalCount === 0 && !debouncedSearch.trim() && propertyTypeFilter === "all" && tradeTypeFilter === "all") {
+            throw new Error("국토부 공공데이터 서버 응답 지연 또는 해당 지역 데이터를 불러오지 못했습니다.");
+          }
+
+          setFetchError(null);
           
           // 36개월 전수 통계 차트: 백엔드 집계 데이터 우선 적용
           const calculatedChart = (response.data.chart_data && response.data.chart_data.length > 0)
             ? response.data.chart_data
             : calculateChartData(fetchedTrades);
 
-          const serverTotalCount = response.data.total_count ?? response.data.totalCount ?? fetchedTrades.length;
           const serverTotalPages = response.data.total_pages ?? Math.ceil(serverTotalCount / ROWS_PER_PAGE) ?? 1;
 
           // [Global Unique List] 백엔드에서 3개년 전수 DB 기반으로 추출한 전체 고유 건물 목록
@@ -1154,13 +1160,10 @@ export default function TossStyleRealEstateDashboard() {
           return;
         }
 
-        console.warn(`[ZipView] 백엔드(${getApiBaseUrl()}) 연결 확인:`, err.message);
-        if (!isRetry) {
-          fetchData(currentLawdCd, targetPage, signal, true);
-        } else {
-          setFetchError("국토부 공공데이터 서버 응답이 지연되어 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.");
-          showToast(`[${currentRegionLabel}] 공공데이터 서버 응답이 지연되었습니다. [다시 시도]를 눌러주세요.`);
-        }
+        console.warn(`[ZipView] 백엔드(${getApiBaseUrl()}) 연결/데이터 확인:`, err.message);
+        // 즉시 에러 상태 활성화하여 0건짜리 빈 대시보드 렌더링 차단
+        setFetchError("공공데이터 응답이 지연되었습니다. 잠시 후 다시 시도해주세요.");
+        showToast(`[${currentRegionLabel}] 공공데이터 서버 응답이 지연되었습니다. [다시 시도]를 눌러주세요.`);
       } finally {
         if (!signal?.aborted) {
           setLoading(false);
@@ -2111,6 +2114,34 @@ export default function TossStyleRealEstateDashboard() {
       {/* 2. 대시보드 메인 본문                                                     */}
       {/* ========================================================================= */}
       <main className="w-full max-w-6xl mx-auto px-3.5 sm:px-6 pt-4 sm:pt-6 space-y-4 sm:space-y-6 box-border min-w-0">
+        {fetchError ? (
+          <div className="w-full bg-white rounded-2xl border border-red-200 p-8 sm:p-16 shadow-xs text-center flex flex-col items-center justify-center space-y-4 my-8">
+            <div className="w-16 h-16 rounded-full bg-red-50 border border-red-200 text-red-600 flex items-center justify-center mb-2">
+              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div className="space-y-2 max-w-lg">
+              <h2 className="text-xl sm:text-2xl font-black text-[#0F172A] tracking-tight">
+                공공데이터 응답이 지연되었습니다
+              </h2>
+              <p className="text-xs sm:text-sm text-[#64748B] leading-relaxed">
+                국토부 공공데이터 서버 응답이 지연되어 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setFetchError(null);
+                fetchData(lawdCd, 1);
+              }}
+              className="mt-4 px-6 py-3 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs active:scale-95 flex items-center gap-2 cursor-pointer"
+            >
+              <span>다시 시도</span>
+            </button>
+          </div>
+        ) : (
+          <>
         {/* ========================================================================= */}
         {/* [스마트 자동완성 검색] 단지명/건물명 실시간 통합 검색 바                  */}
         {/* ========================================================================= */}
@@ -3469,6 +3500,7 @@ export default function TossStyleRealEstateDashboard() {
             </div>
           )}
         </section>
+          </>
         )}
       </main>
 

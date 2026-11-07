@@ -90,15 +90,9 @@ async def request_molit_xml_async(
     aiohttp를 사용한 국토교통부 Open API 고성능 비동기 호출 함수
     Rate Limit 방어 및 네트워크 불안정 극복을 위한 지수 백오프(Exponential Backoff) 재시도 포함
     """
-    raw_key = unquote(MOLIT_API_KEY)
-    params = {
-        "serviceKey": raw_key,
-        "LAWD_CD": lawd_cd,
-        "DEAL_YMD": deal_ymd,
-        "numOfRows": 1000,
-        "pageNo": 1
-    }
-    url = f"{endpoint}?{urlencode(params)}"
+    # 공공데이터포털 serviceKey 인코딩/디코딩 호환 URL 직접 구성
+    key_to_use = MOLIT_API_KEY.strip()
+    url = f"{endpoint}?serviceKey={key_to_use}&LAWD_CD={lawd_cd}&DEAL_YMD={deal_ymd}&numOfRows=1000&pageNo=1"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ZipViewRealEstateETL/3.0"
     }

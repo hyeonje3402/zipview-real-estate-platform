@@ -381,22 +381,23 @@ async def get_trades(
     existing_pairs = existing_yms_res.all()
     existing_ym_set = {f"{y:04d}{m:02d}" for y, m in existing_pairs if y and m}
 
-    # 최근 36개월 기준 목록 생성
+    # 최근 36개월 기준 목록 생성 (최신월 우선 역순 정렬: 202410 ~ 202111)
     all_36_months = get_last_36_months(2024, 10)
     missing_months = [ym for ym in all_36_months if ym not in existing_ym_set]
+    missing_months.sort(reverse=True)  # 최신 데이터 우선 동기화
 
-    # 빈 구간(누락된 월)만 선별하여 병렬 청크로 국토부 API 호출 (타임아웃 방지: 최초 6개월 즉시 처리, 나머지 백그라운드)
+    # 빈 구간(누락된 월)만 선별하여 병렬 청크로 국토부 API 호출 (최신 3개월 즉시 처리, 나머지 백그라운드)
     if missing_months and auto_sync:
         try:
             print(f"⚡ [스마트 캐싱] 지역({target_code}) 36개월 중 {len(existing_ym_set)}개월 DB 보유 ➜ 누락된 {len(missing_months)}개월 수집 시작")
-            if len(missing_months) > 6:
-                first_batch = missing_months[:6]
-                remaining_batch = missing_months[6:]
-                await execute_sync_for_region_chunked(target_code, first_batch, chunk_size=6)
+            if len(missing_months) > 3:
+                first_batch = missing_months[:3]
+                remaining_batch = missing_months[3:]
+                await execute_sync_for_region_chunked(target_code, first_batch, chunk_size=3)
                 if background_tasks:
                     background_tasks.add_task(execute_sync_for_region_chunked, target_code, remaining_batch, 6)
             else:
-                await execute_sync_for_region_chunked(target_code, missing_months, chunk_size=6)
+                await execute_sync_for_region_chunked(target_code, missing_months, chunk_size=3)
         except Exception as sync_err:
             print(f"⚠️ [자동 동기화 경고]: {sync_err}")
 
@@ -434,6 +435,14 @@ async def get_trades(
     count_stmt = select(func.count(ApartmentTrade.id)).where(*base_filter)
     count_res = await db.execute(count_stmt)
     total_count = count_res.scalar() or 0
+
+    # [빈 배열 강제 예외 처리]: 수집 데이터가 0건일 경우 200 OK 대신 즉시 404 예외 발생
+    if total_count == 0 and not apt_name:
+        raise HTTPException(
+            status_code=404,
+            detail="국토부 서버 응답 지연 또는 해당 지역 데이터를 불러오지 못했습니다."
+        )
+
     total_pages = math.ceil(total_count / limit) if total_count > 0 else 1
 
     # ---------------- 5단계: 최신 매매/전세 최고가 단일 조회 ----------------
