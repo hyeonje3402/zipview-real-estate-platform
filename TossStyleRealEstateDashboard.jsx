@@ -323,10 +323,10 @@ export const REGION_DATA = {
 };
 // ==================== 스켈레톤 UI 컴포넌트군 ====================
 
-// 1. 차트 영역 스켈레톤 UI (animate-pulse)
+// 1. 차트 영역 스켈레톤 및 자동 로딩 스피너 UI (animate-pulse & Spinner)
 const ChartSkeleton = ({ regionLabel }) => (
-  <div className="w-full h-80 min-h-[320px] bg-[#F2F4F6] rounded-xl animate-pulse relative overflow-hidden border border-[#E5E8EB] p-6 flex flex-col justify-between">
-    <div className="flex items-center justify-between">
+  <div className="w-full h-80 min-h-[320px] bg-[#F2F4F6] rounded-xl relative overflow-hidden border border-[#E5E8EB] p-6 flex flex-col justify-between">
+    <div className="flex items-center justify-between animate-pulse">
       <div className="space-y-2">
         <div className="h-4 bg-[#E5E8EB] rounded-md w-48"></div>
         <div className="h-3 bg-[#E5E8EB] rounded-md w-32"></div>
@@ -336,7 +336,7 @@ const ChartSkeleton = ({ regionLabel }) => (
         <div className="h-6 bg-[#E5E8EB] rounded-full w-16"></div>
       </div>
     </div>
-    <div className="w-full flex items-end justify-between h-36 px-4 gap-1 opacity-40">
+    <div className="w-full flex items-end justify-between h-36 px-4 gap-1 opacity-40 animate-pulse">
       {[45, 60, 52, 70, 65, 80, 75, 90, 85, 100, 95, 110, 105, 120, 115, 130, 125, 140].map((h, i) => (
         <div
           key={i}
@@ -345,17 +345,21 @@ const ChartSkeleton = ({ regionLabel }) => (
         ></div>
       ))}
     </div>
-    <div className="flex justify-between pt-2 border-t border-[#E5E8EB]">
+    <div className="flex justify-between pt-2 border-t border-[#E5E8EB] animate-pulse">
       {["21.11", "22.05", "22.11", "23.05", "23.11", "24.05", "24.10"].map((label, idx) => (
         <div key={idx} className="h-3 bg-[#E5E8EB] rounded w-8"></div>
       ))}
     </div>
-    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-      <div className="bg-white/90 backdrop-blur-xs px-4 py-2 rounded-full border border-[#E5E8EB] shadow-xs flex items-center gap-2">
-        <div className="w-2.5 h-2.5 rounded-full bg-[#0f172a] animate-ping"></div>
-        <span className="text-xs font-bold text-[#4E5968]">
-          {regionLabel} 36개월 주식형 복합 시세 분석 중...
-        </span>
+    {/* 중앙 로딩 스피너 및 상태 안내 */}
+    <div className="absolute inset-0 flex items-center justify-center bg-white/75 backdrop-blur-xs z-10 pointer-events-none">
+      <div className="bg-white px-5 py-3.5 rounded-xl border border-[#E2E8F0] shadow-sm flex items-center gap-3">
+        <div className="w-5 h-5 border-2 border-[#0f172a] border-t-transparent rounded-full animate-spin shrink-0"></div>
+        <div className="flex flex-col">
+          <span className="text-xs font-bold text-[#0F172A]">
+            {regionLabel ? `[${regionLabel}] 데이터를 불러오는 중입니다...` : "데이터를 불러오는 중입니다..."}
+          </span>
+          <span className="text-[10px] text-[#64748B]">최신 36개월 국토교통부 실거래 원장 자동 동기화 중</span>
+        </div>
       </div>
     </div>
   </div>
@@ -386,20 +390,21 @@ const TableSkeleton = ({ regionLabel }) => (
         </div>
       </div>
     ))}
-    <div className="text-center py-2 text-xs font-medium text-[#8B95A1]">
-      국토교통부 표준 API에서 {regionLabel} 실거래 계약 데이터를 불러오고 있습니다.
+    <div className="text-center py-2 text-xs font-medium text-[#8B95A1] flex items-center justify-center gap-2">
+      <div className="w-3.5 h-3.5 border-2 border-[#0f172a] border-t-transparent rounded-full animate-spin"></div>
+      <span>{regionLabel ? `[${regionLabel}] 실거래 계약 데이터를 불러오는 중입니다...` : "데이터를 불러오는 중입니다..."}</span>
     </div>
   </div>
 );
 
 // 3. 비교 매트릭스 스켈레톤 UI
 const MatrixSkeleton = ({ regionLabel }) => (
-  <div className="w-full h-48 bg-[#F2F4F6] rounded-xl animate-pulse flex flex-col items-center justify-center p-6 border border-[#E5E8EB] space-y-2">
-    <div className="w-8 h-8 rounded-full bg-[#E5E8EB] flex items-center justify-center">
-      <div className="w-4 h-4 rounded-full bg-[#D1D6DB]"></div>
-    </div>
-    <div className="h-4 bg-[#E5E8EB] rounded w-52"></div>
-    <div className="h-3 bg-[#E5E8EB] rounded w-36"></div>
+  <div className="w-full h-48 bg-[#F8FAFC] rounded-xl flex flex-col items-center justify-center p-6 border border-[#E5E8EB] space-y-2">
+    <div className="w-6 h-6 border-2 border-[#7B2CBF] border-t-transparent rounded-full animate-spin"></div>
+    <span className="text-xs font-bold text-[#0F172A]">
+      {regionLabel ? `[${regionLabel}] 1:1 비교 분석 데이터를 불러오는 중입니다...` : "데이터를 불러오는 중입니다..."}
+    </span>
+    <span className="text-[10px] text-[#64748B]">단지별 평균 매매가 및 전세가율 자동 연산 중</span>
   </div>
 );
 
@@ -1129,7 +1134,6 @@ export default function TossStyleRealEstateDashboard() {
   // ==================== 2. 데이터 및 로딩 상태 ====================
   const [loading, setLoading] = useState(false);
   const isLoading = loading;
-  const [syncLoading, setSyncLoading] = useState(false);
   const [apiPort, setApiPort] = useState(8001);
   const [rawTrades, setRawTrades] = useState([]);
   const [chartData, setChartData] = useState([]);
@@ -1245,7 +1249,7 @@ export default function TossStyleRealEstateDashboard() {
         regional_code: currentLawdCd,
         page: targetPage,
         limit: ROWS_PER_PAGE,
-        auto_sync: false
+        auto_sync: true
       };
       if (propertyTypeFilter !== "all") {
         params.property_type = propertyTypeFilter;
@@ -1385,20 +1389,32 @@ export default function TossStyleRealEstateDashboard() {
     fetchData(lawdCd, pageNum, controller.signal);
   };
 
-  // [핵심 1 & 2] AbortController 요청 강제 취소 및 단일 진실 공급원(Single Source of Truth) useEffect
+  // =========================================================================
+  // [요구사항 2] 지역 선택 감지 및 자동 패칭 & 실시간 동기화 (useEffect)
+  // =========================================================================
   useEffect(() => {
+    // 유효성 조건 검증: '시/도'와 '시/군/구'가 모두 유효하게 선택된 상태에서만 자동 동기화 실행
+    const isSidoValid = Boolean(selectedSido && REGION_DATA[selectedSido] && REGION_DATA[selectedSido].length > 0);
+    const isLawdCdValid = Boolean(lawdCd && String(lawdCd).trim().length === 5 && !isNaN(Number(lawdCd)));
+
+    if (!isSidoValid || !isLawdCdValid) {
+      return;
+    }
+
+    // 이전 미완료 비동기 요청 취소 (경쟁 상태 완벽 방어)
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    // 즉시 백엔드 API 데이터 요청 (실시간 자동 동기화)
     fetchData(lawdCd, 1, controller.signal);
 
     return () => {
       controller.abort();
     };
-  }, [lawdCd, propertyTypeFilter, tradeTypeFilter, debouncedSearch, fetchData]);
+  }, [selectedSido, lawdCd, propertyTypeFilter, tradeTypeFilter, debouncedSearch, fetchData]);
 
   // 법정동 코드(5자리)로부터 [시/도 시/군/구] 실제 행정구역명 역추출
   const getRegionLabelByCode = useCallback((code) => {
@@ -1859,21 +1875,23 @@ export default function TossStyleRealEstateDashboard() {
     }
   }, [viewMode, filteredMockListings, selectedListing, rawTrades, selectedMapTarget, buildPropertyAddressAndTitle, searchAndPinAddress, currentRegionLabel, openListingInfoWindow]);
 
-  // 시/도 드롭다운 변경 핸들러 (상태 불일치 방지 즉시 초기화)
+  // 시/도 드롭다운 변경 핸들러 (상태 불일치 방지 및 로딩 상태 즉시 활성화)
   const handleSidoChange = (e) => {
     const newSido = e.target.value;
     setSelectedSido(newSido);
     const districts = REGION_DATA[newSido] || [];
     if (districts.length > 0) {
       const newCode = districts[0].code;
-      // 상태 불일치 즉시 해소: 이전 지역 데이터 및 하이라이트 서클 즉각 초기화
+      // 상태 불일치 즉시 해소 및 로딩 스켈레톤 활성화
       if (circleRef.current) {
         circleRef.current.setMap(null);
         circleRef.current = null;
       }
       setSelectedMapTarget(null);
       setSelectedListing(null);
+      setLoading(true);
       setRawTrades([]);
+      setChartData([]);
       setTotalCount(0);
       setAllBuildings([]);
       setTablePage(1);
@@ -1884,13 +1902,15 @@ export default function TossStyleRealEstateDashboard() {
     }
   };
 
-  // 시/군/구 드롭다운 변경 핸들러 (상태 불일치 방지 즉시 초기화)
+  // 시/군/구 드롭다운 변경 핸들러 (상태 불일치 방지 및 로딩 상태 즉시 활성화)
   const handleLawdCdChange = (e) => {
     const newCode = e.target.value;
-    // 상태 불일치 즉시 해소: 이전 지역 데이터 즉각 초기화
+    // 상태 불일치 즉시 해소 및 로딩 스켈레톤 활성화
     setSelectedMapTarget(null);
     setSelectedListing(null);
+    setLoading(true);
     setRawTrades([]);
+    setChartData([]);
     setTotalCount(0);
     setAllBuildings([]);
     setTablePage(1);
@@ -1898,21 +1918,6 @@ export default function TossStyleRealEstateDashboard() {
       setRegionCoords(REGION_CENTERS[newCode]);
     }
     setLawdCd(newCode);
-  };
-
-  // 수동 실시간 국토부 동기화 트리거
-  const handleRealtimeSync = async () => {
-    setSyncLoading(true);
-    showToast(`[${currentRegionLabel}] 최근 36개월 국토교통부 실거래 원장 동기화를 시작합니다.`);
-    try {
-      await axios.post(`${getApiBaseUrl()}/api/sync/${lawdCd}`, {}, { timeout: 45000 });
-      showToast(`실거래 원장 동기화 완료: 최신 데이터를 갱신합니다.`);
-      await fetchData(lawdCd, 1);
-    } catch (err) {
-      showToast("실시간 3년 치 동기화 중 일시적 오류가 발생했습니다.");
-    } finally {
-      setSyncLoading(false);
-    }
   };
 
   // ==================== [핵심 1] 주식 스타일 차트 데이터 보강 ====================
@@ -2208,17 +2213,13 @@ export default function TossStyleRealEstateDashboard() {
               </div>
             </div>
 
-            {/* 모바일 화면용 동기화 버튼 (터치 친화적 40px) */}
-            <div className="sm:hidden">
-              <button
-                onClick={handleRealtimeSync}
-                disabled={syncLoading}
-                title="국토부 실시간 동기화"
-                className="flex items-center gap-1 px-3 min-h-[40px] bg-white border border-[#E5E8EB] hover:bg-[#F2F4F6] text-[#191F28] rounded-full text-xs font-bold transition-all shadow-2xs active:scale-95 disabled:opacity-50"
-              >
-                <span className={syncLoading ? "animate-spin" : ""}>동기화</span>
-              </button>
-            </div>
+            {/* 모바일 화면용 자동 동기화 인디케이터 (로딩 중일 때만 표시) */}
+            {isLoading && (
+              <div className="sm:hidden flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-[10px] font-bold text-slate-700 animate-pulse">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
+                <span>동기화 중...</span>
+              </div>
+            )}
           </div>
 
           {/* 2) 컨트롤러 바: [View Mode 토글 스위치] + [지역 선택 드롭다운] */}
@@ -2296,14 +2297,13 @@ export default function TossStyleRealEstateDashboard() {
                 </div>
               </div>
 
-              {/* 데스크탑 화면용 실시간 동기화 버튼 */}
-              <button
-                onClick={handleRealtimeSync}
-                disabled={syncLoading}
-                className="hidden sm:flex items-center space-x-1.5 px-3.5 py-2 min-h-[42px] bg-white border border-[#E5E8EB] hover:bg-[#F2F4F6] text-[#191F28] rounded-full text-xs font-bold transition-all shadow-2xs active:scale-95 disabled:opacity-50 shrink-0"
-              >
-                <span className={syncLoading ? "animate-spin" : ""}></span><span>{syncLoading ? "동기화 진행 중..." : "실시간 원장 동기화"}</span>
-              </button>
+              {/* 데스크탑 화면용 실시간 자동 동기화 상태 인디케이터 (수동 버튼 제거) */}
+              <div className="hidden sm:flex items-center space-x-2 px-3.5 py-2 min-h-[40px] bg-white border border-[#E5E8EB] rounded-full text-xs font-semibold text-slate-700 shadow-2xs shrink-0 select-none">
+                <span className={`w-2 h-2 rounded-full ${isLoading ? "bg-amber-500 animate-ping" : "bg-emerald-500"}`}></span>
+                <span className="text-[11px] font-bold text-slate-700">
+                  {isLoading ? "실시간 원장 동기화 중..." : "실시간 자동 동기화"}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -2548,15 +2548,14 @@ export default function TossStyleRealEstateDashboard() {
             {isLoading ? (
               <ChartSkeleton regionLabel={currentRegionLabel} />
             ) : enrichedStockChartData.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-xs text-[#8B95A1] font-medium space-y-1">
-                
-                <span className="font-bold text-[#191F28]">{currentRegionLabel} 36개월 데이터를 불러오는 중입니다.</span>
-                <button
-                  onClick={handleRealtimeSync}
-                  className="mt-2 px-3.5 py-1.5 bg-[#0f172a] text-white rounded-full font-bold hover:bg-[#1e293b] transition-all"
-                >
-                  실시간 국토부 데이터 패칭하기
-                </button>
+              <div className="flex flex-col items-center justify-center h-full text-xs text-[#64748B] font-medium space-y-2 p-6 text-center">
+                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <span className="font-bold text-[#0F172A]">{currentRegionLabel} 36개월 실거래 데이터가 없습니다.</span>
+                <p className="text-[11px] text-[#64748B]">다른 시/군/구를 선택하시면 해당 지역의 데이터가 자동으로 동기화됩니다.</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={330}>
@@ -2720,8 +2719,9 @@ export default function TossStyleRealEstateDashboard() {
           {isLoading ? (
             <MatrixSkeleton regionLabel={currentRegionLabel} />
           ) : !targetComplexA || !targetComplexB ? (
-            <div className="py-12 text-center text-[#8B95A1] text-xs font-medium">
-              비교할 단지 데이터가 부족합니다. 상단의 국토부 실시간 동기화를 실행해 주세요.
+            <div className="py-12 text-center text-[#64748B] text-xs font-medium space-y-1">
+              <p className="font-bold text-[#0F172A]">{currentRegionLabel}에 비교 가능한 단지 정보가 충분하지 않습니다.</p>
+              <p className="text-[11px] text-[#64748B]">다른 지역을 선택하시면 실거래 단지 데이터가 자동으로 동기화됩니다.</p>
             </div>
           ) : (
             <div className="space-y-6">
