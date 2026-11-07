@@ -518,6 +518,222 @@ const calculateChartData = (trades) => {
   return chartPoints;
 };
 
+// ==================== 1:1 비교용 B2B 검색형 드롭다운 (Searchable Combobox) ====================
+const SearchableComplexCombobox = ({
+  tag = "단지 A",
+  theme = "navy", // "navy" | "purple"
+  value = "",
+  options = [],
+  onChange,
+  placeholder = "단지명 검색..."
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const containerRef = useRef(null);
+  const inputRef = useRef(null);
+  const listRef = useRef(null);
+
+  // 실시간 텍스트 필터링 (사용자 입력 포함 여부 검색)
+  const filteredOptions = useMemo(() => {
+    if (!searchTerm.trim()) return options;
+    const term = searchTerm.trim().toLowerCase();
+    return options.filter((opt) => String(opt).toLowerCase().includes(term));
+  }, [options, searchTerm]);
+
+  // 검색어 입력 시 하이라이트 인덱스 초기화
+  useEffect(() => {
+    setHighlightedIndex(0);
+  }, [searchTerm]);
+
+  // <input> 모드 전환 시 자동 포커스
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isOpen]);
+
+  // 화면 외부 클릭 (Outside Click & Touch) 시 닫힘 처리
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false);
+        setSearchTerm("");
+      }
+    };
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      document.addEventListener("touchstart", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("touchstart", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  // 키보드 방향키 이동 시 스크롤 자동 추적
+  useEffect(() => {
+    if (isOpen && listRef.current) {
+      const activeEl = listRef.current.querySelector(`[data-index="${highlightedIndex}"]`);
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: "nearest" });
+      }
+    }
+  }, [highlightedIndex, isOpen]);
+
+  // 키보드 제어 (위/아래 방향키 탐색, Enter 선택, Escape 닫기)
+  const handleKeyDown = (e) => {
+    if (!isOpen) {
+      if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        setIsOpen(true);
+        setSearchTerm("");
+      }
+      return;
+    }
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (filteredOptions.length > 0 ? (prev + 1) % filteredOptions.length : 0));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (filteredOptions.length > 0 ? (prev - 1 + filteredOptions.length) % filteredOptions.length : 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (filteredOptions.length > 0 && filteredOptions[highlightedIndex]) {
+        handleSelect(filteredOptions[highlightedIndex]);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setIsOpen(false);
+      setSearchTerm("");
+    }
+  };
+
+  const handleSelect = (selectedName) => {
+    onChange(selectedName);
+    setIsOpen(false);
+    setSearchTerm("");
+  };
+
+  const isNavy = theme === "navy";
+  const badgeClass = isNavy ? "bg-[#0f172a] text-white" : "bg-[#7B2CBF] text-white";
+  const borderFocusClass = isNavy
+    ? "border-[#0f172a] ring-2 ring-[#0f172a]/10"
+    : "border-[#7B2CBF] ring-2 ring-[#7B2CBF]/10";
+  const highlightClass = isNavy ? "bg-[#0f172a] text-white" : "bg-[#7B2CBF] text-white";
+
+  return (
+    <div ref={containerRef} className="relative w-full text-left" onKeyDown={handleKeyDown}>
+      {/* 1. 일반 뷰: 클릭 전 상태 (버튼형 UI) */}
+      {!isOpen ? (
+        <button
+          type="button"
+          onClick={() => {
+            setIsOpen(true);
+            setSearchTerm("");
+          }}
+          className="w-full flex items-center justify-between gap-1.5 bg-white text-xs font-bold pl-2.5 pr-2.5 py-2 rounded-lg border border-[#E2E8F0] hover:border-slate-400 shadow-2xs transition-all cursor-pointer text-left truncate group focus:outline-none focus:ring-2 focus:ring-slate-300"
+          title={`${tag}: ${value || "선택"}`}
+        >
+          <div className="flex items-center gap-1.5 min-w-0 truncate">
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded shrink-0 ${badgeClass}`}>
+              {tag}
+            </span>
+            <span className={`truncate text-xs ${value ? "text-[#0F172A] font-extrabold" : "text-slate-400 font-normal"}`}>
+              {value || placeholder}
+            </span>
+          </div>
+          <span className="text-[9px] text-slate-400 group-hover:text-slate-600 transition-colors shrink-0">
+            ▼
+          </span>
+        </button>
+      ) : (
+        /* 2. 검색 뷰: 클릭 시 <input> 모드로 실시간 전환 */
+        <div className={`w-full flex items-center gap-1.5 bg-white text-xs pl-2.5 pr-2 py-1.5 rounded-lg border shadow-xs transition-all ${borderFocusClass}`}>
+          <span className={`text-[10px] font-black px-1.5 py-0.5 rounded shrink-0 ${badgeClass}`}>
+            {tag}
+          </span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder={value || placeholder}
+            className="w-full bg-transparent text-xs font-bold text-[#0F172A] outline-none placeholder:text-slate-400 placeholder:font-normal"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSearchTerm("");
+                inputRef.current?.focus();
+              }}
+              className="text-slate-400 hover:text-slate-600 text-xs px-1 font-bold shrink-0 cursor-pointer"
+              title="검색어 초기화"
+            >
+              ✕
+            </button>
+          )}
+          <span className="text-[9px] text-slate-400 shrink-0 pointer-events-none">
+            ▲
+          </span>
+        </div>
+      )}
+
+      {/* 3. 실시간 필터링 드롭다운 결과 목록 */}
+      {isOpen && (
+        <div className="absolute left-0 right-0 top-full mt-1 bg-white rounded-lg border border-[#E2E8F0] shadow-md z-30 overflow-hidden animate-in fade-in zoom-in-95 duration-100 min-w-[210px] max-w-full">
+          {/* 상단 검색 상태 표시줄 */}
+          <div className="bg-[#F8FAFC] px-2.5 py-1 border-b border-[#F1F5F9] flex items-center justify-between text-[10px] text-slate-400 font-semibold">
+            <span>{searchTerm ? `"${searchTerm}" 검색 결과` : "전체 단지 목록"}</span>
+            <span>{filteredOptions.length}개 단지</span>
+          </div>
+
+          {/* 목록 스크롤 컨테이너 (모바일 가상 키보드 대비 max-h-56) */}
+          <div ref={listRef} className="max-h-56 overflow-y-auto divide-y divide-[#F8FAFC]">
+            {filteredOptions.length === 0 ? (
+              <div className="px-3 py-4 text-center text-xs text-slate-400 font-medium">
+                일치하는 단지가 없습니다.
+              </div>
+            ) : (
+              filteredOptions.map((name, idx) => {
+                const isSelected = name === value;
+                const isHighlighted = idx === highlightedIndex;
+
+                return (
+                  <div
+                    key={`${tag}-${name}`}
+                    data-index={idx}
+                    onMouseEnter={() => setHighlightedIndex(idx)}
+                    onClick={() => handleSelect(name)}
+                    className={`px-3 py-2 text-xs cursor-pointer flex items-center justify-between transition-colors ${
+                      isHighlighted
+                        ? highlightClass
+                        : isSelected
+                        ? "bg-slate-100 font-black text-slate-900"
+                        : "text-slate-700 hover:bg-slate-50 font-medium"
+                    }`}
+                  >
+                    <span className="truncate pr-2">{name}</span>
+                    {isSelected && (
+                      <span className={`text-[11px] font-bold ${isHighlighted ? "text-white" : isNavy ? "text-[#1e3a8a]" : "text-[#7B2CBF]"}`}>
+                        ✓
+                      </span>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ==================== 주식 거래 앱 스타일 커스텀 툴팁 (모바일 최적화) ====================
 const TossStockChartTooltip = ({ active, payload, label }) => {
   if (!active || !payload || !payload.length) return null;
@@ -2468,46 +2684,34 @@ export default function TossStyleRealEstateDashboard() {
               </p>
             </div>
 
-            {/* 1:1 비교 단지 선택 컨트롤러 (모바일 flex-col 대응) */}
-            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 bg-[#F9FAFB] p-2.5 rounded-xl border border-[#E5E8EB] w-full md:w-auto box-border">
-              {/* 단지 A 선택 드롭다운 */}
-              <div className="relative flex-1 min-w-0 w-full">
-                <select
+            {/* 1:1 비교 단지 선택 컨트롤러 (실시간 검색형 콤보박스) */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 bg-[#F9FAFB] p-2.5 rounded-xl border border-[#E5E8EB] w-full md:w-[520px] box-border">
+              {/* 단지 A 실시간 검색 콤보박스 */}
+              <div className="flex-1 min-w-0 w-full">
+                <SearchableComplexCombobox
+                  tag="단지 A"
+                  theme="navy"
                   value={targetComplexA?.name || ""}
-                  onChange={(e) => setCompareComplexA(e.target.value)}
-                  className="w-full appearance-none bg-white text-xs font-extrabold text-[#1e3a8a] pl-3 pr-7 py-2 rounded-lg border border-[#0f172a]/30 shadow-2xs outline-none cursor-pointer hover:border-[#0f172a] transition-all truncate"
-                >
-                  {availableComplexNames.map((name) => (
-                    <option key={`a-${name}`} value={name}>
-                      [단지 A] {name}
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#1e3a8a] text-[10px]">
-                  ▼
-                </div>
+                  options={availableComplexNames}
+                  onChange={(val) => setCompareComplexA(val)}
+                  placeholder="단지 A 검색..."
+                />
               </div>
 
-              <div className="flex items-center justify-center py-0.5 md:py-0">
+              <div className="flex items-center justify-center py-0.5 md:py-0 shrink-0">
                 <span className="text-[11px] font-black text-[#7B2CBF] px-2 py-0.5 bg-[#7B2CBF]/10 rounded-md">VS</span>
               </div>
 
-              {/* 단지 B 선택 드롭다운 */}
-              <div className="relative flex-1 min-w-0 w-full">
-                <select
+              {/* 단지 B 실시간 검색 콤보박스 */}
+              <div className="flex-1 min-w-0 w-full">
+                <SearchableComplexCombobox
+                  tag="단지 B"
+                  theme="purple"
                   value={targetComplexB?.name || ""}
-                  onChange={(e) => setCompareComplexB(e.target.value)}
-                  className="w-full appearance-none bg-white text-xs font-extrabold text-[#7B2CBF] pl-3 pr-7 py-2 rounded-lg border border-[#7B2CBF]/30 shadow-2xs outline-none cursor-pointer hover:border-[#7B2CBF] transition-all truncate"
-                >
-                  {availableComplexNames.map((name) => (
-                    <option key={`b-${name}`} value={name}>
-                      [단지 B] {name}
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-[#7B2CBF] text-[10px]">
-                  ▼
-                </div>
+                  options={availableComplexNames}
+                  onChange={(val) => setCompareComplexB(val)}
+                  placeholder="단지 B 검색..."
+                />
               </div>
             </div>
           </div>
