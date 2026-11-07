@@ -157,8 +157,9 @@
           throw new Error("React 또는 ReactDOM 라이브러리가 로드되지 않았습니다.");
         }
 
-        // 2. TossStyleRealEstateDashboard.jsx 로드 및 컴파일
-        const dashRes = await fetch("./TossStyleRealEstateDashboard.jsx");
+        const buildVer = Date.now();
+        // 2. TossStyleRealEstateDashboard.jsx 로드 및 컴파일 (캐시 무효화 no-store & timestamp 강제 적용)
+        const dashRes = await fetch("./TossStyleRealEstateDashboard.jsx?v=" + buildVer, { cache: "no-store" });
         if (!dashRes.ok) throw new Error("TossStyleRealEstateDashboard.jsx 로드 실패: " + dashRes.status);
         const dashCode = await dashRes.text();
         const transpiledDash = Babel.transform(dashCode, {
@@ -171,8 +172,8 @@
         const DashComp = dashModule.exports.default || dashModule.exports;
         window.moduleRegistry["TossStyleRealEstateDashboard"] = DashComp;
 
-        // 3. App.jsx 로드 및 컴파일
-        const appRes = await fetch("./App.jsx");
+        // 3. App.jsx 로드 및 컴파일 (캐시 무효화 no-store & timestamp 강제 적용)
+        const appRes = await fetch("./App.jsx?v=" + buildVer, { cache: "no-store" });
         if (!appRes.ok) throw new Error("App.jsx 로드 실패: " + appRes.status);
         const appCode = await appRes.text();
         const transpiledApp = Babel.transform(appCode, {

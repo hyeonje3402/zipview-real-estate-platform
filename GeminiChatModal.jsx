@@ -77,8 +77,8 @@ export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegion
       const disambiguation = res.data?.disambiguation;
       const rawText = res.data.reply || res.data.answer || res.data.message || "데이터를 조회할 수 없습니다.";
       const cleanText = String(rawText)
-        .replace(/만원\s*만원/g, "만원")
-        .replace(/억\s*만원만원/g, "억 만원");
+        .replace(/(?:만원|만\s*원)(?:\s*(?:만원|만\s*원))+/g, "만원")
+        .replace(/억\s*만원+/g, "억");
 
       if (status === "needs_clarification" && disambiguation) {
         setPendingDisambiguation(disambiguation);

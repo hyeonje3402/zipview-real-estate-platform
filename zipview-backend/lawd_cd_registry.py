@@ -1621,21 +1621,23 @@ for item in LAWD_CD_MASTER_LIST:
 
 # ==================== 핵심 식별 및 검증 함수 ====================
 
-def resolve_lawd_cd(input_val: Optional[str]) -> Optional[str]:
+def resolve_lawd_cd(input_val: Optional[str], silent: bool = False) -> Optional[str]:
     """
     프론트엔드 또는 API 호출자로부터 전달받은 지역 코드/지역명 문자열을
     국토교통부 표준 5자리 법정동 코드(LAWD_CD)로 정규화 및 매핑합니다.
 
     매핑 성공 시: '11680' 등 5자리 문자열 반환
-    매핑 실패 시: 백엔드 콘솔에 [Mapping Error] 정확한 로그 출력 후 None 반환
+    매핑 실패 시: silent=False일 때 백엔드 콘솔에 [Mapping Error] 출력 후 None 반환
     """
     if input_val is None:
-        print('[Mapping Error] 요청된 지역명: "None"을(를) 찾을 수 없습니다.')
+        if not silent:
+            print('[Mapping Error] 요청된 지역명: "None"을(를) 찾을 수 없습니다.')
         return None
 
     raw_str = str(input_val).strip()
     if not raw_str:
-        print('[Mapping Error] 요청된 지역명: ""을(를) 찾을 수 없습니다.')
+        if not silent:
+            print('[Mapping Error] 요청된 지역명: ""을(를) 찾을 수 없습니다.')
         return None
 
     # 케이스 1: 5자리 숫자가 직접 들어온 경우
@@ -1650,7 +1652,8 @@ def resolve_lawd_cd(input_val: Optional[str]) -> Optional[str]:
             return target
 
         # 1-3. 5자리 숫자이지만 국토부 코드 테이블에 없는 경우
-        print(f'[Mapping Error] 요청된 지역명: "{raw_str}"을(를) 찾을 수 없습니다.')
+        if not silent:
+            print(f'[Mapping Error] 요청된 지역명: "{raw_str}"을(를) 찾을 수 없습니다.')
         return None
 
     # 케이스 2: 한글 지역명 또는 복합 문자열인 경우 (띄어쓰기 무관 정규화)
@@ -1666,7 +1669,8 @@ def resolve_lawd_cd(input_val: Optional[str]) -> Optional[str]:
             return code
 
     # 2-3. 최종 실패 시 필수 로그 출력
-    print(f'[Mapping Error] 요청된 지역명: "{raw_str}"을(를) 찾을 수 없습니다.')
+    if not silent:
+        print(f'[Mapping Error] 요청된 지역명: "{raw_str}"을(를) 찾을 수 없습니다.')
     return None
 
 

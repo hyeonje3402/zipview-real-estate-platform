@@ -43,11 +43,12 @@ def clean_format_korean_money(amount_manwon: Optional[int]) -> str:
     eok = amount // 10000
     rem = amount % 10000
     if eok > 0 and rem > 0:
-        return f"{eok}억 {rem:,}만원"
+        res = f"{eok}억 {rem:,}만원"
     elif eok > 0:
-        return f"{eok}억"
+        res = f"{eok}억"
     else:
-        return f"{rem:,}만원"
+        res = f"{rem:,}만원"
+    return re.sub(r"(?:만\s*원|만원)(?:\s*(?:만\s*원|만원))+", "만원", res)
 
 
 def parse_korean_number_to_manwon(text: str) -> int:
@@ -151,15 +152,46 @@ def extract_conditions_nlp(
                     max_price = parsed_val
                     max_deposit = parsed_val
 
-    # 5. 광역 시/군/구 지역 코드 및 지역명 추출
-    target_lawd_cd = current_lawd_cd
+    # 5. 광역 시/군/구 지역 코드 및 지역명 추출 (N-gram 우선 매칭으로 '인천 서구' 등 복합 지명 완벽 분별)
+    target_lawd_cd = None
     extracted_region = None
-    for word in p.split():
-        cleaned_word = re.sub(r"[^가-힣a-zA-Z0-9]", "", word)
-        if cleaned_word in NORMALIZED_NAME_TO_CODE:
-            target_lawd_cd = NORMALIZED_NAME_TO_CODE[cleaned_word]
-            extracted_region = cleaned_word
+    words = [re.sub(r"[^가-힣a-zA-Z0-9]", "", w) for w in p.split() if w.strip()]
+
+    # 5-1. 3어절 N-gram (예: "경상남도 창원시 의창구", "인천 광역시 서구")
+    for i in range(len(words) - 2):
+        cand = f"{words[i]} {words[i+1]} {words[i+2]}"
+        code = resolve_lawd_cd(cand, silent=True)
+        if code:
+            target_lawd_cd = code
+            extracted_region = get_region_name(code)
             break
+
+    # 5-2. 2어절 N-gram (예: "인천 서구", "서울 강남", "창원 의창구", "대전 서구", "광주 서구")
+    if not target_lawd_cd:
+        for i in range(len(words) - 1):
+            cand = f"{words[i]} {words[i+1]}"
+            code = resolve_lawd_cd(cand, silent=True)
+            if code:
+                target_lawd_cd = code
+                extracted_region = get_region_name(code)
+                break
+
+    # 5-3. 1어절 매칭 (단, 전국 중복 시군구인 '서구', '중구', '남구', '동구', '북구', '강서구', '고성군'은 모호성 판별을 위해 단독 매핑 배제)
+    if not target_lawd_cd:
+        ambig_single_words = {"서구", "중구", "남구", "동구", "북구", "강서구", "강서", "고성군", "고성"}
+        for w in words:
+            if w in ambig_single_words:
+                extracted_region = w
+                break
+            code = resolve_lawd_cd(w, silent=True)
+            if code:
+                target_lawd_cd = code
+                extracted_region = get_region_name(code)
+                break
+
+    # 5-4. 질문 내에 새로운 지역명이 전혀 없을 경우에만 current_lawd_cd 유지
+    if not target_lawd_cd and not extracted_region:
+        target_lawd_cd = current_lawd_cd
 
     # 6. 특정 단지명 검색
     apt_name = None
@@ -256,11 +288,17 @@ async def parse_conditions_with_openai(
         content = resp.choices[0].message.content
         data = json.loads(content)
 
-        region_code = current_lawd_cd
+        region_code = nlp_cond.get("regional_code")
         if data.get("region_name"):
-            resolved = resolve_lawd_cd(data["region_name"])
+            resolved = resolve_lawd_cd(data["region_name"], silent=True)
             if resolved:
                 region_code = resolved
+        elif nlp_cond.get("region_name") and not region_code:
+            resolved = resolve_lawd_cd(nlp_cond["region_name"], silent=True)
+            if resolved:
+                region_code = resolved
+        if not region_code:
+            region_code = current_lawd_cd
 
         # OpenAI 결과와 NLP 규칙 결과의 교차 병합 (법정동 누락 원천 방어)
         final_dong = data.get("dong_name") or nlp_cond.get("dong_name")
@@ -417,19 +455,20 @@ async def _format_briefing_response(
                 timeout=12.0
             )
             raw_text = resp.choices[0].message.content or ""
-            clean_text = re.sub(r"만원\s*만원+", "만원", raw_text)
-            clean_text = re.sub(r"억\s*만원\s*만원+", "억 만원", clean_text)
+            clean_text = re.sub(r"(?:만\s*원|만원)(?:\s*(?:만\s*원|만원))+", "만원", raw_text)
+            clean_text = re.sub(r"억\s*만원+", "억", clean_text)
             return clean_text
         except Exception as llm_err:
             print(f"⚠️ [OpenAI Completion Err]: {llm_err}")
 
     header_title = f"**요청하신 [{full_target_name}]의 거래 내역을 새로 분석했습니다.**\n\n" if is_new_region_override else f"**[{full_target_name}] 조건 부합 국토교통부 실거래 매물 분석 결과**\n\n"
-    return (
+    res_str = (
         f"{header_title}"
         f"조건에 부합하는 최근 국토교통부 실제 거래 내역 총 {len(records)}건을 데이터베이스에서 확인했습니다:\n\n"
         f"{listings_text}\n\n"
         f"※ 위 내역은 국토교통부 실거래 원장 등록 기준 실제 데이터이며, 금액 및 층수 정보가 검증되었습니다."
     )
+    return re.sub(r"(?:만\s*원|만원)(?:\s*(?:만\s*원|만원))+", "만원", res_str)
 
 
 async def run_ai_consultant(
@@ -639,7 +678,7 @@ async def run_ai_consultant(
             "new_region_label": None
         }
 
-    is_new_override = bool((current_lawd_cd and target_code != current_lawd_cd) or extracted_reg or is_followup)
+    is_new_override = bool((current_lawd_cd and target_code != current_lawd_cd) or extracted_reg or (target_code and target_code != current_lawd_cd))
     region_name = get_region_name(target_code)
 
     session_data["last_active_region"] = {
@@ -657,9 +696,13 @@ async def run_ai_consultant(
                 print(f"🔄 [Autonomous Data Injection] {region_name}({target_code}) 최신 실거래 자율 수집 실행...")
                 try:
                     from main import execute_sync_for_region
-                    await execute_sync_for_region(target_code, deal_ymd="last6")
+                    # 3초 내 신속 응답을 위해 최신 1개월(202410) 우선 동기화
+                    await execute_sync_for_region(target_code, deal_ymd="202410")
                     records = await execute_text_to_sql_query(db, conditions)
                     print(f"✅ [Autonomous Data Injection 완료] 총 {len(records)}건 매물 확보")
+                    # 나머지 5개월은 백그라운드 태스크로 추가 적재하여 타임아웃 방지
+                    import asyncio
+                    asyncio.create_task(execute_sync_for_region(target_code, deal_ymd="last6"))
                 except Exception as sync_err:
                     print(f"⚠️ [Autonomous Data Injection 예외]: {sync_err}")
         except Exception as query_err:

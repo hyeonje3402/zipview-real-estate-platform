@@ -54,3 +54,4 @@ SELECT
 FROM pg_indexes 
 WHERE tablename = 'apartment_trade'
 ORDER BY indexname;
+

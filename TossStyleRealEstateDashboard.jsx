@@ -2002,8 +2002,8 @@ export default function TossStyleRealEstateDashboard() {
       const rawAnswer = res.data?.reply || res.data?.answer || res.data?.message || "조건에 맞는 매물이 없습니다.";
       // '만원만원' 단위 중복 방지 정제 필터
       const cleanAnswer = String(rawAnswer)
-        .replace(/만원\s*만원/g, "만원")
-        .replace(/억\s*만원만원/g, "억 만원");
+        .replace(/(?:만원|만\s*원)(?:\s*(?:만원|만\s*원))+/g, "만원")
+        .replace(/억\s*만원+/g, "억");
 
       if (status === "needs_clarification" && disambiguation) {
         setPendingDisambiguation(disambiguation);
