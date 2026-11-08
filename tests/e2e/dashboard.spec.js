@@ -85,6 +85,7 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
             disambiguation: {
               keyword: '진주 남강유등축제',
               entity_type: 'landmark',
+              original_prompt: postData.prompt,
               options: [{ index: 1, label: '경상남도 진주시 (남강유등축제 인접 칠암동, 망경동, 강남동)', code: '48170', sido: '경상남도', district: '진주시' }]
             }
           })
@@ -242,6 +243,16 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
     await expect(selectSido).toHaveValue('경상남도', { timeout: 10000 });
     await expect(selectDistrict).toHaveValue('48170', { timeout: 10000 });
     await expect.poll(() => page.url(), { timeout: 10000 }).toContain('lawdCd=48170');
+
+    // AI 검색 칩: 챗봇 창을 닫아도 최초 원본 질문이 메인 화면에 표시되어야 한다
+    const chip = page.locator('[data-testid="ai-active-query-chip"]');
+    await expect(chip).toBeVisible({ timeout: 10000 });
+    await expect(chip).toContainText('AI 검색');
+    await expect(chip).toContainText('남강축제 하는곳 집세가 궁금해');
+
+    // 사용자가 드롭다운을 직접 변경하면 칩이 사라져야 한다
+    await selectDistrict.selectOption('48220');
+    await expect(chip).toHaveCount(0);
   });
 });
 

@@ -93,7 +93,8 @@ export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegion
           city_name: res.data.new_city_name || res.data.new_sido_name,
           district_name: res.data.new_district_name,
           hotspot_coord: res.data.hotspot_coord,
-          target_dongs: res.data.target_dongs
+          target_dongs: res.data.target_dongs,
+          user_message: pendingDisambiguation?.original_prompt || userMsg.text
         });
       }
 

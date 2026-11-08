@@ -1060,6 +1060,18 @@ export default function TossStyleRealEstateDashboard() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   // [스마트 자동완성 검색] 실시간 단지명/건물명 필터링 키워드
   const [searchKeyword, setSearchKeyword] = useState("");
+  // [AI 검색 컨텍스트] 챗봇으로 대시보드가 동기화되었을 때 사용자의 원본 질문을 메인 화면에 표시
+  const [aiActiveQuery, setAiActiveQuery] = useState("");
+  const aiKeywordAppliedRef = useRef(false); // AI(핫스팟 동)가 검색 키워드를 채웠는지 여부
+
+  // AI 검색 컨텍스트 초기화 (사용자가 직접 지역을 바꾸거나 칩을 닫을 때)
+  const clearAiContext = () => {
+    setAiActiveQuery("");
+    if (aiKeywordAppliedRef.current) {
+      setSearchKeyword("");
+      aiKeywordAppliedRef.current = false;
+    }
+  };
 
   // ==================== 2. 데이터 및 로딩 상태 ====================
   const [loading, setLoading] = useState(false);
@@ -1882,6 +1894,7 @@ export default function TossStyleRealEstateDashboard() {
     const newSido = e.target.value;
     setSelectedSido(newSido);
     setPendingDisambiguation(null);
+    clearAiContext();
     const districts = REGION_DATA[newSido] || [];
     if (districts.length > 0) {
       const newCode = districts[0].code;
@@ -1917,6 +1930,7 @@ export default function TossStyleRealEstateDashboard() {
   const handleLawdCdChange = (e) => {
     const newCode = e.target.value;
     setPendingDisambiguation(null);
+    clearAiContext();
     // 상태 불일치 즉시 해소 및 로딩 스켈레톤 활성화
     setSelectedMapTarget(null);
     setSelectedListing(null);
@@ -1996,6 +2010,10 @@ export default function TossStyleRealEstateDashboard() {
       // 4) 핫스팟 인접 동네(target_dongs) 우선 필터링 적용
       if (targetDongs && Array.isArray(targetDongs) && targetDongs.length > 0) {
         setSearchKeyword(targetDongs[0]);
+        aiKeywordAppliedRef.current = true;
+      } else if (aiKeywordAppliedRef.current) {
+        setSearchKeyword("");
+        aiKeywordAppliedRef.current = false;
       }
 
       // 5) 타깃 LAWD_CD 확정 -> useEffect(fetchData) 자동 트리거
@@ -2283,6 +2301,9 @@ export default function TossStyleRealEstateDashboard() {
           districtName: res.data.new_district_name,
           label: res.data.new_region_label
         }, res.data.hotspot_coord, res.data.target_dongs);
+        // 챗봇 창을 닫아도 메인 화면에 사용자의 원본 질문이 남도록 상태 저장
+        // 되묻기 확인 응답("응 맞아")이면 최초 원본 질문을, 아니면 방금 입력한 질문을 표시
+        setAiActiveQuery(pendingDisambiguation?.original_prompt || userText);
       }
 
       setChatMessages((prev) => [
@@ -2486,6 +2507,25 @@ export default function TossStyleRealEstateDashboard() {
               )}
             </div>
           </div>
+
+          {/* AI 검색 태그(Chip): 챗봇으로 동기화된 사용자의 원본 질문 표시 */}
+          {aiActiveQuery && (
+            <div className="flex items-center" data-testid="ai-active-query-chip">
+              <div className="inline-flex items-center gap-2 max-w-full bg-[#E8F3FF] border border-[#3182F6]/30 text-[#1e3a8a] rounded-full pl-3.5 pr-2 py-1.5 text-xs sm:text-sm font-bold">
+                <span className="shrink-0">🤖 AI 검색:</span>
+                <span className="truncate" title={aiActiveQuery}>'{aiActiveQuery}'</span>
+                <button
+                  type="button"
+                  onClick={clearAiContext}
+                  aria-label="AI 검색 태그 닫기"
+                  data-testid="ai-active-query-clear"
+                  className="shrink-0 w-5 h-5 rounded-full bg-white/80 hover:bg-white text-[#1e3a8a] flex items-center justify-center text-[11px] font-bold cursor-pointer"
+                >
+                  x
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* 퀵 태그 추천 버튼 */}
           <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1 text-xs">
