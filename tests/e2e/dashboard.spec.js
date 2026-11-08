@@ -335,5 +335,41 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
     // 3) B2B 제휴 매물 현황 탭 전환 확인
     await expect(page.locator('text=제휴 공인중개사 실시간 매물').first()).toBeVisible({ timeout: 10000 });
   });
+
+  test('플로팅 코파일럿(Floating Copilot): 배경 딤 없이 우측 하단에 고정 표시되고 최소화/토글이 가능해야 한다', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    const chatTriggerBtn = page.locator('[data-testid="chat-trigger-btn"]');
+    await expect(chatTriggerBtn).toBeVisible({ timeout: 15000 });
+
+    // 1. 코파일럿 열기
+    await chatTriggerBtn.click();
+
+    // 2. 우측 하단 플로팅 위젯 렌더링 검증
+    const copilotWidget = page.locator('[data-testid="ai-copilot-widget"]');
+    await expect(copilotWidget).toBeVisible({ timeout: 10000 });
+
+    // 3. 배경 딤(오버레이) 없음 확인: 뒤쪽 대시보드 셀렉터가 가려지지 않고 바로 확인 가능
+    const selectSido = page.locator('[data-testid="select-sido"]');
+    await expect(selectSido).toBeVisible();
+
+    // 4. 최소화(-) 버튼 클릭 시 위젯이 닫히고 플로팅 액션 버튼(FAB)이 다시 표시되어야 함
+    const minimizeBtn = page.locator('[data-testid="chat-minimize-btn"]');
+    await expect(minimizeBtn).toBeVisible();
+    await minimizeBtn.click();
+
+    await expect(copilotWidget).toHaveCount(0);
+    await expect(chatTriggerBtn).toBeVisible();
+
+    // 5. 다시 열기 후 닫기(X) 버튼으로 닫힘 확인
+    await chatTriggerBtn.click();
+    await expect(copilotWidget).toBeVisible();
+    const closeBtn = page.locator('[data-testid="chat-close-btn"]');
+    await expect(closeBtn).toBeVisible();
+    await closeBtn.click();
+
+    await expect(copilotWidget).toHaveCount(0);
+    await expect(chatTriggerBtn).toBeVisible();
+  });
 });
 

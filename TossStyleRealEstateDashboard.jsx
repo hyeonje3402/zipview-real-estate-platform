@@ -4027,16 +4027,21 @@ export default function TossStyleRealEstateDashboard() {
 
       {/* ========================================================================= */}
       {/* ========================================================================= */}
-      {/* 3. [요구사항 1] 부모-자식 컴포넌트 Props 체인 복구: GeminiChatModal 렌더링 */}
+      {/* 3. 우측 하단 플로팅 AI 코파일럿 토글 버튼 및 위젯                        */}
       {/* ========================================================================= */}
       <div className="fixed bottom-4 sm:bottom-6 right-3 sm:right-6 z-50 max-w-[calc(100vw-24px)] box-border">
         {!isAiOpen && (
           <button
             data-testid="chat-trigger-btn"
             onClick={() => setIsAiOpen(true)}
-            className="flex items-center gap-2 bg-[#0f172a] hover:bg-[#1e293b] text-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-full shadow-xs font-extrabold text-xs sm:text-sm transition-all transform hover:scale-105 active:scale-95 cursor-pointer"
+            aria-label="AI 코파일럿 열기"
+            className="flex items-center gap-2.5 bg-[#0f172a] hover:bg-[#1e293b] text-white pl-4 pr-5 py-3 sm:py-3.5 rounded-full shadow-lg font-extrabold text-xs sm:text-sm transition-all transform hover:scale-105 active:scale-95 cursor-pointer border border-slate-700/60"
           >
-            <span>AI 어시스턴트</span>
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <span>AI 코파일럿</span>
           </button>
         )}
       </div>
