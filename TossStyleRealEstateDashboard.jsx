@@ -2368,6 +2368,8 @@ export default function TossStyleRealEstateDashboard() {
               <div className="flex items-center flex-1 sm:flex-initial bg-[#F2F4F6] p-1 rounded-full border border-[#E5E8EB]">
                 <div className="relative flex-1 sm:flex-initial">
                   <select
+                    data-testid="select-sido"
+                    aria-label="시/도 선택"
                     value={selectedSido}
                     onChange={handleSidoChange}
                     className="w-full sm:w-auto appearance-none bg-[#F2F4F6] text-xs font-bold text-[#191F28] pl-3 pr-6 py-2 min-h-[40px] rounded-full border border-transparent outline-none cursor-pointer hover:bg-[#E5E8EB] focus:ring-2 focus:ring-[#3182F6]/30 focus:border-[#0f172a] transition-all"
@@ -2387,6 +2389,8 @@ export default function TossStyleRealEstateDashboard() {
 
                 <div className="relative flex-1 sm:flex-initial">
                   <select
+                    data-testid="select-district"
+                    aria-label="시/군/구 선택"
                     value={lawdCd}
                     onChange={handleLawdCdChange}
                     className="w-full sm:w-auto appearance-none bg-[#F2F4F6] text-xs font-bold text-[#191F28] pl-3 pr-6 py-2 min-h-[40px] rounded-full border border-transparent outline-none cursor-pointer hover:bg-[#E5E8EB] focus:ring-2 focus:ring-[#3182F6]/30 focus:border-[#0f172a] transition-all"
@@ -3813,6 +3817,7 @@ export default function TossStyleRealEstateDashboard() {
             </div>
           )}
         </section>
+        )}
           </>
         )}
       </main>
@@ -3823,6 +3828,7 @@ export default function TossStyleRealEstateDashboard() {
       <div className="fixed bottom-4 sm:bottom-6 right-3 sm:right-6 z-50 max-w-[calc(100vw-24px)] box-border">
         {!isAiOpen && (
           <button
+            data-testid="chat-trigger-btn"
             onClick={() => setIsAiOpen(true)}
             className="flex items-center gap-2 bg-[#0f172a] hover:bg-[#1e293b] text-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-full shadow-xs font-extrabold text-xs sm:text-sm transition-all transform hover:scale-105 active:scale-95"
           >
@@ -3904,6 +3910,7 @@ export default function TossStyleRealEstateDashboard() {
             {/* 입력 폼 */}
             <form onSubmit={handleAiSubmit} className="p-2.5 sm:p-3 bg-white border-t border-[#E5E8EB] flex gap-2">
               <input
+                data-testid="chat-input"
                 type="text"
                 placeholder="궁금한 단지명이나 시세를 물어보세요..."
                 value={chatPrompt}
@@ -3911,6 +3918,7 @@ export default function TossStyleRealEstateDashboard() {
                 className="flex-1 bg-[#F2F4F6] text-xs px-3.5 py-2.5 rounded-full border border-transparent outline-none focus:border-[#0f172a] focus:bg-white transition-all font-medium"
               />
               <button
+                data-testid="chat-submit-btn"
                 type="submit"
                 disabled={!chatPrompt.trim() || aiLoading}
                 className="bg-[#0f172a] text-white w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs disabled:opacity-40 hover:bg-[#1e293b] transition-all shrink-0"

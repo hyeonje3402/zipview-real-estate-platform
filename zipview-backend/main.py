@@ -809,6 +809,7 @@ async def chat_with_multi_llm(req: ChatRequest, db: AsyncSession = Depends(get_d
         "disambiguation": None,
         "override_region": is_override,
         "new_regional_code": new_code,
+        "new_lawd_cd": new_code,
         "new_region_label": new_label,
         "new_city_name": new_city,
         "new_sido_name": new_sido,

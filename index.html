@@ -75,7 +75,8 @@
   </script>
 
   <style>
-    html, body {
+    html,
+    body {
       overflow-x: hidden;
       width: 100%;
       max-width: 100vw;
@@ -129,7 +130,8 @@
   <!-- Axios HTTP Client -->
   <script src="https://cdn.jsdelivr.net/npm/axios@1.6.8/dist/axios.min.js"></script>
   <!-- Kakao Maps JavaScript API SDK (services 라이브러리 포함 & autoload=false SPA 안전 로드) -->
-  <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=aa2d1500d7b8a140be177761d62f4384&libraries=services&autoload=false"></script>
+  <script type="text/javascript"
+    src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=aa2d1500d7b8a140be177761d62f4384&libraries=services&autoload=false"></script>
   <!-- Babel Standalone (JSX 런타임 트랜스파일러) -->
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.24.4/babel.min.js"></script>
 </head>
@@ -156,7 +158,7 @@
   <script>
     // 브라우저 런타임 CommonJS / ESM Interop Shim
     window.moduleRegistry = {};
-    window.require = function(mod) {
+    window.require = function (mod) {
       if (mod === "react") return window.React;
       if (mod === "react-dom" || mod === "react-dom/client") return window.ReactDOM;
       if (mod === "recharts") return window.Recharts || {};

@@ -244,7 +244,7 @@ async def parse_conditions_with_openai(
 
     try:
         from openai import AsyncOpenAI
-        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY, timeout=5.0)
 
         context_hint = ""
         if session_context:
@@ -422,7 +422,7 @@ async def _format_briefing_response(
     if OPENAI_API_KEY and model_choice.lower() in ["gpt", "openai"]:
         try:
             from openai import AsyncOpenAI
-            client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+            client = AsyncOpenAI(api_key=OPENAI_API_KEY, timeout=5.0)
             target_dong_str = f"법정동: {conditions.get('dong_name')}" if conditions.get('dong_name') else "전체 동"
             target_apt_str = f", 단지명={conditions.get('apt_name')}" if conditions.get('apt_name') else ""
             rag_prompt = (
@@ -579,6 +579,7 @@ async def run_ai_consultant(
                 "reply": empty_msg,
                 "override_region": True,
                 "new_regional_code": target_code,
+                "new_lawd_cd": target_code,
                 "new_region_label": resolved_label,
                 "new_city_name": sido_name,
                 "new_sido_name": sido_name,
@@ -615,6 +616,7 @@ async def run_ai_consultant(
             "reply": briefing_text,
             "override_region": True,
             "new_regional_code": target_code,
+            "new_lawd_cd": target_code,
             "new_region_label": resolved_label,
             "new_city_name": sido_name,
             "new_sido_name": sido_name,
@@ -747,6 +749,7 @@ async def run_ai_consultant(
             "reply": f"{empty_lead}요청하신 조건({cond_desc})에 해당하는 최근 국토교통부 실거래 내역이 데이터베이스에 없습니다.",
             "override_region": is_new_override,
             "new_regional_code": target_code,
+            "new_lawd_cd": target_code,
             "new_region_label": region_name,
             "new_city_name": sido_name,
             "new_sido_name": sido_name,
@@ -784,6 +787,7 @@ async def run_ai_consultant(
         "reply": briefing_text,
         "override_region": is_new_override,
         "new_regional_code": target_code,
+        "new_lawd_cd": target_code,
         "new_region_label": region_name,
         "new_city_name": sido_name,
         "new_sido_name": sido_name,
