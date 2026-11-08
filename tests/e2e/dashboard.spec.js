@@ -75,7 +75,24 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
       const postData = route.request().postDataJSON() || {};
       const prompt = postData.prompt || postData.query || '';
 
-      if (prompt.includes('월세 매물')) {
+      if (prompt.includes('김해시')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'success',
+            reply: '요청하신 [경상남도 김해시]의 원룸 매물을 분석했습니다.',
+            new_regional_code: '48250',
+            new_lawd_cd: '48250',
+            new_city_name: '경상남도',
+            new_district_name: '김해시',
+            new_region_label: '경상남도 김해시',
+            override_region: true,
+            target_view: 'B2B',
+            trade_type: '월세'
+          })
+        });
+      } else if (prompt.includes('월세 매물')) {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -295,6 +312,28 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
 
     // 3) 거래 유형 필터가 월세로 자동 세팅 (활성 필터 버튼은 어두운 배경)
     await expect(page.locator('button.bg-\\[\\#191F28\\]', { hasText: '월세' }).first()).toBeVisible({ timeout: 10000 });
+  });
+
+  test('사용자가 "김해시 원룸 매물이 보고싶어" 입력 시 GeminiChatModal에서 onDashboardSync가 호출되어 김해시(48250) 및 B2B 탭으로 강제 전환되어야 한다', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    const selectSido = page.locator('[data-testid="select-sido"]');
+    const selectDistrict = page.locator('[data-testid="select-district"]');
+    await expect(selectSido).toBeVisible({ timeout: 15000 });
+
+    await page.locator('[data-testid="chat-trigger-btn"]').click();
+    await page.locator('[data-testid="chat-input"]').fill('김해시 원룸 매물이 보고싶어');
+    await page.locator('[data-testid="chat-submit-btn"]').click();
+
+    // 1) 지역 드롭다운 동기화 (경상남도 김해시)
+    await expect(selectSido).toHaveValue('경상남도', { timeout: 10000 });
+    await expect(selectDistrict).toHaveValue('48250', { timeout: 10000 });
+
+    // 2) URL 파라미터 lawdCd=48250 갱신
+    await expect.poll(() => page.url(), { timeout: 10000 }).toContain('lawdCd=48250');
+
+    // 3) B2B 제휴 매물 현황 탭 전환 확인
+    await expect(page.locator('text=제휴 공인중개사 실시간 매물').first()).toBeVisible({ timeout: 10000 });
   });
 });
 

@@ -6,7 +6,8 @@ import axios from "axios";
  * - 국토교통부 실거래 원장 데이터 및 시장 분석 LLM 연동
  * - 간결하고 정제된 실무 인터페이스 및 타이포그래피 정보 위계 적용
  */
-export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegionLabel, onDashboardSync }) {
+export default function GeminiChatModal(props) {
+  const { isOpen, onClose, lawdCd, currentRegionLabel, onDashboardSync } = props || {};
   const activeRegion = currentRegionLabel || "현재 지역";
 
   const [messages, setMessages] = useState([
@@ -71,7 +72,10 @@ export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegion
         selected_option: selectedOption || undefined
       };
 
-      const res = await axios.post("https://zipview-real-estate-platform.onrender.com/api/chat", payload);
+      const apiBase = (typeof window !== "undefined" && window.ZIPVIEW_API_URL)
+        ? window.ZIPVIEW_API_URL
+        : "https://zipview-real-estate-platform.onrender.com";
+      const res = await axios.post(`${apiBase}/api/chat`, payload, { timeout: 35000 });
 
       const status = res.data?.status;
       const disambiguation = res.data?.disambiguation;
@@ -86,25 +90,16 @@ export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegion
         setPendingDisambiguation(null);
       }
 
-      // 챗봇 응답을 부모 대시보드의 전역 UI 제어 콜백으로 즉시 전달 (지역 + 탭 + 거래유형 필터 + 원본 질문)
+      // [요구사항 3] 챗봇 자식 컴포넌트의 이벤트 트리거 확인:
+      // 백엔드 응답을 수신했을 때 반드시 props.onDashboardSync(res.new_lawd_cd, res.target_view, res.trade_type, user_message) 100% 호출
       const newLawdCd = res.data?.new_lawd_cd || res.data?.new_regional_code;
-      if (status !== "needs_clarification" && typeof onDashboardSync === "function") {
-        const regionInfo = newLawdCd
-          ? {
-              code: newLawdCd,
-              label: res.data.new_region_label,
-              sidoName: res.data.new_city_name || res.data.new_sido_name,
-              districtName: res.data.new_district_name,
-              hotspotCoord: res.data.hotspot_coord,
-              targetDongs: res.data.target_dongs
-            }
-          : null;
-        onDashboardSync(
-          regionInfo,
-          res.data?.target_view,
-          res.data?.trade_type,
-          pendingDisambiguation?.original_prompt || userMsg.text
-        );
+      const targetView = res.data?.target_view;
+      const tradeType = res.data?.trade_type;
+      const userMessage = pendingDisambiguation?.original_prompt || userMsg.text;
+
+      const syncCallback = props?.onDashboardSync || onDashboardSync || props?.onRegionSync || props?.onRegionOverride;
+      if (status !== "needs_clarification" && typeof syncCallback === "function") {
+        syncCallback(newLawdCd, targetView, tradeType, userMessage, res.data);
       }
 
       const aiMsg = {
@@ -416,6 +411,7 @@ export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegion
           }}
         >
           <input
+            data-testid="chat-input"
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -432,6 +428,7 @@ export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegion
             }}
           />
           <button
+            data-testid="chat-submit-btn"
             type="submit"
             disabled={loading || !input.trim()}
             style={{

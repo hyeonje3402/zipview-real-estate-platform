@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import axios from "axios";
+import GeminiChatModal from "./GeminiChatModal";
+
+// [Props 체인 복구] GeminiChatModal 브라우저/번들러 런타임 호환 리졸버
+const ResolvedGeminiChatModal = (typeof GeminiChatModal !== "undefined" && GeminiChatModal)
+  ? (GeminiChatModal.default || GeminiChatModal)
+  : ((typeof window !== "undefined" && window.moduleRegistry && window.moduleRegistry["GeminiChatModal"])
+    ? (window.moduleRegistry["GeminiChatModal"].default || window.moduleRegistry["GeminiChatModal"])
+    : null);
 
 // Recharts 순정 컴포넌트 직접 구조분해할당 (window.Recharts UMD)
 const {
@@ -1019,6 +1027,20 @@ export default function TossStyleRealEstateDashboard() {
   // ==================== 1. 전국 지역 상태 (lawdCd 필수 바인딩) ====================
   // ==================== 1. [B2B 확장] View Mode (실거래가 vs 현재 매물 Demo) ====================
   const [viewMode, setViewMode] = useState("transaction"); // "transaction" | "listing"
+  // [B2B 탭 제어] activeTab 상태 ('실거래 원장 분석' | 'B2B 제휴 매물 현황')
+  const [activeTab, setActiveTabState] = useState("실거래 원장 분석");
+
+  const setActiveTab = useCallback((tabName) => {
+    const str = String(tabName || "").trim();
+    if (str === "B2B" || str.includes("B2B") || str.includes("제휴") || str === "listing") {
+      setActiveTabState("B2B 제휴 매물 현황");
+      setViewMode("listing");
+    } else {
+      setActiveTabState("실거래 원장 분석");
+      setViewMode("transaction");
+    }
+    setSelectedListing(null);
+  }, []);
   const [selectedListing, setSelectedListing] = useState(null);
   const [listingPropertyFilter, setListingPropertyFilter] = useState("all");
   const [listingTradeFilter, setListingTradeFilter] = useState("all");
@@ -2034,33 +2056,130 @@ export default function TossStyleRealEstateDashboard() {
     return false;
   }, [lawdCd, selectedSido, showToast]);
 
-  // 챗봇 → 대시보드 전역 UI 제어: 지역 + 탭(viewMode) + 거래유형 필터 + AI 검색 칩을 한 번에 동기화
-  const applyDashboardSync = useCallback((regionInfo, targetView, tradeType, userMessage) => {
-    const hasRegion = Boolean(regionInfo && (regionInfo.code || regionInfo.sidoName || regionInfo.districtName));
-    if (hasRegion) {
-      applyRegionSwitch(regionInfo, regionInfo.hotspotCoord, regionInfo.targetDongs);
+  // =========================================================================
+  // [요구사항 2] 부모 컴포넌트 전역 상태 동기화 콜백 (onDashboardSync)
+  // - 챗봇 응답에 new_lawd_cd가 있으면 setLawdCd 및 history.replaceState 동기화
+  // - 챗봇 응답에 target_view: "B2B" 감지 시 setActiveTab('B2B 제휴 매물 현황') 강제 실행
+  // - trade_type 감지 시 거래 유형 필터 자동 세팅
+  // - GeminiChatModal(자식) 및 내부 채팅 양쪽에서 100% 호출 호환
+  // =========================================================================
+  const onDashboardSync = useCallback((newLawdCdOrRegion, targetView, tradeType, userMessage, rawPayload = null) => {
+    let targetCode = null;
+    let targetSido = null;
+    let targetDist = null;
+    let targetLabel = null;
+    let hotspotCoord = null;
+    let targetDongs = null;
+
+    if (typeof newLawdCdOrRegion === "object" && newLawdCdOrRegion !== null) {
+      targetCode = newLawdCdOrRegion.code || newLawdCdOrRegion.new_lawd_cd || newLawdCdOrRegion.new_regional_code;
+      targetSido = newLawdCdOrRegion.sidoName || newLawdCdOrRegion.new_city_name || newLawdCdOrRegion.new_sido_name;
+      targetDist = newLawdCdOrRegion.districtName || newLawdCdOrRegion.new_district_name;
+      targetLabel = newLawdCdOrRegion.label || newLawdCdOrRegion.new_region_label;
+      hotspotCoord = newLawdCdOrRegion.hotspotCoord || newLawdCdOrRegion.hotspot_coord;
+      targetDongs = newLawdCdOrRegion.targetDongs || newLawdCdOrRegion.target_dongs;
+    } else if (newLawdCdOrRegion) {
+      targetCode = String(newLawdCdOrRegion).trim();
     }
 
-    // 1) 활성 탭 강제 전환 (예: target_view "B2B" -> "B2B 제휴 매물 현황" 탭)
-    const nextMode = targetView ? VIEW_MODE_BY_TARGET[String(targetView).trim().toUpperCase()] : null;
-    if (nextMode) {
-      setViewMode(nextMode);
-      setSelectedListing(null);
+    if (rawPayload && typeof rawPayload === "object") {
+      if (!targetCode) targetCode = rawPayload.new_lawd_cd || rawPayload.new_regional_code;
+      if (!targetSido) targetSido = rawPayload.new_city_name || rawPayload.new_sido_name;
+      if (!targetDist) targetDist = rawPayload.new_district_name;
+      if (!targetLabel) targetLabel = rawPayload.new_region_label;
+      if (!hotspotCoord) hotspotCoord = rawPayload.hotspot_coord;
+      if (!targetDongs) targetDongs = rawPayload.target_dongs;
     }
 
-    // 2) 거래 유형 필터 자동 세팅 (실거래 원장 / 제휴 매물 양쪽 필터 모두) -> fetch useEffect 가 자동 리패칭
-    const nextTrade = tradeType && TRADE_FILTER_IDS.includes(String(tradeType).trim()) ? String(tradeType).trim() : null;
-    if (nextTrade) {
-      setTradeTypeFilter(nextTrade);
-      setListingTradeFilter(nextTrade);
+    // 1) 지역 코드 동기화 및 history.replaceState (UI & URL 동기화)
+    if (targetCode) {
+      const resolved = resolveRegionFromData({
+        code: targetCode,
+        sidoName: targetSido,
+        districtName: targetDist,
+        label: targetLabel
+      });
+
+      if (resolved) {
+        setSelectedSido(resolved.sido);
+        setLawdCd(resolved.code);
+
+        // 이전 지역 잔존 데이터 초기화 및 로딩 시작
+        if (circleRef.current) {
+          circleRef.current.setMap(null);
+          circleRef.current = null;
+        }
+        setSelectedMapTarget(null);
+        setSelectedListing(null);
+        setLoading(true);
+        setFetchError(null);
+        setRawTrades([]);
+        setChartData([]);
+        setTotalCount(0);
+        setAllBuildings([]);
+        setComplexSummaryMap({});
+        setSummaryInfo({
+          totalCount: 0,
+          latestTradePrice: "-",
+          latestJeonsePrice: "-",
+          lastSyncedAt: "-"
+        });
+        setTablePage(1);
+
+        try {
+          const url = new URL(window.location.href);
+          url.searchParams.set("lawdCd", resolved.code);
+          url.searchParams.set("region", resolved.label);
+          window.history.replaceState({ lawdCd: resolved.code, region: resolved.label }, "", url.toString());
+        } catch (_) {}
+
+        if (hotspotCoord && hotspotCoord.lat && hotspotCoord.lng) {
+          const hCoord = { lat: Number(hotspotCoord.lat), lng: Number(hotspotCoord.lng) };
+          setRegionCoords(hCoord);
+          try {
+            if (mapInstanceRef.current && window.kakao && window.kakao.maps) {
+              mapInstanceRef.current.setCenter(new window.kakao.maps.LatLng(hCoord.lat, hCoord.lng));
+              mapInstanceRef.current.setLevel(4);
+            }
+          } catch (_) {}
+        } else if (REGION_CENTERS[resolved.code]) {
+          setRegionCoords(REGION_CENTERS[resolved.code]);
+        }
+
+        if (targetDongs && Array.isArray(targetDongs) && targetDongs.length > 0) {
+          setSearchKeyword(targetDongs[0]);
+          aiKeywordAppliedRef.current = true;
+        }
+
+        if (typeof showToast === "function") {
+          showToast(`[${resolved.label}] 분석 대시보드로 전환되었습니다.`);
+        }
+      }
+    }
+
+    // 2) target_view: "B2B" 감지 시 setActiveTab('B2B 제휴 매물 현황') 강제 실행
+    const viewStr = String(targetView || "").toUpperCase();
+    if (viewStr === "B2B" || viewStr.includes("B2B") || viewStr.includes("제휴") || viewStr === "LISTING") {
+      setActiveTab("B2B 제휴 매물 현황");
+    } else if (viewStr === "TRANSACTION" || viewStr.includes("실거래") || viewStr === "원장") {
+      setActiveTab("실거래 원장 분석");
+    }
+
+    // 3) 거래 유형 필터 (trade_type) 자동 세팅
+    if (tradeType && TRADE_FILTER_IDS.includes(String(tradeType).trim())) {
+      const tVal = String(tradeType).trim();
+      setTradeTypeFilter(tVal);
+      setListingTradeFilter(tVal);
       setTablePage(1);
     }
 
-    // 3) 챗봇 창을 닫아도 사용자의 원본 질문 표시
-    if (userMessage && (hasRegion || nextMode || nextTrade)) {
+    // 4) AI 검색 칩 질문 표시
+    if (userMessage) {
       setAiActiveQuery(userMessage);
     }
-  }, [applyRegionSwitch]);
+  }, [setActiveTab, showToast]);
+
+  const applyDashboardSync = onDashboardSync;
 
   // ==================== [핵심 1] 주식 스타일 차트 데이터 보강 ====================
   // 전월 대비 매매가/전세가 등락액 및 등락률(▲▼) 사전 계산
@@ -2415,7 +2534,7 @@ export default function TossStyleRealEstateDashboard() {
             <div className="flex items-center bg-[#F2F4F6] p-1 rounded-full border border-[#E5E8EB] justify-center">
               <button
                 onClick={() => {
-                  setViewMode("transaction");
+                  setActiveTab("실거래 원장 분석");
                   showToast("[실거래가 분석] 국토교통부 3개년 실거래 원장 데이터를 표시합니다.");
                 }}
                 className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 min-h-[42px] rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${viewMode === "transaction"
@@ -2427,7 +2546,7 @@ export default function TossStyleRealEstateDashboard() {
               </button>
               <button
                 onClick={() => {
-                  setViewMode("listing");
+                  setActiveTab("B2B 제휴 매물 현황");
                   showToast("[제휴 매물 현황] B2B 제휴 중개사 현장 확인 매물을 표시합니다.");
                 }}
                 className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 min-h-[42px] rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${viewMode === "listing"
@@ -3907,110 +4026,33 @@ export default function TossStyleRealEstateDashboard() {
       </main>
 
       {/* ========================================================================= */}
-      {/* 3. 토스 고객센터 스타일 플로팅 AI 상담 챗 모달                             */}
+      {/* ========================================================================= */}
+      {/* 3. [요구사항 1] 부모-자식 컴포넌트 Props 체인 복구: GeminiChatModal 렌더링 */}
       {/* ========================================================================= */}
       <div className="fixed bottom-4 sm:bottom-6 right-3 sm:right-6 z-50 max-w-[calc(100vw-24px)] box-border">
         {!isAiOpen && (
           <button
             data-testid="chat-trigger-btn"
             onClick={() => setIsAiOpen(true)}
-            className="flex items-center gap-2 bg-[#0f172a] hover:bg-[#1e293b] text-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-full shadow-xs font-extrabold text-xs sm:text-sm transition-all transform hover:scale-105 active:scale-95"
+            className="flex items-center gap-2 bg-[#0f172a] hover:bg-[#1e293b] text-white px-4 sm:px-5 py-3 sm:py-3.5 rounded-full shadow-xs font-extrabold text-xs sm:text-sm transition-all transform hover:scale-105 active:scale-95 cursor-pointer"
           >
             <span>AI 어시스턴트</span>
           </button>
         )}
-
-        {isAiOpen && (
-          <div className="w-[calc(100vw-24px)] max-w-[360px] sm:w-[400px] h-[480px] sm:h-[520px] bg-white rounded-xl shadow-sm border border-[#E5E8EB] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 box-border">
-            {/* AI 모달 상단 헤더 */}
-            <div className="bg-[#0f172a] text-white px-4 sm:px-5 py-3.5 sm:py-4 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-sm">
-                  AI
-                </div>
-                <div>
-                  <h4 className="font-bold text-xs sm:text-sm leading-tight text-white">부동산 시장 분석 어시스턴트</h4>
-                  <p className="text-[10px] sm:text-[11px] text-slate-300">{currentRegionLabel} 원장 데이터 분석</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsAiOpen(false)}
-                className="w-7 h-7 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-semibold text-white transition-all cursor-pointer"
-                title="닫기"
-              >
-                x
-              </button>
-            </div>
-
-            {/* 대화 내역 스크롤 영역 */}
-            <div className="flex-1 p-3.5 sm:p-4 overflow-y-auto space-y-3 bg-[#F9FAFB] text-xs">
-              {chatMessages.map((m, i) => (
-                <div
-                  key={i}
-                  className={`flex flex-col ${m.sender === "user" ? "items-end" : "items-start"
-                    }`}
-                >
-                  <div
-                    className={`max-w-[85%] px-3.5 py-2.5 rounded-xl whitespace-pre-wrap leading-relaxed ${m.sender === "user"
-                        ? "bg-[#0f172a] text-white rounded-br-none"
-                        : "bg-white text-[#191F28] border border-[#E5E8EB] rounded-bl-none shadow-2xs"
-                      }`}
-                  >
-                    {m.text}
-                  </div>
-                  {/* 동음이의어 되묻기 선택지 버튼 목록 */}
-                  {m.options && m.options.length > 0 && (
-                    <div className="flex flex-col gap-1.5 mt-2 w-full max-w-[85%]">
-                      {m.options.map((opt) => (
-                        <button
-                          key={opt.index}
-                          type="button"
-                          onClick={() => handleAiSubmit(null, `${opt.index}번 ${opt.label}`, opt)}
-                          disabled={aiLoading}
-                          className="w-full text-left px-3 py-2 bg-white hover:bg-slate-50 border border-slate-200 hover:border-[#0f172a] rounded-lg text-xs font-semibold text-[#0f172a] transition-all shadow-2xs flex items-center justify-between group cursor-pointer disabled:opacity-50"
-                        >
-                          <span>{opt.index}. {opt.label}</span>
-                          <span className="text-[10px] text-slate-400 group-hover:text-[#0f172a] font-bold">선택 →</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <span className="text-[10px] text-[#8B95A1] mt-1 px-1">{m.time}</span>
-                </div>
-              ))}
-              {aiLoading && (
-                <div className="flex items-center gap-1.5 bg-white text-[#8B95A1] px-4 py-2.5 rounded-xl border border-[#E5E8EB] w-fit text-[11px]">
-                  <div className="w-2 h-2 rounded-full bg-[#0f172a] animate-bounce"></div>
-                  <div className="w-2 h-2 rounded-full bg-[#0f172a] animate-bounce delay-100"></div>
-                  <div className="w-2 h-2 rounded-full bg-[#0f172a] animate-bounce delay-200"></div>
-                  <span className="ml-1">데이터 분석 브리핑 작성 중...</span>
-                </div>
-              )}
-              <div ref={chatBottomRef}></div>
-            </div>
-
-            {/* 입력 폼 */}
-            <form onSubmit={handleAiSubmit} className="p-2.5 sm:p-3 bg-white border-t border-[#E5E8EB] flex gap-2">
-              <input
-                data-testid="chat-input"
-                type="text"
-                placeholder="궁금한 단지명이나 시세를 물어보세요..."
-                value={chatPrompt}
-                onChange={(e) => setChatPrompt(e.target.value)}
-                className="flex-1 bg-[#F2F4F6] text-xs px-3.5 py-2.5 rounded-full border border-transparent outline-none focus:border-[#0f172a] focus:bg-white transition-all font-medium"
-              />
-              <button
-                data-testid="chat-submit-btn"
-                type="submit"
-                disabled={!chatPrompt.trim() || aiLoading}
-                className="bg-[#0f172a] text-white w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs disabled:opacity-40 hover:bg-[#1e293b] transition-all shrink-0"
-              >
-                ↑
-              </button>
-            </form>
-          </div>
-        )}
       </div>
+
+      {isAiOpen && (
+        (ResolvedGeminiChatModal || GeminiChatModal) ? (
+          React.createElement(ResolvedGeminiChatModal || GeminiChatModal, {
+            isOpen: isAiOpen,
+            onClose: () => setIsAiOpen(false),
+            lawdCd: lawdCd,
+            currentRegionLabel: currentRegionLabel,
+            onDashboardSync: onDashboardSync,
+            onRegionSync: onDashboardSync
+          })
+        ) : null
+      )}
 
       {/* ========================================================================= */}
       {/* 4. 하단 플로팅 토스트 메시지                                              */}

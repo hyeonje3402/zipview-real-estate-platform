@@ -164,6 +164,11 @@
       if (mod === "recharts") return window.Recharts || {};
       if (mod === "axios") return window.axios;
       if (mod === "lucide" || mod === "lucide-react") return window.lucide || {};
+      if (mod === "./GeminiChatModal" || mod.endsWith("GeminiChatModal")) {
+        const comp = window.moduleRegistry["GeminiChatModal"];
+        const actual = (comp && comp.__esModule && comp.default) ? comp.default : (comp && comp.default ? comp.default : comp);
+        return { __esModule: true, default: actual, GeminiChatModal: actual };
+      }
       if (mod === "./TossStyleRealEstateDashboard" || mod.endsWith("TossStyleRealEstateDashboard")) {
         const comp = window.moduleRegistry["TossStyleRealEstateDashboard"];
         const actual = (comp && comp.__esModule && comp.default) ? comp.default : (comp && comp.default ? comp.default : comp);
@@ -191,6 +196,24 @@
         }
 
         const buildVer = Date.now();
+        // 2-0. GeminiChatModal.jsx 로드 및 컴파일 (부모-자식 컴포넌트 Props 체인 보장)
+        try {
+          const chatRes = await fetch("./GeminiChatModal.jsx?v=" + buildVer, { cache: "no-store" });
+          if (chatRes.ok) {
+            const chatCode = await chatRes.text();
+            const transpiledChat = Babel.transform(chatCode, {
+              presets: ["react", ["env", { modules: "commonjs" }]]
+            }).code;
+            const chatModule = { exports: {} };
+            const chatFn = new Function("require", "module", "exports", transpiledChat);
+            chatFn(window.require, chatModule, chatModule.exports);
+            const ChatComp = chatModule.exports.default || chatModule.exports;
+            window.moduleRegistry["GeminiChatModal"] = ChatComp;
+          }
+        } catch (chatErr) {
+          console.warn("[ZipView] GeminiChatModal 로드 예외:", chatErr);
+        }
+
         // 2. TossStyleRealEstateDashboard.jsx 로드 및 컴파일 (캐시 무효화 no-store & timestamp 강제 적용)
         const dashRes = await fetch("./TossStyleRealEstateDashboard.jsx?v=" + buildVer, { cache: "no-store" });
         if (!dashRes.ok) throw new Error("TossStyleRealEstateDashboard.jsx 로드 실패: " + dashRes.status);

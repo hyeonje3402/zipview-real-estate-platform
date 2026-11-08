@@ -10,7 +10,8 @@ __pycache__/
 .env.example
 *.zip
 *.docx
-*.txt
+# robots.txt 는 build.js 의 필수 입력 파일이므로 배포에 포함해야 함 (전체 *.txt 제외 금지)
+집뷰_*.txt
 *.bat
 scratch/
 scripts/

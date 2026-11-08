@@ -16,6 +16,7 @@ fs.mkdirSync(distDir, { recursive: true });
 const requiredFiles = [
   'index.html',
   'TossStyleRealEstateDashboard.jsx',
+  'GeminiChatModal.jsx',
   'App.jsx',
   'styles.css',
   'robots.txt',
