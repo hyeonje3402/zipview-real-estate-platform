@@ -1980,10 +1980,14 @@ export default function TossStyleRealEstateDashboard() {
       if (hotspotCoord && hotspotCoord.lat && hotspotCoord.lng) {
         const hCoord = { lat: Number(hotspotCoord.lat), lng: Number(hotspotCoord.lng) };
         setRegionCoords(hCoord);
-        if (kakaoMapRef.current && window.kakao && window.kakao.maps) {
-          const moveLatLon = new window.kakao.maps.LatLng(hCoord.lat, hCoord.lng);
-          kakaoMapRef.current.setCenter(moveLatLon);
-          kakaoMapRef.current.setLevel(4);
+        try {
+          if (mapInstanceRef.current && window.kakao && window.kakao.maps) {
+            const moveLatLon = new window.kakao.maps.LatLng(hCoord.lat, hCoord.lng);
+            mapInstanceRef.current.setCenter(moveLatLon);
+            mapInstanceRef.current.setLevel(4);
+          }
+        } catch (mapErr) {
+          console.warn("[Region Switch] 지도 중심 이동 실패:", mapErr);
         }
       } else if (REGION_CENTERS[code]) {
         setRegionCoords(REGION_CENTERS[code]);
@@ -2271,9 +2275,10 @@ export default function TossStyleRealEstateDashboard() {
       }
 
       // 프론트엔드 종속성 완전 차단: 백엔드 챗봇에서 확정/전환된 타겟 지역으로 대시보드 상태 자율 오버라이드 (전국 252개 시/군/구 정규화 매핑)
-      if (res.data?.override_region && (res.data?.new_regional_code || res.data?.new_city_name || res.data?.new_district_name)) {
+      const newCode = res.data?.new_lawd_cd || res.data?.new_regional_code;
+      if (status !== "needs_clarification" && (res.data?.override_region || newCode) && (newCode || res.data?.new_city_name || res.data?.new_district_name)) {
         applyRegionSwitch({
-          code: res.data.new_regional_code,
+          code: newCode,
           sidoName: res.data.new_city_name || res.data.new_sido_name,
           districtName: res.data.new_district_name,
           label: res.data.new_region_label

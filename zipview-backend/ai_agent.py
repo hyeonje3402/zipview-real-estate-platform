@@ -1001,7 +1001,7 @@ async def run_ai_consultant(
         return {
             "status": "success",
             "reply": f"{empty_lead}요청하신 조건({cond_desc})에 해당하는 최근 국토교통부 실거래 내역이 데이터베이스에 없습니다.",
-            "override_region": is_new_override,
+            "override_region": bool(target_code),
             "new_regional_code": target_code,
             "new_lawd_cd": target_code,
             "new_region_label": region_name,
@@ -1048,7 +1048,7 @@ async def run_ai_consultant(
     return {
         "status": "success",
         "reply": briefing_text,
-        "override_region": is_new_override,
+        "override_region": bool(target_code),
         "new_regional_code": target_code,
         "new_lawd_cd": target_code,
         "new_region_label": region_name,

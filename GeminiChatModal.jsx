@@ -86,10 +86,14 @@ export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegion
         setPendingDisambiguation(null);
       }
 
-      if (res.data?.override_region && typeof onRegionOverride === "function") {
-        onRegionOverride(res.data.new_regional_code, res.data.new_region_label, {
+      // new_lawd_cd 가 존재하면 무조건 부모 대시보드의 지역 변경 콜백을 즉시 실행 (State Lifting)
+      const newLawdCd = res.data?.new_lawd_cd || res.data?.new_regional_code;
+      if (status !== "needs_clarification" && newLawdCd && typeof onRegionOverride === "function") {
+        onRegionOverride(newLawdCd, res.data.new_region_label, {
           city_name: res.data.new_city_name || res.data.new_sido_name,
-          district_name: res.data.new_district_name
+          district_name: res.data.new_district_name,
+          hotspot_coord: res.data.hotspot_coord,
+          target_dongs: res.data.target_dongs
         });
       }
 

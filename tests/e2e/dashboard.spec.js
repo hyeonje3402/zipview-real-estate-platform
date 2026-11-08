@@ -75,7 +75,38 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
       const postData = route.request().postDataJSON() || {};
       const prompt = postData.prompt || postData.query || '';
 
-      if (prompt.includes('혁샌도시') || prompt.includes('혁신도시')) {
+      if (prompt.includes('남강축제')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'needs_clarification',
+            reply: '혹시 진주 남강유등축제가 열리는 경상남도 진주시 일대의 매물을 찾으시나요?',
+            disambiguation: {
+              keyword: '진주 남강유등축제',
+              entity_type: 'landmark',
+              options: [{ index: 1, label: '경상남도 진주시 (남강유등축제 인접 칠암동, 망경동, 강남동)', code: '48170', sido: '경상남도', district: '진주시' }]
+            }
+          })
+        });
+      } else if (prompt.includes('응 맞아') || postData.selected_option) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'success',
+            reply: '요청하신 [경상남도 진주시]의 거래 내역을 새로 분석했습니다.',
+            new_regional_code: '48170',
+            new_lawd_cd: '48170',
+            new_city_name: '경상남도',
+            new_district_name: '진주시',
+            new_region_label: '경상남도 진주시',
+            override_region: true,
+            target_dongs: ['칠암동', '망경동', '강남동', '본성동'],
+            hotspot_coord: { lat: 35.1804, lng: 128.0872 }
+          })
+        });
+      } else if (prompt.includes('혁샌도시') || prompt.includes('혁신도시')) {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -188,6 +219,29 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
       message: '브라우저 URL 파라미터에 lawdCd=48170이 포함되어야 합니다',
       timeout: 10000
     }).toContain('lawdCd=48170');
+  });
+
+  test('랜드마크 \"남강축제 하는곳 집세가 궁금해\" 되묻기 후 확인 시 대시보드 드롭다운/URL이 진주시로 전역 스위칭되어야 한다', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    const selectSido = page.locator('[data-testid="select-sido"]');
+    const selectDistrict = page.locator('[data-testid="select-district"]');
+    await expect(selectSido).toBeVisible({ timeout: 15000 });
+
+    await page.locator('[data-testid="chat-trigger-btn"]').click();
+    const chatInput = page.locator('[data-testid="chat-input"]');
+    const chatSubmitBtn = page.locator('[data-testid="chat-submit-btn"]');
+
+    await chatInput.fill('남강축제 하는곳 집세가 궁금해');
+    await chatSubmitBtn.click();
+    await expect(page.locator('text=진주 남강유등축제가 열리는').first()).toBeVisible({ timeout: 10000 });
+
+    await chatInput.fill('응 맞아');
+    await chatSubmitBtn.click();
+
+    await expect(selectSido).toHaveValue('경상남도', { timeout: 10000 });
+    await expect(selectDistrict).toHaveValue('48170', { timeout: 10000 });
+    await expect.poll(() => page.url(), { timeout: 10000 }).toContain('lawdCd=48170');
   });
 });
 
