@@ -172,6 +172,70 @@ def extract_target_view(prompt: str) -> Optional[str]:
     return None
 
 
+def extract_search_keyword(
+    prompt: str,
+    region_name: Optional[str] = None,
+    dong_name: Optional[str] = None,
+    apt_name: Optional[str] = None
+) -> Optional[str]:
+    """사용자 발화에서 아파트/오피스텔 단지명, 건물명, 또는 핵심 검색 키워드를 정밀 추출"""
+    if apt_name and len(apt_name.strip()) >= 2:
+        return apt_name.strip()
+
+    p = prompt or ""
+    clean_p = re.sub(r"[?!.,~@#$%^&*()_+=\[\]{}<>:;\"'\\/|]", " ", p)
+    tokens = clean_p.split()
+
+    stop_keywords = {
+        # 거래 및 주택 유형
+        "매매", "전세", "월세", "반전세", "단기임대", "집세", "원룸", "투룸", "쓰리룸", "아파트", "오피스텔", "빌라", "주택", "다세대", "다가구",
+        # 전국 주요 광역 및 시군구 일반 명칭
+        "서울", "서울특별시", "경기", "경기도", "인천", "인천광역시", "부산", "부산광역시", "대구", "대구광역시",
+        "광주", "광주광역시", "대전", "대전광역시", "울산", "울산광역시", "세종", "세종특별자치시", "강원", "강원도",
+        "충북", "충청북도", "충남", "충청남도", "전북", "전라북도", "전남", "전라남도", "경북", "경상북도", "경남", "경상남도", "제주", "제주도",
+        "진주", "진주시", "창원", "창원시", "김해", "김해시", "강남", "강남구", "서초", "서초구", "송파", "송파구", "마포", "마포구",
+        "용산", "용산구", "성동", "성동구", "영등포", "영등포구", "분당", "분당구", "수지", "수지구", "일산", "일산서구", "일산동구",
+        # 의도 및 질의 서술어
+        "알려줘", "알려", "보여줘", "보여", "보고싶어", "보고", "싶어", "찾아줘", "찾아", "궁금해", "어때", "추천해줘", "추천",
+        "매물", "시세", "가격", "실거래", "실거래가", "원장", "분석", "차트", "내역", "현황", "리스트", "조회", "필터", "탭",
+        "있어", "어딨어", "어디", "얼마", "얼마야", "평형", "평", "쪽", "근처", "주변", "하는곳", "하는", "곳", "일대",
+        # 조사 및 연결어
+        "은", "는", "이", "가", "을", "를", "의", "에", "에서", "으로", "로", "좀", "있는"
+    }
+
+    if region_name:
+        for w in region_name.split():
+            stop_keywords.add(w)
+
+    building_candidates = []
+    dong_candidates = []
+
+    for token in tokens:
+        clean_tok = token.strip()
+        if len(clean_tok) < 2:
+            continue
+        if clean_tok in stop_keywords:
+            continue
+        # 불용어가 아닐 때 끝에 붙은 조사/접미사만 정밀 제거 (단, '가', '이'는 웰가, 자이 등 단지명 음절이므로 보존)
+        sub_tok = re.sub(r"(?:아파트|단지|오피스텔|에서|으로|에는|에게|까지|부터|보다|처럼|만의|[은는을를의에])$", "", clean_tok)
+        chosen = sub_tok if (len(sub_tok) >= 2 and sub_tok not in stop_keywords) else clean_tok
+        if dong_name and (chosen == dong_name or clean_tok == dong_name):
+            dong_candidates.append(dong_name)
+        else:
+            building_candidates.append(chosen)
+
+    if building_candidates:
+        return building_candidates[0]
+
+    if dong_candidates:
+        return dong_candidates[0]
+
+    if dong_name and len(dong_name.strip()) >= 2:
+        return dong_name.strip()
+
+    return None
+
+
 def extract_conditions_nlp(
     prompt: str,
     current_lawd_cd: Optional[str] = None,
@@ -316,6 +380,11 @@ def extract_conditions_nlp(
         target_lawd_cd = "48170"
         extracted_region = "경상남도 진주시"
 
+    # 6-2. 텍스트 검색 키워드(search_keyword) 추출 (예: '트레젠웰가 월세' -> '트레젠웰가')
+    search_keyword = extract_search_keyword(p, region_name=extracted_region, dong_name=dong_name, apt_name=apt_name)
+    if search_keyword and not apt_name:
+        apt_name = search_keyword
+
     # 7. [맥락 복원] 직전 세션 컨텍스트 복원 ('그 단지', '아까 거기', '그 아파트', '그중에서 제일 최근' 등)
     if session_context:
         has_followup = any(kw in p_lower for kw in [
@@ -356,6 +425,7 @@ def extract_conditions_nlp(
         "max_price": max_price,
         "regional_code": target_lawd_cd,
         "apt_name": apt_name,
+        "search_keyword": search_keyword,
         "target_dongs": target_dongs,
         "hotspot_coord": hotspot_coord,
         "target_view": extract_target_view(p),
@@ -413,6 +483,7 @@ async def parse_conditions_with_openai(
             "- max_monthly_rent: 월세 상한선(만원 단위 정수, 예: 70이하는 70) 또는 null\n"
             "- max_price: 매매가 상한선(만원 단위 정수, 예: 15억은 150000) 또는 null\n"
             "- apt_name: 특정 단지명 또는 건물명 (예: '힐스테이트', '은마', '자이') 또는 null\n"
+            "- search_keyword: 사용자가 특정 아파트/오피스텔 단지명, 건물명, 또는 법정동 이름을 명시한 경우 필터링을 위한 검색 키워드 (예: '트레젠웰가 월세' -> '트레젠웰가', '진주 트레젠웰가 월세' -> '트레젠웰가', '은마 전세' -> '은마', '가좌동 원룸' -> '가좌동') 또는 null\n"
             "- target_view: 사용자가 보고 싶어 하는 대시보드 화면. 'B2B' (B2B 제휴 매물 현황, 현재 매물/호가 매물 조회 의도), 'TRANSACTION' (실거래 원장 분석, 과거 실거래가/시세 추이 조회 의도) 또는 null\n"
             "반드시 유효한 JSON 문자열만 출력해."
         )
@@ -451,6 +522,8 @@ async def parse_conditions_with_openai(
         final_rent = data.get("max_monthly_rent") if data.get("max_monthly_rent") is not None else nlp_cond.get("max_monthly_rent")
         final_price = data.get("max_price") if data.get("max_price") is not None else nlp_cond.get("max_price")
         final_apt = data.get("apt_name") or nlp_cond.get("apt_name")
+        llm_search_keyword = data.get("search_keyword") or data.get("apt_name")
+        final_search_keyword = llm_search_keyword or nlp_cond.get("search_keyword") or final_apt
         llm_view = str(data.get("target_view") or "").strip().upper()
         final_view = llm_view if llm_view in TARGET_VIEW_KEYWORDS else nlp_cond.get("target_view")
 
@@ -477,6 +550,7 @@ async def parse_conditions_with_openai(
             "max_price": final_price,
             "regional_code": region_code,
             "apt_name": final_apt,
+            "search_keyword": final_search_keyword,
             "target_dongs": final_target_dongs,
             "hotspot_coord": final_hotspot_coord,
             "target_view": final_view,
@@ -762,7 +836,8 @@ async def run_ai_consultant(
                 "hotspot_coord": hotspot_coord,
                 "landmark_name": landmark_name,
                 "target_view": conditions.get("target_view"),
-                "trade_type": conditions.get("trade_type")
+                "trade_type": conditions.get("trade_type"),
+                "search_keyword": conditions.get("search_keyword") or conditions.get("apt_name")
             }
 
         briefing_text = await _format_briefing_response(
@@ -804,7 +879,8 @@ async def run_ai_consultant(
             "hotspot_coord": hotspot_coord,
             "landmark_name": landmark_name,
             "target_view": conditions.get("target_view"),
-            "trade_type": conditions.get("trade_type")
+            "trade_type": conditions.get("trade_type"),
+            "search_keyword": conditions.get("search_keyword") or conditions.get("apt_name")
         }
 
     # ---------------- 2단계: 신규 질의 자연어 조건 파싱 & 대명사/이전 맥락 복원 ----------------
@@ -907,7 +983,8 @@ async def run_ai_consultant(
                 "hotspot_coord": lm.get("hotspot_coord"),
                 "landmark_name": lm["landmark_name"],
                 "target_view": conditions.get("target_view"),
-                "trade_type": conditions.get("trade_type")
+                "trade_type": conditions.get("trade_type"),
+                "search_keyword": conditions.get("search_keyword") or conditions.get("apt_name")
             }
         else:
             if lm.get("target_dongs"):
@@ -955,7 +1032,10 @@ async def run_ai_consultant(
             "reply": "조회하고자 하시는 지역(예: 진주시, 창원시 성산구, 대전 서구 등)이나 단지명을 함께 말씀해 주시면 국토교통부 실거래 원장 데이터를 즉각 분석해 드립니다.",
             "override_region": False,
             "new_regional_code": None,
-            "new_region_label": None
+            "new_region_label": None,
+            "target_view": conditions.get("target_view"),
+            "trade_type": conditions.get("trade_type"),
+            "search_keyword": conditions.get("search_keyword") or conditions.get("apt_name")
         }
 
     is_new_override = bool((current_lawd_cd and target_code != current_lawd_cd) or extracted_reg or (target_code and target_code != current_lawd_cd))
@@ -1039,7 +1119,8 @@ async def run_ai_consultant(
             "hotspot_coord": conditions.get("hotspot_coord"),
             "landmark_name": conditions.get("landmark_name"),
             "target_view": conditions.get("target_view"),
-            "trade_type": conditions.get("trade_type")
+            "trade_type": conditions.get("trade_type"),
+            "search_keyword": conditions.get("search_keyword") or conditions.get("apt_name")
         }
 
     # ---------------- 6단계: 실제 데이터 브리핑 생성 ----------------
@@ -1088,7 +1169,8 @@ async def run_ai_consultant(
         "hotspot_coord": conditions.get("hotspot_coord"),
         "landmark_name": conditions.get("landmark_name"),
         "target_view": conditions.get("target_view"),
-        "trade_type": conditions.get("trade_type")
+        "trade_type": conditions.get("trade_type"),
+        "search_keyword": conditions.get("search_keyword") or conditions.get("apt_name")
     }
 
 

@@ -2059,17 +2059,30 @@ export default function TossStyleRealEstateDashboard() {
   // =========================================================================
   // [요구사항 2] 부모 컴포넌트 전역 상태 동기화 콜백 (onDashboardSync)
   // - 챗봇 응답에 new_lawd_cd가 있으면 setLawdCd 및 history.replaceState 동기화
+  // - 챗봇 응답에 search_keyword가 있으면 단지명/건물명 검색창 상태 즉시 바인딩 및 실시간 필터링
   // - 챗봇 응답에 target_view: "B2B" 감지 시 setActiveTab('B2B 제휴 매물 현황') 강제 실행
   // - trade_type 감지 시 거래 유형 필터 자동 세팅
   // - GeminiChatModal(자식) 및 내부 채팅 양쪽에서 100% 호출 호환
   // =========================================================================
-  const onDashboardSync = useCallback((newLawdCdOrRegion, targetView, tradeType, userMessage, rawPayload = null) => {
+  const onDashboardSync = useCallback((newLawdCdOrRegion, targetView, tradeType, userMessage, arg5 = null, arg6 = null) => {
     let targetCode = null;
     let targetSido = null;
     let targetDist = null;
     let targetLabel = null;
     let hotspotCoord = null;
     let targetDongs = null;
+    let searchKeywordParam = null;
+    let rawPayload = null;
+
+    if (typeof arg5 === "string") {
+      searchKeywordParam = arg5;
+      rawPayload = (typeof arg6 === "object" && arg6 !== null) ? arg6 : null;
+    } else if (typeof arg5 === "object" && arg5 !== null) {
+      rawPayload = arg5;
+      if (typeof arg6 === "string") {
+        searchKeywordParam = arg6;
+      }
+    }
 
     if (typeof newLawdCdOrRegion === "object" && newLawdCdOrRegion !== null) {
       targetCode = newLawdCdOrRegion.code || newLawdCdOrRegion.new_lawd_cd || newLawdCdOrRegion.new_regional_code;
@@ -2078,6 +2091,9 @@ export default function TossStyleRealEstateDashboard() {
       targetLabel = newLawdCdOrRegion.label || newLawdCdOrRegion.new_region_label;
       hotspotCoord = newLawdCdOrRegion.hotspotCoord || newLawdCdOrRegion.hotspot_coord;
       targetDongs = newLawdCdOrRegion.targetDongs || newLawdCdOrRegion.target_dongs;
+      if (!searchKeywordParam) {
+        searchKeywordParam = newLawdCdOrRegion.searchKeyword || newLawdCdOrRegion.search_keyword;
+      }
     } else if (newLawdCdOrRegion) {
       targetCode = String(newLawdCdOrRegion).trim();
     }
@@ -2089,6 +2105,7 @@ export default function TossStyleRealEstateDashboard() {
       if (!targetLabel) targetLabel = rawPayload.new_region_label;
       if (!hotspotCoord) hotspotCoord = rawPayload.hotspot_coord;
       if (!targetDongs) targetDongs = rawPayload.target_dongs;
+      if (!searchKeywordParam) searchKeywordParam = rawPayload.search_keyword;
     }
 
     // 1) 지역 코드 동기화 및 history.replaceState (UI & URL 동기화)
@@ -2146,18 +2163,25 @@ export default function TossStyleRealEstateDashboard() {
           setRegionCoords(REGION_CENTERS[resolved.code]);
         }
 
-        if (targetDongs && Array.isArray(targetDongs) && targetDongs.length > 0) {
-          setSearchKeyword(targetDongs[0]);
-          aiKeywordAppliedRef.current = true;
-        }
-
         if (typeof showToast === "function") {
           showToast(`[${resolved.label}] 분석 대시보드로 전환되었습니다.`);
         }
       }
     }
 
-    // 2) target_view: "B2B" 감지 시 setActiveTab('B2B 제휴 매물 현황') 강제 실행
+    // 2) [텍스트 검색어 동기화] search_keyword 존재 시 상단 검색창에 세팅 및 즉시 필터링
+    if (searchKeywordParam && typeof searchKeywordParam === "string" && searchKeywordParam.trim()) {
+      const kw = searchKeywordParam.trim();
+      setSearchKeyword(kw);
+      aiKeywordAppliedRef.current = true;
+      setTablePage(1);
+    } else if (targetDongs && Array.isArray(targetDongs) && targetDongs.length > 0) {
+      setSearchKeyword(targetDongs[0]);
+      aiKeywordAppliedRef.current = true;
+      setTablePage(1);
+    }
+
+    // 3) target_view: "B2B" 감지 시 setActiveTab('B2B 제휴 매물 현황') 강제 실행
     const viewStr = String(targetView || "").toUpperCase();
     if (viewStr === "B2B" || viewStr.includes("B2B") || viewStr.includes("제휴") || viewStr === "LISTING") {
       setActiveTab("B2B 제휴 매물 현황");
@@ -2165,7 +2189,7 @@ export default function TossStyleRealEstateDashboard() {
       setActiveTab("실거래 원장 분석");
     }
 
-    // 3) 거래 유형 필터 (trade_type) 자동 세팅
+    // 4) 거래 유형 필터 (trade_type) 자동 세팅
     if (tradeType && TRADE_FILTER_IDS.includes(String(tradeType).trim())) {
       const tVal = String(tradeType).trim();
       setTradeTypeFilter(tVal);
@@ -2173,7 +2197,7 @@ export default function TossStyleRealEstateDashboard() {
       setTablePage(1);
     }
 
-    // 4) AI 검색 칩 질문 표시
+    // 5) AI 검색 칩 질문 표시
     if (userMessage) {
       setAiActiveQuery(userMessage);
     }
@@ -2631,6 +2655,7 @@ export default function TossStyleRealEstateDashboard() {
                 검색
               </span>
               <input
+                data-testid="search-input"
                 type="text"
                 value={searchKeyword}
                 onChange={(e) => setSearchKeyword(e.target.value)}

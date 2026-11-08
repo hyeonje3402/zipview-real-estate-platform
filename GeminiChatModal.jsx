@@ -91,15 +91,16 @@ export default function GeminiChatModal(props) {
       }
 
       // [요구사항 3] 챗봇 자식 컴포넌트의 이벤트 트리거 확인:
-      // 백엔드 응답을 수신했을 때 반드시 props.onDashboardSync(res.new_lawd_cd, res.target_view, res.trade_type, user_message) 100% 호출
+      // 백엔드 응답을 수신했을 때 반드시 props.onDashboardSync(res.new_lawd_cd, res.target_view, res.trade_type, user_message, res.search_keyword, res.data) 100% 호출
       const newLawdCd = res.data?.new_lawd_cd || res.data?.new_regional_code;
       const targetView = res.data?.target_view;
       const tradeType = res.data?.trade_type;
+      const searchKeyword = res.data?.search_keyword;
       const userMessage = pendingDisambiguation?.original_prompt || userMsg.text;
 
       const syncCallback = props?.onDashboardSync || onDashboardSync || props?.onRegionSync || props?.onRegionOverride;
       if (status !== "needs_clarification" && typeof syncCallback === "function") {
-        syncCallback(newLawdCd, targetView, tradeType, userMessage, res.data);
+        syncCallback(newLawdCd, targetView, tradeType, userMessage, searchKeyword, res.data);
       }
 
       const aiMsg = {

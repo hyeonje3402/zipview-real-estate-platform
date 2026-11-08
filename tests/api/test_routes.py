@@ -398,3 +398,38 @@ async def test_dashboard_intent_target_view_and_trade_type(prompt, expected_view
         assert data.get("trade_type") == expected_trade, data
 
     app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prompt,expected_lawd,expected_trade,expected_keyword", [
+    ("진주 트레젠웰가 월세", "48170", "월세", "트레젠웰가"),
+    ("트레젠웰가 월세", None, "월세", "트레젠웰가"),
+    ("강남구 대치동 래미안대치팰리스 전세", "11680", "전세", "래미안대치팰리스"),
+])
+async def test_search_keyword_extraction_in_chat(prompt, expected_lawd, expected_trade, expected_keyword):
+    """
+    [단지/건물명 검색 키워드(search_keyword) 엔티티 추출]
+    사용자 발화에서 특정 아파트/오피스텔 단지명 또는 건물명이 명시되었을 때
+    search_keyword 필드로 정확하게 추출되어 반환되는지 검증
+    """
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = []
+    mock_db.execute = AsyncMock(return_value=mock_result)
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post("/api/chat", json={"prompt": prompt, "model_choice": "gpt"})
+        assert res.status_code == 200, res.text
+        data = res.json()
+
+        assert data.get("status") == "success", data
+        assert data.get("search_keyword") == expected_keyword, f"search_keyword 불일치: {data.get('search_keyword')} != {expected_keyword}"
+        if expected_lawd:
+            assert data.get("new_lawd_cd") == expected_lawd, f"lawd_cd 불일치: {data.get('new_lawd_cd')} != {expected_lawd}"
+        if expected_trade:
+            assert data.get("trade_type") == expected_trade, f"trade_type 불일치: {data.get('trade_type')} != {expected_trade}"
+
+    app.dependency_overrides.clear()
+

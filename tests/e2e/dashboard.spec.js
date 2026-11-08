@@ -22,33 +22,64 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
         dongName = '충무공동';
       }
 
+      const items = isJinju ? [
+        {
+          id: 'trade_jinju_1',
+          deal_year: 2024,
+          deal_month: 5,
+          deal_day: 15,
+          apt_name: '트레젠웰가',
+          trade_type: '월세',
+          deal_amount: 0,
+          deposit_amount: 1000,
+          monthly_amount: 55,
+          exclusive_area: 59.99,
+          floor: 8,
+          dong: '충무공동'
+        },
+        {
+          id: 'trade_jinju_2',
+          deal_year: 2024,
+          deal_month: 5,
+          deal_day: 10,
+          apt_name: '진주혁신도시대방노블랜드',
+          trade_type: '전세',
+          deal_amount: 0,
+          deposit_amount: 45000,
+          monthly_amount: 0,
+          exclusive_area: 84.99,
+          floor: 12,
+          dong: '충무공동'
+        }
+      ] : [
+        {
+          id: 'trade_1',
+          deal_year: 2024,
+          deal_month: 5,
+          deal_day: 15,
+          apt_name: aptName,
+          trade_type: '전세',
+          deal_amount: 0,
+          deposit_amount: 45000,
+          monthly_amount: 0,
+          exclusive_area: 84.99,
+          floor: 12,
+          dong: dongName
+        }
+      ];
+
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
           status: 'success',
           regional_code: targetCode,
-          data: [
-            {
-              id: 'trade_1',
-              deal_year: 2024,
-              deal_month: 5,
-              deal_day: 15,
-              apt_name: aptName,
-              trade_type: '전세',
-              deal_amount: 0,
-              deposit_amount: 45000,
-              monthly_amount: 0,
-              exclusive_area: 84.99,
-              floor: 12,
-              dong: dongName
-            }
-          ],
+          data: items,
           chart: [
             { year: 2024, month: 5, trade_type: '전세', count: 1, avg_deal: 0, avg_deposit: 45000 }
           ],
           summary: {
-            total_count: 1,
+            total_count: items.length,
             latest_trade_price: '-',
             latest_jeonse_price: '4억 5,000만원',
             last_synced_at: new Date().toISOString()
@@ -75,7 +106,25 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
       const postData = route.request().postDataJSON() || {};
       const prompt = postData.prompt || postData.query || '';
 
-      if (prompt.includes('김해시')) {
+      if (prompt.includes('트레젠웰가')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'success',
+            reply: '요청하신 [경상남도 진주시] 트레젠웰가 월세 실거래 및 매물 정보를 분석했습니다.',
+            new_regional_code: '48170',
+            new_lawd_cd: '48170',
+            new_city_name: '경상남도',
+            new_district_name: '진주시',
+            new_region_label: '경상남도 진주시',
+            override_region: true,
+            target_view: 'TRANSACTION',
+            trade_type: '월세',
+            search_keyword: '트레젠웰가'
+          })
+        });
+      } else if (prompt.includes('김해시')) {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -370,6 +419,36 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
 
     await expect(copilotWidget).toHaveCount(0);
     await expect(chatTriggerBtn).toBeVisible();
+  });
+
+  test('사용자가 "진주 트레젠웰가 월세" 질의 시 지역(진주시 48170), 월세 필터 스위칭 및 검색창에 "트레젠웰가"가 자동 세팅되어 테이블이 실시간 필터링되어야 한다', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    const selectSido = page.locator('[data-testid="select-sido"]');
+    const selectDistrict = page.locator('[data-testid="select-district"]');
+    const searchInput = page.locator('[data-testid="search-input"]');
+    await expect(selectSido).toBeVisible({ timeout: 15000 });
+
+    // 1. 코파일럿 열기
+    await page.locator('[data-testid="chat-trigger-btn"]').click();
+    const chatInput = page.locator('[data-testid="chat-input"]');
+    const chatSubmitBtn = page.locator('[data-testid="chat-submit-btn"]');
+
+    // 2. "진주 트레젠웰가 월세" 질의 전송
+    await chatInput.fill('진주 트레젠웰가 월세');
+    await chatSubmitBtn.click();
+
+    // 3. 지역 드롭다운 동기화 검증 (경상남도 진주시: 48170)
+    await expect(selectSido).toHaveValue('경상남도', { timeout: 10000 });
+    await expect(selectDistrict).toHaveValue('48170', { timeout: 10000 });
+    await expect.poll(() => page.url(), { timeout: 10000 }).toContain('lawdCd=48170');
+
+    // 4. 대시보드 상단 단지명/건물명 검색창에 '트레젠웰가'가 자동 입력되었는지 검증
+    await expect(searchInput).toHaveValue('트레젠웰가', { timeout: 10000 });
+
+    // 5. 하단 RAW DATA 테이블에 '트레젠웰가' 데이터만 남고 다른 단지('대방노블랜드')는 실시간 필터링되어 제외되었는지 검증
+    await expect(page.locator('text=트레젠웰가').first()).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=진주혁신도시대방노블랜드')).toHaveCount(0);
   });
 });
 

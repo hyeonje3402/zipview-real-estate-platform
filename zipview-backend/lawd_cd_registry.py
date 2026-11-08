@@ -1928,12 +1928,26 @@ def check_global_ambiguity(
 
     # 1. 시/군/구 레벨 중복 지명 판별 (서구, 중구, 동구, 남구, 북구, 강서구, 고성군 등)
     target_sigungu_key = None
-    if region_name and _clean_str(region_name) in GLOBAL_AMBIGUOUS_SIGUNGU:
-        target_sigungu_key = _clean_str(region_name)
+    if region_name:
+        last_word = _clean_str(region_name.split()[-1])
+        if last_word in GLOBAL_AMBIGUOUS_SIGUNGU:
+            target_sigungu_key = last_word
+        else:
+            target_sigungu_key = None
     else:
+        # region_name이 명시되지 않은 경우에만 질문에서 모호한 시군구 매칭
+        false_positive_prefixes = {
+            "남구": ["강남구"],
+            "동구": ["강동구", "성동구", "동대문구"],
+            "서구": ["서대문구", "강서구"],
+            "북구": ["강북구"]
+        }
         # 단어 길이가 긴 순서대로 매칭 (예: 강서구 > 서구)
         for k in sorted(GLOBAL_AMBIGUOUS_SIGUNGU.keys(), key=lambda x: -len(x)):
             if k in p_clean:
+                prefixes = false_positive_prefixes.get(k, [])
+                if any(fp in p_clean for fp in prefixes):
+                    continue
                 target_sigungu_key = k
                 break
 

@@ -784,7 +784,10 @@ async def chat_with_multi_llm(req: ChatRequest, db: AsyncSession = Depends(get_d
             "disambiguation": result.get("disambiguation"),
             "target_dongs": result.get("target_dongs"),
             "hotspot_coord": result.get("hotspot_coord"),
-            "landmark_name": result.get("landmark_name")
+            "landmark_name": result.get("landmark_name"),
+            "target_view": result.get("target_view") if isinstance(result, dict) else None,
+            "trade_type": result.get("trade_type") if isinstance(result, dict) else None,
+            "search_keyword": result.get("search_keyword") if isinstance(result, dict) else None
         }
     
     reply_str = result["reply"] if isinstance(result, dict) else str(result)
@@ -820,6 +823,7 @@ async def chat_with_multi_llm(req: ChatRequest, db: AsyncSession = Depends(get_d
         "target_dongs": result.get("target_dongs") if isinstance(result, dict) else None,
         "target_view": result.get("target_view") if isinstance(result, dict) else None,
         "trade_type": result.get("trade_type") if isinstance(result, dict) else None,
+        "search_keyword": result.get("search_keyword") if isinstance(result, dict) else None,
         "hotspot_coord": result.get("hotspot_coord") if isinstance(result, dict) else None,
         "landmark_name": result.get("landmark_name") if isinstance(result, dict) else None
     }
