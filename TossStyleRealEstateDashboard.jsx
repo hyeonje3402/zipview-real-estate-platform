@@ -1940,8 +1940,8 @@ export default function TossStyleRealEstateDashboard() {
     setLawdCd(newCode);
   };
 
-  // 챗봇 또는 외부 호출에 의한 범용 지역 전환 함수 (전국 252개 시/군/구 100% 매핑)
-  const applyRegionSwitch = useCallback((regionTarget) => {
+  // 챗봇 또는 외부 호출에 의한 범용 지역 전환 함수 (전국 252개 시/군/구 100% 매핑 & 핫스팟 좌표 이동)
+  const applyRegionSwitch = useCallback((regionTarget, hotspotCoord = null, targetDongs = null) => {
     const resolved = resolveRegionFromData(regionTarget);
     if (!resolved) {
       console.warn("[Region Switch] 일치하는 지역을 찾을 수 없습니다:", regionTarget);
@@ -1949,7 +1949,7 @@ export default function TossStyleRealEstateDashboard() {
     }
 
     const { sido, code, label } = resolved;
-    if (code !== lawdCd || sido !== selectedSido) {
+    if (code !== lawdCd || sido !== selectedSido || hotspotCoord) {
       console.log(`[Region Switch] 대시보드 지역을 [${label}] (${code})로 전환합니다.`);
       // 1) 시/도 및 시/군/구 드롭다운 상태를 토씨 하나 틀리지 않고 100% 동기화
       setSelectedSido(sido);
@@ -1976,17 +1976,31 @@ export default function TossStyleRealEstateDashboard() {
       });
       setTablePage(1);
 
-      // 3) 지도 좌표 중심 이동
-      if (REGION_CENTERS[code]) {
+      // 3) 지도 좌표 중심 이동: 핫스팟 랜드마크 좌표가 있으면 우선 이동 및 줌 레벨 조정
+      if (hotspotCoord && hotspotCoord.lat && hotspotCoord.lng) {
+        const hCoord = { lat: Number(hotspotCoord.lat), lng: Number(hotspotCoord.lng) };
+        setRegionCoords(hCoord);
+        if (kakaoMapRef.current && window.kakao && window.kakao.maps) {
+          const moveLatLon = new window.kakao.maps.LatLng(hCoord.lat, hCoord.lng);
+          kakaoMapRef.current.setCenter(moveLatLon);
+          kakaoMapRef.current.setLevel(4);
+        }
+      } else if (REGION_CENTERS[code]) {
         setRegionCoords(REGION_CENTERS[code]);
       }
 
-      // 4) 타깃 LAWD_CD 확정 -> useEffect(fetchData) 자동 트리거
+      // 4) 핫스팟 인접 동네(target_dongs) 우선 필터링 적용
+      if (targetDongs && Array.isArray(targetDongs) && targetDongs.length > 0) {
+        setSearchKeyword(targetDongs[0]);
+      }
+
+      // 5) 타깃 LAWD_CD 확정 -> useEffect(fetchData) 자동 트리거
       setPendingDisambiguation(null);
       setLawdCd(code);
 
       if (typeof showToast === "function") {
-        showToast(`[${label}] 분석 대시보드로 전환되었습니다.`);
+        const dongNote = (targetDongs && targetDongs.length > 0) ? ` (${targetDongs.join(", ")} 일대)` : "";
+        showToast(`[${label}${dongNote}] 분석 대시보드로 전환되었습니다.`);
       }
       return true;
     }
@@ -2263,7 +2277,7 @@ export default function TossStyleRealEstateDashboard() {
           sidoName: res.data.new_city_name || res.data.new_sido_name,
           districtName: res.data.new_district_name,
           label: res.data.new_region_label
-        });
+        }, res.data.hotspot_coord, res.data.target_dongs);
       }
 
       setChatMessages((prev) => [

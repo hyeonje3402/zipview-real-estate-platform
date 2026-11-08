@@ -2009,6 +2009,12 @@ def resolve_disambiguation_choice(
 
     choice_clean = choice.replace(" ", "")
 
+    # 0. 긍정 확인 응답 매칭 (되묻기 확인 시: "응", "맞아", "네", "어", "그래", "거기", "맞아요", "그곳으로", "진주" 등)
+    affirmative_tokens = ["응", "맞아", "네", "어", "그래", "좋아", "거기", "맞아요", "그곳", "진행해", "확인", "진주", "진주시"]
+    if any(tok in choice_clean for tok in affirmative_tokens):
+        if options and len(options) >= 1:
+            return options[0]
+
     # 1. 번호 선택 우선 매칭 (예: "1", "1번", "1번으로", "2")
     num_match = re.search(r"(\d+)(?:번)?", choice)
     if num_match:

@@ -274,3 +274,95 @@ async def test_session_memory_context_retention():
         assert last_trade_type == "전세", f"세션 메모리에 거래 유형 '전세'가 보존되어야 합니다. (실제: {last_trade_type})"
 
     app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_spatial_reasoning_and_active_clarification():
+    """
+    [공간 추론 및 능동 되묻기 (Active Clarification) 통합 검증]
+    1차 턴: '남강축제 하는곳 집세가 궁금해' 질의
+      -> 행정구역 미명시 랜드마크 감지, 강남구로 잘못 폴백하지 않고 status='needs_clarification' 반환
+      -> 되묻기 질문 및 진주시(48170) 선택지, 핫스팟 좌표 포함 검증
+    2차 턴: '응 맞아 거기' 긍정 답변
+      -> 진주시(48170)로 자율 스위칭(override_region=True)
+      -> 핫스팟 인접 동(칠암동, 망경동, 강남동, 본성동) 및 좌표(hotspot_coord) 반환 검증
+    """
+    mock_db = AsyncMock()
+    mock_item = MagicMock(
+        id=999,
+        regional_code="48170",
+        apt_name="칠암현대",
+        dong="칠암동",
+        jibun="10",
+        trade_type="월세",
+        deal_amount=0,
+        deposit=1000,
+        monthly_rent=45,
+        floor=7,
+        exclu_use_ar=59.9,
+        deal_year=2024,
+        deal_month=10,
+        deal_day=1,
+        deal_date="2024-10-01",
+        property_type="아파트"
+    )
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [mock_item]
+    mock_db.execute = AsyncMock(return_value=mock_result)
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    session_id = "test_spatial_session_999"
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1차 질의: 행사명/랜드마크 질의 (행정구역 미지정, 집세 질의)
+        p1 = {
+            "prompt": "남강축제 하는곳 집세가 궁금해",
+            "current_regional_code": "11680",
+            "regionLabel": "서울특별시 강남구",
+            "session_id": session_id,
+            "model_choice": "gpt"
+        }
+        res1 = await client.post("/api/chat", json=p1)
+        assert res1.status_code == 200, f"1차 질의 실패: {res1.text}"
+        d1 = res1.json()
+
+        # 1차 검증: 디폴트 강남구로 폴백하지 않고 능동 되묻기(needs_clarification) 모드로 진입
+        assert d1.get("status") == "needs_clarification", f"능동 되묻기 모드로 진입해야 합니다: {d1}"
+        assert "진주" in d1.get("reply", "") or "남강" in d1.get("reply", "")
+        disambiguation = d1.get("disambiguation")
+        assert disambiguation is not None, "disambiguation 페이로드가 포함되어야 합니다."
+        options = disambiguation.get("options", [])
+        assert len(options) >= 1, "추론된 타겟 지역 옵션이 최소 1개 이상 존재해야 합니다."
+        assert options[0].get("code") == "48170", f"1순위 옵션 코드는 진주시(48170)여야 합니다: {options[0]}"
+        assert "칠암동" in options[0].get("target_dongs", [])
+
+        # 2차 질의: 사용자가 긍정 확인 답변 ('응 맞아')
+        p2 = {
+            "prompt": "응 맞아",
+            "current_regional_code": "11680",
+            "session_id": session_id,
+            "context": disambiguation,
+            "model_choice": "gpt"
+        }
+        res2 = await client.post("/api/chat", json=p2)
+        assert res2.status_code == 200, f"2차 확인 질의 실패: {res2.text}"
+        d2 = res2.json()
+
+        # 2차 검증: 진주시(48170) 확정 및 대시보드 오버라이드 플래그 활성화
+        assert d2.get("status") == "success", f"확인 후 정상 응답이어야 합니다: {d2}"
+        assert d2.get("override_region") is True
+        assert d2.get("new_regional_code") == "48170"
+        assert d2.get("new_lawd_cd") == "48170"
+        assert d2.get("new_city_name") == "경상남도"
+        assert d2.get("new_district_name") == "진주시"
+
+        # 핫스팟 인접 동 및 지도 좌표 반환 검증
+        target_dongs = d2.get("target_dongs") or []
+        assert "칠암동" in target_dongs
+        assert "망경동" in target_dongs
+        hotspot = d2.get("hotspot_coord")
+        assert hotspot is not None
+        assert abs(hotspot.get("lat") - 35.1804) < 0.01
+        assert abs(hotspot.get("lng") - 128.0872) < 0.01
+
+    app.dependency_overrides.clear()

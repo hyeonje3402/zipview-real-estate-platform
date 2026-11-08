@@ -35,6 +35,82 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # 다중 턴 세션 컨텍스트 캐시 (1시간 TTL, 최대 2048개 동시 세션 메모리 보존)
 SESSION_CONTEXT_CACHE: TTLCache = TTLCache(maxsize=2048, ttl=3600)
 
+# 대한민국 주요 랜드마크 및 축제·행사 공간 추론(Spatial Reasoning) 지식 레지스트리
+SPATIAL_LANDMARK_REGISTRY: Dict[str, Dict[str, Any]] = {
+    "남강축제": {
+        "landmark_name": "진주 남강유등축제",
+        "region_name": "경상남도 진주시",
+        "code": "48170",
+        "target_dongs": ["칠암동", "망경동", "강남동", "본성동"],
+        "hotspot_coord": {"lat": 35.1804, "lng": 128.0872},
+        "clarification_question": "혹시 진주 남강유등축제가 열리는 경상남도 진주시 일대의 매물을 찾으시나요?",
+        "confidence": "medium"
+    },
+    "남강유등축제": {
+        "landmark_name": "진주 남강유등축제",
+        "region_name": "경상남도 진주시",
+        "code": "48170",
+        "target_dongs": ["칠암동", "망경동", "강남동", "본성동"],
+        "hotspot_coord": {"lat": 35.1804, "lng": 128.0872},
+        "clarification_question": "혹시 진주 남강유등축제가 열리는 경상남도 진주시 일대의 매물을 찾으시나요?",
+        "confidence": "medium"
+    },
+    "유등축제": {
+        "landmark_name": "진주 남강유등축제",
+        "region_name": "경상남도 진주시",
+        "code": "48170",
+        "target_dongs": ["칠암동", "망경동", "강남동", "본성동"],
+        "hotspot_coord": {"lat": 35.1804, "lng": 128.0872},
+        "clarification_question": "혹시 진주 남강유등축제가 열리는 경상남도 진주시 일대의 매물을 찾으시나요?",
+        "confidence": "medium"
+    },
+    "에버랜드": {
+        "landmark_name": "에버랜드",
+        "region_name": "경기도 용인시 처인구",
+        "code": "41461",
+        "target_dongs": ["포곡읍"],
+        "hotspot_coord": {"lat": 37.2934, "lng": 127.2026},
+        "clarification_question": "혹시 에버랜드가 위치한 경기도 용인시 처인구(포곡읍) 일대의 매물을 찾으시나요?",
+        "confidence": "medium"
+    },
+    "해운대": {
+        "landmark_name": "해운대",
+        "region_name": "부산광역시 해운대구",
+        "code": "26350",
+        "target_dongs": ["우동", "중동"],
+        "hotspot_coord": {"lat": 35.1587, "lng": 129.1604},
+        "clarification_question": "혹시 해운대 해수욕장 인근 부산광역시 해운대구 일대의 매물을 찾으시나요?",
+        "confidence": "medium"
+    },
+    "킨텍스": {
+        "landmark_name": "킨텍스",
+        "region_name": "경기도 고양시 일산서구",
+        "code": "41287",
+        "target_dongs": ["대화동"],
+        "hotspot_coord": {"lat": 37.6698, "lng": 126.7473},
+        "clarification_question": "혹시 킨텍스가 위치한 경기도 고양시 일산서구(대화동) 일대의 매물을 찾으시나요?",
+        "confidence": "medium"
+    },
+    "불꽃축제": {
+        "landmark_name": "여의도 서울세계불꽃축제",
+        "region_name": "서울특별시 영등포구",
+        "code": "11560",
+        "target_dongs": ["여의도동"],
+        "hotspot_coord": {"lat": 37.5284, "lng": 126.9328},
+        "clarification_question": "혹시 서울세계불꽃축제가 열리는 서울특별시 영등포구(여의도동) 일대의 매물을 찾으시나요?",
+        "confidence": "medium"
+    },
+    "코엑스": {
+        "landmark_name": "코엑스",
+        "region_name": "서울특별시 강남구",
+        "code": "11680",
+        "target_dongs": ["삼성동"],
+        "hotspot_coord": {"lat": 37.5116, "lng": 127.0591},
+        "clarification_question": "혹시 코엑스(COEX)가 위치한 서울특별시 강남구(삼성동) 일대의 매물을 찾으시나요?",
+        "confidence": "medium"
+    }
+}
+
 
 def clean_format_korean_money(amount_manwon: Optional[int]) -> str:
     """만원 단위 숫자를 한국어로 변환하며, '만원' 단위 중복을 원천 차단"""
@@ -104,7 +180,7 @@ def extract_conditions_nlp(
 
     # 2. 거래 유형 판별
     trade_type = None
-    if "월세" in p_lower:
+    if any(k in p_lower for k in ["월세", "집세", "월세가", "집세가"]):
         trade_type = "월세"
     elif "전세" in p_lower:
         trade_type = "전세"
@@ -158,14 +234,28 @@ def extract_conditions_nlp(
     extracted_region = None
     words = [re.sub(r"[^가-힣a-zA-Z0-9]", "", w) for w in p.split() if w.strip()]
 
-    # 5-1. 3어절 N-gram (예: "경상남도 창원시 의창구", "인천 광역시 서구")
-    for i in range(len(words) - 2):
-        cand = f"{words[i]} {words[i+1]} {words[i+2]}"
-        code = resolve_lawd_cd(cand, silent=True)
-        if code:
-            target_lawd_cd = code
-            extracted_region = get_region_name(code)
+    # 5-0. 대한민국 주요 랜드마크 / 행사명 공간 추론 (Spatial Reasoning) 사전 검사
+    landmark_info = None
+    target_dongs = None
+    hotspot_coord = None
+    for lm_key, lm_val in SPATIAL_LANDMARK_REGISTRY.items():
+        if lm_key in p_lower:
+            landmark_info = lm_val
+            target_lawd_cd = lm_val["code"]
+            extracted_region = lm_val["region_name"]
+            target_dongs = lm_val.get("target_dongs")
+            hotspot_coord = lm_val.get("hotspot_coord")
             break
+
+    # 5-1. 3어절 N-gram (예: "경상남도 창원시 의창구", "인천 광역시 서구")
+    if not target_lawd_cd:
+        for i in range(len(words) - 2):
+            cand = f"{words[i]} {words[i+1]} {words[i+2]}"
+            code = resolve_lawd_cd(cand, silent=True)
+            if code:
+                target_lawd_cd = code
+                extracted_region = get_region_name(code)
+                break
 
     # 5-2. 2어절 N-gram (예: "인천 서구", "서울 강남", "창원 의창구", "대전 서구", "광주 서구")
     if not target_lawd_cd:
@@ -249,7 +339,10 @@ def extract_conditions_nlp(
         "max_monthly_rent": max_monthly_rent,
         "max_price": max_price,
         "regional_code": target_lawd_cd,
-        "apt_name": apt_name
+        "apt_name": apt_name,
+        "target_dongs": target_dongs,
+        "hotspot_coord": hotspot_coord,
+        "landmark_info": landmark_info
     }
 
 
@@ -284,16 +377,25 @@ async def parse_conditions_with_openai(
                 )
 
         system_msg = (
-            "너는 대한민국 부동산 질의 엔티티 추출(Named Entity Recognition) 전문가야. 사용자의 자연어 질문에서 검색 조건을 분석하여 반드시 유효한 JSON 형식으로만 추출해.\n"
+            "너는 대한민국 부동산 질의 엔티티 추출 및 공간 추론(Spatial Reasoning) 최고 전문가야.\n"
+            "사용자의 자연어 질문에서 검색 조건을 분석하여 반드시 유효한 JSON 형식으로만 추출해.\n"
             f"{context_hint}"
-            "- dong_name: 읍/면/동/리 단위의 세부 법정동 명칭 (예: '가좌동에 있어?' -> '가좌동', '대치동', '상남동', '문산읍'). 언급되지 않았으면 null.\n"
-            "- trade_type: 거래 유형 ('매매', '전세', '월세') 또는 null\n"
-            "- property_type: 주택 유형 ('아파트', '오피스텔', '연립다세대', '단독다가구'). '빌라'나 '투룸'은 '연립다세대', '원룸'은 '단독다가구'로 매핑. 없으면 null.\n"
-            "- max_deposit: 보증금 또는 전세금 상한선(만원 단위 정수, 예: 1000이하는 1000, 2억은 20000, 5000만원은 5000) 또는 null\n"
+            "[공간 추론(Spatial Reasoning) 핵심 규칙]:\n"
+            "1. 질문에 시/군/구 행정구역명이 직접 없더라도, 랜드마크/관광지/문화재/축제·행사명/테마파크/공원/대학(예: '남강축제', '에버랜드', '해운대', '킨텍스', '불꽃축제', '카이스트', '코엑스' 등)이 포함되어 있다면 너의 공간 지식을 활용하여 해당 랜드마크가 위치한 행정구역과 인접 핵심 법정동을 최우선으로 추론해.\n"
+            "- landmark_name: 질문에서 감지된 랜드마크 또는 행사명 (예: '남강축제' -> '진주 남강유등축제', '에버랜드', '킨텍스' 등) 또는 null\n"
+            "- region_name: 언급되었거나 랜드마크를 통해 추론된 시/도 및 시/군/구 정식 명칭 (예: '남강축제' -> '경상남도 진주시', '에버랜드' -> '경기도 용인시 처인구') 또는 null\n"
+            "- confidence: 랜드마크 위치 추론에 대한 확신도 ('high': 대한민국 내 명확한 단일 위치, 'medium': 추론 가능하나 추가 확인 권장, 'low': 여러 지역에 분산되어 있거나 불명확) 또는 null\n"
+            "- target_dongs: 해당 랜드마크/행사장과 직접 맞닿아 있거나 속한 핵심 법정동 목록 (배열, 예: '남강축제' -> ['칠암동', '망경동', '강남동', '본성동'], '에버랜드' -> ['포곡읍']) 또는 []\n"
+            "- clarification_question: 확신도가 낮거나 사용자 확인이 필요할 때 물어볼 친절한 되묻기 문장 (예: '혹시 진주 남강유등축제가 열리는 경상남도 진주시 일대의 매물을 찾으시나요?') 또는 null\n"
+            "\n"
+            "[부동산 검색 조건 규칙]:\n"
+            "- dong_name: 특정 법정동이 직접 언급된 경우 그 법정동 (예: '가좌동') 또는 null\n"
+            "- trade_type: 거래 유형 ('매매', '전세', '월세'). '집세'나 '월세'는 '월세', '전세'는 '전세', '매매'는 '매매'. 언급 없으면 null.\n"
+            "- property_type: 주택 유형 ('아파트', '오피스텔', '연립다세대', '단독다가구') 또는 null\n"
+            "- max_deposit: 보증금 또는 전세금 상한선(만원 단위 정수, 예: 1000이하는 1000, 2억은 20000) 또는 null\n"
             "- max_monthly_rent: 월세 상한선(만원 단위 정수, 예: 70이하는 70) 또는 null\n"
             "- max_price: 매매가 상한선(만원 단위 정수, 예: 15억은 150000) 또는 null\n"
             "- apt_name: 특정 단지명 또는 건물명 (예: '힐스테이트', '은마', '자이') 또는 null\n"
-            "- region_name: 언급된 시/군/구 광역 지역명 (예: '진주시', '강남구', '창원시 성산구') 또는 null\n"
             "반드시 유효한 JSON 문자열만 출력해."
         )
 
@@ -320,7 +422,7 @@ async def parse_conditions_with_openai(
             resolved = resolve_lawd_cd(nlp_cond["region_name"], silent=True)
             if resolved:
                 region_code = resolved
-        if not region_code:
+        if not region_code and not nlp_cond.get("landmark_info"):
             region_code = current_lawd_cd
 
         # OpenAI 결과와 NLP 규칙 결과의 교차 병합 (법정동 누락 원천 방어)
@@ -332,6 +434,19 @@ async def parse_conditions_with_openai(
         final_price = data.get("max_price") if data.get("max_price") is not None else nlp_cond.get("max_price")
         final_apt = data.get("apt_name") or nlp_cond.get("apt_name")
 
+        landmark_info = nlp_cond.get("landmark_info") or {}
+        if data.get("landmark_name"):
+            landmark_info["landmark_name"] = data["landmark_name"]
+        if data.get("confidence"):
+            landmark_info["confidence"] = data["confidence"]
+        if data.get("clarification_question"):
+            landmark_info["clarification_question"] = data["clarification_question"]
+        if data.get("target_dongs"):
+            landmark_info["target_dongs"] = data["target_dongs"]
+
+        final_target_dongs = data.get("target_dongs") or nlp_cond.get("target_dongs")
+        final_hotspot_coord = nlp_cond.get("hotspot_coord")
+
         return {
             "dong_name": final_dong,
             "region_name": data.get("region_name") or nlp_cond.get("region_name"),
@@ -341,7 +456,10 @@ async def parse_conditions_with_openai(
             "max_monthly_rent": final_rent,
             "max_price": final_price,
             "regional_code": region_code,
-            "apt_name": final_apt
+            "apt_name": final_apt,
+            "target_dongs": final_target_dongs,
+            "hotspot_coord": final_hotspot_coord,
+            "landmark_info": landmark_info if landmark_info else None
         }
     except Exception as e:
         print(f"⚠️ [OpenAI Parser 폴백]: {e}")
@@ -360,12 +478,16 @@ async def execute_text_to_sql_query(
     if reg_code:
         filters.append(ApartmentTrade.regional_code == str(reg_code))
 
-    # [핵심 1: 법정동 엄격한 AND 교집합 필터링]
+    # [핵심 1: 법정동 엄격한 AND 교집합 필터링 / 핫스팟 인접 동네 다중 OR 필터링]
     dong_val = conditions.get("dong_name")
+    target_dongs = conditions.get("target_dongs")
     if dong_val and str(dong_val).strip():
         clean_dong = str(dong_val).strip()
         # 국토부 실거래 데이터의 dong 컬럼에 정확히 일치하거나 포함되는 레코드만 엄격 필터링
         filters.append(ApartmentTrade.dong.ilike(f"%{clean_dong}%"))
+    elif target_dongs and isinstance(target_dongs, list) and len(target_dongs) > 0:
+        dong_clauses = [ApartmentTrade.dong.ilike(f"%{d}%") for d in target_dongs]
+        filters.append(or_(*dong_clauses))
 
     t_type = conditions.get("trade_type")
     if t_type:
@@ -540,12 +662,21 @@ async def run_ai_consultant(
         target_code = chosen_option.get("code")
         resolved_label = chosen_option.get("label") or get_region_name(target_code)
         resolved_dong = chosen_option.get("dong")
+        target_dongs = chosen_option.get("target_dongs") or (pending_ctx.get("target_dongs") if pending_ctx else None)
+        hotspot_coord = chosen_option.get("hotspot_coord") or (pending_ctx.get("hotspot_coord") if pending_ctx else None)
+        landmark_name = chosen_option.get("landmark") or (pending_ctx.get("keyword") if pending_ctx else None)
 
         # 이전 대화의 원본 질문 조건(보증금, 월세, 거래유형 등) 복원 및 결합 (맥락 유지)
         conditions = dict(pending_ctx.get("pending_conditions") or {}) if pending_ctx else {}
         conditions["regional_code"] = target_code
         if resolved_dong:
             conditions["dong_name"] = resolved_dong
+        if target_dongs:
+            conditions["target_dongs"] = target_dongs
+        if hotspot_coord:
+            conditions["hotspot_coord"] = hotspot_coord
+        if landmark_name:
+            conditions["landmark_name"] = landmark_name
 
         # 활성 타겟 지역 세션 메모리에 갱신 (프론트엔드 UI 지역 컨텍스트 오버라이드)
         session_data["last_active_region"] = {
@@ -605,7 +736,10 @@ async def run_ai_consultant(
                 "new_region_label": resolved_label,
                 "new_city_name": sido_name,
                 "new_sido_name": sido_name,
-                "new_district_name": district_name
+                "new_district_name": district_name,
+                "target_dongs": target_dongs,
+                "hotspot_coord": hotspot_coord,
+                "landmark_name": landmark_name
             }
 
         briefing_text = await _format_briefing_response(
@@ -642,7 +776,10 @@ async def run_ai_consultant(
             "new_region_label": resolved_label,
             "new_city_name": sido_name,
             "new_sido_name": sido_name,
-            "new_district_name": district_name
+            "new_district_name": district_name,
+            "target_dongs": target_dongs,
+            "hotspot_coord": hotspot_coord,
+            "landmark_name": landmark_name
         }
 
     # ---------------- 2단계: 신규 질의 자연어 조건 파싱 & 대명사/이전 맥락 복원 ----------------
@@ -684,6 +821,74 @@ async def run_ai_consultant(
         if not dong and session_data.get("last_dong_name"):
             conditions["dong_name"] = session_data["last_dong_name"]
             dong = session_data["last_dong_name"]
+
+    # ---------------- 2-1단계: 랜드마크/행사명 공간 추론 및 스마트 되묻기 (Active Clarification) ----------------
+    if not is_followup and conditions.get("landmark_info"):
+        lm = conditions["landmark_info"]
+        # 사용자가 행정구역명을 프롬프트에 직접 작성하지 않고 랜드마크/행사명만 말한 경우
+        # (예: '남강축제', '에버랜드' 등 -> 강남구 폴백 방지 및 스마트 되묻기 실행)
+        lm_kw = lm.get("landmark_name") or ""
+        prompt_without_lm = prompt
+        for k in SPATIAL_LANDMARK_REGISTRY.keys():
+            prompt_without_lm = prompt_without_lm.replace(k, "")
+        if lm_kw:
+            prompt_without_lm = prompt_without_lm.replace(lm_kw, "")
+
+        user_explicit_city = False
+        if lm.get("region_name"):
+            r_tokens = [tok for tok in lm["region_name"].split() if len(tok) >= 2]
+            for tok in r_tokens:
+                clean_tok = tok.replace("특별자치시", "").replace("광역시", "").replace("특별시", "").replace("시", "").replace("군", "").replace("구", "").replace("도", "")
+                if tok in prompt_without_lm or (len(clean_tok) >= 2 and clean_tok in prompt_without_lm):
+                    user_explicit_city = True
+                    break
+
+        if not user_explicit_city:
+            sido_name, district_name = get_sido_and_district(lm["code"])
+            clarify_text = lm.get("clarification_question") or f"혹시 {lm['landmark_name']}이(가) 열리는 {lm['region_name']} 일대의 매물을 찾으시나요?"
+
+            options = [
+                {
+                    "index": 1,
+                    "label": f"{lm['region_name']} ({lm['landmark_name']} 인접 {', '.join(lm.get('target_dongs', [])[:3])})",
+                    "code": lm["code"],
+                    "sido": sido_name,
+                    "district": district_name,
+                    "target_dongs": lm.get("target_dongs"),
+                    "hotspot_coord": lm.get("hotspot_coord"),
+                    "landmark": lm["landmark_name"]
+                }
+            ]
+
+            disambiguation_payload = {
+                "keyword": lm["landmark_name"],
+                "entity_type": "landmark",
+                "inferred_region": lm["region_name"],
+                "code": lm["code"],
+                "target_dongs": lm.get("target_dongs"),
+                "hotspot_coord": lm.get("hotspot_coord"),
+                "original_prompt": prompt,
+                "pending_conditions": conditions,
+                "options": options
+            }
+
+            session_data["pending_disambiguation"] = disambiguation_payload
+
+            return {
+                "status": "needs_clarification",
+                "reply": clarify_text,
+                "disambiguation": disambiguation_payload,
+                "target_dongs": lm.get("target_dongs"),
+                "hotspot_coord": lm.get("hotspot_coord"),
+                "landmark_name": lm["landmark_name"]
+            }
+        else:
+            if lm.get("target_dongs"):
+                conditions["target_dongs"] = lm["target_dongs"]
+            if lm.get("hotspot_coord"):
+                conditions["hotspot_coord"] = lm["hotspot_coord"]
+            if lm.get("landmark_name"):
+                conditions["landmark_name"] = lm["landmark_name"]
 
     # ---------------- 3단계: 범용 중복 지명 탐지 (Global Ambiguity Detection) ----------------
     if not is_followup:
@@ -802,7 +1007,10 @@ async def run_ai_consultant(
             "new_region_label": region_name,
             "new_city_name": sido_name,
             "new_sido_name": sido_name,
-            "new_district_name": district_name
+            "new_district_name": district_name,
+            "target_dongs": conditions.get("target_dongs"),
+            "hotspot_coord": conditions.get("hotspot_coord"),
+            "landmark_name": conditions.get("landmark_name")
         }
 
     # ---------------- 6단계: 실제 데이터 브리핑 생성 ----------------
@@ -846,7 +1054,10 @@ async def run_ai_consultant(
         "new_region_label": region_name,
         "new_city_name": sido_name,
         "new_sido_name": sido_name,
-        "new_district_name": district_name
+        "new_district_name": district_name,
+        "target_dongs": conditions.get("target_dongs"),
+        "hotspot_coord": conditions.get("hotspot_coord"),
+        "landmark_name": conditions.get("landmark_name")
     }
 
 
