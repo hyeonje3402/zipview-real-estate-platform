@@ -322,6 +322,12 @@ export const REGION_DATA = {
   ]
 };
 
+// ==================== AI 챗봇 → 대시보드 UI 제어 매핑 (target_view / trade_type) ====================
+// 백엔드가 내려주는 target_view 값을 대시보드 viewMode 상태값으로 매핑
+export const VIEW_MODE_BY_TARGET = { B2B: "listing", TRANSACTION: "transaction" };
+// 거래 유형 필터로 허용되는 값 (매물/차트 필터 버튼의 id 와 동일)
+export const TRADE_FILTER_IDS = ["매매", "전세", "월세"];
+
 // ==================== 전국 시/도 및 시/군/구 정규화 매퍼 ====================
 export const SIDO_ALIASES = {
   "서울": "서울특별시", "서울시": "서울특별시",
@@ -820,13 +826,12 @@ const SearchableComplexCombobox = ({
                     data-index={idx}
                     onMouseEnter={() => setHighlightedIndex(idx)}
                     onClick={() => handleSelect(name)}
-                    className={`px-3 py-2 text-xs cursor-pointer flex items-center justify-between transition-colors ${
-                      isHighlighted
+                    className={`px-3 py-2 text-xs cursor-pointer flex items-center justify-between transition-colors ${isHighlighted
                         ? highlightClass
                         : isSelected
-                        ? "bg-slate-100 font-black text-slate-900"
-                        : "text-slate-700 hover:bg-slate-50 font-medium"
-                    }`}
+                          ? "bg-slate-100 font-black text-slate-900"
+                          : "text-slate-700 hover:bg-slate-50 font-medium"
+                      }`}
                   >
                     <span className="truncate pr-2">{name}</span>
                     {isSelected && (
@@ -1230,7 +1235,7 @@ export default function TossStyleRealEstateDashboard() {
           }
 
           setFetchError(null);
-          
+
           // 36개월 전수 통계 차트: 백엔드 집계 데이터 우선 적용
           const calculatedChart = (response.data.chart_data && response.data.chart_data.length > 0)
             ? response.data.chart_data
@@ -1395,7 +1400,7 @@ export default function TossStyleRealEstateDashboard() {
         url.searchParams.set("region", currentRegionLabel);
         window.history.replaceState({ lawdCd, region: currentRegionLabel }, "", url.toString());
       }
-    } catch (_) {}
+    } catch (_) { }
 
     // 2) 동적 페이지 타이틀(Title) 최적화
     const pageTitle = `${currentRegionLabel} 아파트 실거래가 및 시세 분석 | 집뷰(ZipView)`;
@@ -2029,6 +2034,34 @@ export default function TossStyleRealEstateDashboard() {
     return false;
   }, [lawdCd, selectedSido, showToast]);
 
+  // 챗봇 → 대시보드 전역 UI 제어: 지역 + 탭(viewMode) + 거래유형 필터 + AI 검색 칩을 한 번에 동기화
+  const applyDashboardSync = useCallback((regionInfo, targetView, tradeType, userMessage) => {
+    const hasRegion = Boolean(regionInfo && (regionInfo.code || regionInfo.sidoName || regionInfo.districtName));
+    if (hasRegion) {
+      applyRegionSwitch(regionInfo, regionInfo.hotspotCoord, regionInfo.targetDongs);
+    }
+
+    // 1) 활성 탭 강제 전환 (예: target_view "B2B" -> "B2B 제휴 매물 현황" 탭)
+    const nextMode = targetView ? VIEW_MODE_BY_TARGET[String(targetView).trim().toUpperCase()] : null;
+    if (nextMode) {
+      setViewMode(nextMode);
+      setSelectedListing(null);
+    }
+
+    // 2) 거래 유형 필터 자동 세팅 (실거래 원장 / 제휴 매물 양쪽 필터 모두) -> fetch useEffect 가 자동 리패칭
+    const nextTrade = tradeType && TRADE_FILTER_IDS.includes(String(tradeType).trim()) ? String(tradeType).trim() : null;
+    if (nextTrade) {
+      setTradeTypeFilter(nextTrade);
+      setListingTradeFilter(nextTrade);
+      setTablePage(1);
+    }
+
+    // 3) 챗봇 창을 닫아도 사용자의 원본 질문 표시
+    if (userMessage && (hasRegion || nextMode || nextTrade)) {
+      setAiActiveQuery(userMessage);
+    }
+  }, [applyRegionSwitch]);
+
   // ==================== [핵심 1] 주식 스타일 차트 데이터 보강 ====================
   // 전월 대비 매매가/전세가 등락액 및 등락률(▲▼) 사전 계산
   const enrichedStockChartData = useMemo(() => {
@@ -2292,18 +2325,26 @@ export default function TossStyleRealEstateDashboard() {
         setPendingDisambiguation(null);
       }
 
-      // 프론트엔드 종속성 완전 차단: 백엔드 챗봇에서 확정/전환된 타겟 지역으로 대시보드 상태 자율 오버라이드 (전국 252개 시/군/구 정규화 매핑)
-      const newCode = res.data?.new_lawd_cd || res.data?.new_regional_code;
-      if (status !== "needs_clarification" && (res.data?.override_region || newCode) && (newCode || res.data?.new_city_name || res.data?.new_district_name)) {
-        applyRegionSwitch({
-          code: newCode,
-          sidoName: res.data.new_city_name || res.data.new_sido_name,
-          districtName: res.data.new_district_name,
-          label: res.data.new_region_label
-        }, res.data.hotspot_coord, res.data.target_dongs);
-        // 챗봇 창을 닫아도 메인 화면에 사용자의 원본 질문이 남도록 상태 저장
-        // 되묻기 확인 응답("응 맞아")이면 최초 원본 질문을, 아니면 방금 입력한 질문을 표시
-        setAiActiveQuery(pendingDisambiguation?.original_prompt || userText);
+      // 챗봇 -> 대시보드 전역 UI 제어: 지역 + 탭(target_view) + 거래유형 필터(trade_type) + AI 검색 칩을 한 번에 동기화
+      if (status !== "needs_clarification") {
+        const newCode = res.data?.new_lawd_cd || res.data?.new_regional_code;
+        const hasRegion = Boolean(newCode || res.data?.new_city_name || res.data?.new_district_name);
+        applyDashboardSync(
+          hasRegion
+            ? {
+                code: newCode,
+                sidoName: res.data.new_city_name || res.data.new_sido_name,
+                districtName: res.data.new_district_name,
+                label: res.data.new_region_label,
+                hotspotCoord: res.data.hotspot_coord,
+                targetDongs: res.data.target_dongs
+              }
+            : null,
+          res.data?.target_view,
+          res.data?.trade_type,
+          // 되묻기 확인 응답("응 맞아")이면 최초 원본 질문을, 아니면 방금 입력한 질문을 표시
+          pendingDisambiguation?.original_prompt || userText
+        );
       }
 
       setChatMessages((prev) => [
@@ -2377,11 +2418,10 @@ export default function TossStyleRealEstateDashboard() {
                   setViewMode("transaction");
                   showToast("[실거래가 분석] 국토교통부 3개년 실거래 원장 데이터를 표시합니다.");
                 }}
-                className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 min-h-[42px] rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
-                  viewMode === "transaction"
+                className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 min-h-[42px] rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${viewMode === "transaction"
                     ? "bg-white text-[#191F28] shadow-xs font-black"
                     : "text-[#8B95A1] hover:text-[#4E5968]"
-                }`}
+                  }`}
               >
                 <span>실거래 원장 분석</span>
               </button>
@@ -2390,11 +2430,10 @@ export default function TossStyleRealEstateDashboard() {
                   setViewMode("listing");
                   showToast("[제휴 매물 현황] B2B 제휴 중개사 현장 확인 매물을 표시합니다.");
                 }}
-                className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 min-h-[42px] rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${
-                  viewMode === "listing"
+                className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 min-h-[42px] rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${viewMode === "listing"
                     ? "bg-[#0f172a] text-white shadow-xs font-black"
                     : "text-[#8B95A1] hover:text-[#4E5968]"
-                }`}
+                  }`}
               >
                 <span>B2B 제휴 매물 현황</span>
                 <span className="bg-slate-800 text-white text-[9px] font-bold px-1.5 py-0.5 rounded">
@@ -2534,11 +2573,10 @@ export default function TossStyleRealEstateDashboard() {
               <button
                 key={tag}
                 onClick={() => setSearchKeyword(tag)}
-                className={`px-2.5 py-1 rounded-lg font-bold shrink-0 transition-all cursor-pointer text-[11px] ${
-                  searchKeyword === tag
+                className={`px-2.5 py-1 rounded-lg font-bold shrink-0 transition-all cursor-pointer text-[11px] ${searchKeyword === tag
                     ? "bg-[#0f172a] text-white"
                     : "bg-[#F2F4F6] hover:bg-[#E5E8EB] text-[#4E5968]"
-                }`}
+                  }`}
               >
                 #{tag}
               </button>
@@ -2648,1235 +2686,1222 @@ export default function TossStyleRealEstateDashboard() {
         ) : (
           <>
 
-        {/* ========================================================================= */}
-        {/* [실거래가 모드] 주식형 ComposedChart & 1:1 비교 매트릭스 (과거 분석용)      */}
-        {/* ========================================================================= */}
-        {viewMode === "transaction" && (
-        <>
-        <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-4 w-full max-w-full box-border min-w-0">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-3 border-b border-[#F2F4F6]">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="bg-[#E8F3FF] text-[#1e3a8a] text-xs font-black px-2.5 py-1 rounded-full">
-                  Stock Multi-Chart
-                </span>
-                <h3 className="text-lg font-black text-[#191F28] tracking-tight">
-                  {currentRegionLabel} 3개년 시세 추이 및 월간 거래량
-                </h3>
-              </div>
-              <p className="text-xs text-[#8B95A1] font-medium mt-1">
-                주식형 복합 차트: 좌측 Y축(매매/전세 시세 곡선)과 우측 Y축(하단 월간 거래량 Bar)을 결합하여 분석합니다.
-              </p>
-            </div>
-
-            {/* 차트 뷰 모드 탭 토글 */}
-            <div className="flex items-center gap-1 bg-[#F2F4F6] p-1 rounded-full self-start">
-              {[
-                { id: "all", label: "매매+전세" },
-                { id: "매매", label: "매매만" },
-                { id: "전세", label: "전세만" }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setChartViewMode(tab.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
-                    chartViewMode === tab.id
-                      ? "bg-white text-[#191F28] shadow-2xs font-extrabold"
-                      : "text-[#8B95A1] hover:text-[#191F28]"
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 주식 앱 스타일 시세 & 등락률 상단 지표 바 (토스증권 스타일) */}
-          {latestMonthStockMetric && (
-            <div className="flex flex-wrap items-center gap-4 bg-[#F9FAFB] p-3.5 rounded-xl border border-[#E5E8EB]/60">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-[#8B95A1]">최근 기준월:</span>
-                <span className="text-xs font-extrabold text-[#191F28] bg-white px-2 py-0.5 rounded-md border border-[#E5E8EB]">
-                  20{latestMonthStockMetric.month}
-                </span>
-              </div>
-
-              <div className="h-3.5 w-px bg-[#E5E8EB]"></div>
-
-              {/* 매매가 등락률 뱃지 */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-[#8B95A1]">매매가:</span>
-                <span className="text-sm font-black text-[#191F28]">
-                  {formatTossMoney(latestMonthStockMetric.tradePrice)}
-                </span>
-                {latestMonthStockMetric.tradeDiff !== 0 && (
-                  <span
-                    className={`inline-flex items-center gap-0.5 text-xs font-black px-2 py-0.5 rounded-md ${
-                      latestMonthStockMetric.isTradeUp
-                        ? "bg-[#FEECEE] text-[#F04452]"
-                        : "bg-[#E8F3FF] text-[#1e3a8a]"
-                    }`}
-                  >
-                    {latestMonthStockMetric.isTradeUp ? "▲ +" : "▼ -"}
-                    {formatTossMoney(Math.abs(latestMonthStockMetric.tradeDiff))} (
-                    {latestMonthStockMetric.tradeRate > 0 ? `+${latestMonthStockMetric.tradeRate}` : latestMonthStockMetric.tradeRate}%)
-                  </span>
-                )}
-              </div>
-
-              <div className="h-3.5 w-px bg-[#E5E8EB] hidden sm:block"></div>
-
-              {/* 전세가 등락률 뱃지 */}
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-[#8B95A1]">전세가:</span>
-                <span className="text-sm font-black text-[#191F28]">
-                  {formatTossMoney(latestMonthStockMetric.jeonsePrice)}
-                </span>
-                {latestMonthStockMetric.jeonseDiff !== 0 && (
-                  <span
-                    className={`inline-flex items-center gap-0.5 text-xs font-black px-2 py-0.5 rounded-md ${
-                      latestMonthStockMetric.isJeonseUp
-                        ? "bg-[#FEECEE] text-[#F04452]"
-                        : "bg-[#E8F3FF] text-[#1e3a8a]"
-                    }`}
-                  >
-                    {latestMonthStockMetric.isJeonseUp ? "▲ +" : "▼ -"}
-                    {formatTossMoney(Math.abs(latestMonthStockMetric.jeonseDiff))} (
-                    {latestMonthStockMetric.jeonseRate > 0 ? `+${latestMonthStockMetric.jeonseRate}` : latestMonthStockMetric.jeonseRate}%)
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* 주식형 ComposedChart 렌더링 컨테이너 */}
-          <div
-            className="w-full h-80 min-h-[320px] pt-1 relative flex items-center justify-center touch-pan-y"
-            style={{ height: "340px", minHeight: "340px", width: "100%", touchAction: "pan-y" }}
-          >
-            {fetchError ? (
-              <div className="flex flex-col items-center justify-center h-full p-6 text-center space-y-3">
-                <div className="w-10 h-10 rounded-full bg-red-50 border border-red-200 text-red-600 flex items-center justify-center">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </div>
-                <div className="space-y-1 max-w-md">
-                  <p className="text-xs sm:text-sm font-bold text-[#0F172A]">
-                    국토부 공공데이터 서버 응답이 지연되어 데이터를 불러오지 못했습니다.
-                  </p>
-                  <p className="text-[11px] text-[#64748B]">
-                    잠시 후 다시 시도해주세요.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setFetchError(null);
-                    fetchData(lawdCd, 1);
-                  }}
-                  className="mt-1 px-4 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 flex items-center gap-1.5 cursor-pointer"
-                >
-                  <span>다시 시도</span>
-                </button>
-              </div>
-            ) : isLoading ? (
-              <ChartSkeleton regionLabel={currentRegionLabel} />
-            ) : enrichedStockChartData.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-xs text-[#64748B] font-medium space-y-2 p-6 text-center">
-                <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <span className="font-bold text-[#0F172A]">{currentRegionLabel} 36개월 실거래 데이터가 없습니다.</span>
-                <p className="text-[11px] text-[#64748B]">다른 시/군/구를 선택하시면 해당 지역의 데이터가 자동으로 동기화됩니다.</p>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={330}>
-                <ComposedChart data={enrichedStockChartData} margin={{ top: 15, right: 15, left: -10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="tradeGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#F04452" stopOpacity={0.28} />
-                      <stop offset="95%" stopColor="#F04452" stopOpacity={0.0} />
-                    </linearGradient>
-                    <linearGradient id="jeonseGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3182F6" stopOpacity={0.28} />
-                      <stop offset="95%" stopColor="#3182F6" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F2F4F6" />
-                  <XAxis
-                    dataKey="month"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fill: "#8B95A1", fontSize: 10, fontWeight: 600 }}
-                    interval={4}
-                  />
-                  {/* 좌측 Y축: 실거래가 (억 단위) */}
-                  <YAxis
-                    yAxisId="price"
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(val) => (val && val > 0 ? `${Math.round(val / 10000)}억` : "0")}
-                    tick={{ fill: "#8B95A1", fontSize: 11, fontWeight: 600 }}
-                    width={52}
-                    domain={["auto", "auto"]}
-                  />
-                  {/* 우측 Y축: 거래량 (차트 하단 35%에만 오버랩되도록 상한 도메인 설정) */}
-                  <YAxis
-                    yAxisId="volume"
-                    orientation="right"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fill: "#B0B8C1", fontSize: 9, fontWeight: 500 }}
-                    tickFormatter={(v) => `${v}건`}
-                    domain={[0, (dataMax) => Math.max(dataMax * 3.2, 40)]}
-                    width={38}
-                  />
-                  <Tooltip
-                    content={<TossStockChartTooltip />}
-                    isAnimationActive={false}
-                    allowEscapeViewBox={{ x: false, y: false }}
-                    wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
-                  />
-                  <Legend
-                    verticalAlign="top"
-                    align="right"
-                    wrapperStyle={{ paddingBottom: 10, fontSize: 11, fontWeight: 700 }}
-                  />
-
-                  {/* 하단 월간 거래량 막대 (주식 차트 거래량 스타일) */}
-                  <Bar
-                    yAxisId="volume"
-                    name="월간 거래량 (Volume)"
-                    dataKey="volume"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={12}
-                  >
-                    {enrichedStockChartData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={entry.tradeDiff >= 0 ? "rgba(240, 68, 82, 0.40)" : "rgba(49, 130, 246, 0.40)"}
-                      />
-                    ))}
-                  </Bar>
-
-                  {/* 매매 평균가 곡선 */}
-                  {(chartViewMode === "all" || chartViewMode === "매매") && (
-                    <Area
-                      yAxisId="price"
-                      type="monotone"
-                      name="매매 평균가"
-                      dataKey="tradePrice"
-                      stroke="#F04452"
-                      strokeWidth={3}
-                      fill="url(#tradeGrad)"
-                      dot={{ r: 3, fill: "#F04452", strokeWidth: 1.5, stroke: "#fff" }}
-                      activeDot={{ r: 6 }}
-                      connectNulls={true}
-                    />
-                  )}
-
-                  {/* 전세 평균가 곡선 */}
-                  {(chartViewMode === "all" || chartViewMode === "전세") && (
-                    <Area
-                      yAxisId="price"
-                      type="monotone"
-                      name="전세 평균가"
-                      dataKey="jeonsePrice"
-                      stroke="#3182F6"
-                      strokeWidth={3}
-                      fill="url(#jeonseGrad)"
-                      dot={{ r: 3, fill: "#3182F6", strokeWidth: 1.5, stroke: "#fff" }}
-                      activeDot={{ r: 6 }}
-                      connectNulls={true}
-                    />
-                  )}
-                </ComposedChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-        </section>
-
-        {/* ========================================================================= */}
-        {/* [요구사항 2] 1:1 비교 막대그래프 & 매트릭스 신규 섹션                      */}
-        {/* ========================================================================= */}
-        <section className="bg-white rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-6 w-full max-w-full box-border min-w-0">
-          <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 gap-3 border-b border-[#F2F4F6]">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="bg-[#7B2CBF]/10 text-[#7B2CBF] text-xs font-black px-2.5 py-1 rounded-full">
-                  1:1 VS Analysis
-                </span>
-                <h3 className="text-lg font-black text-[#191F28] tracking-tight">
-                  단지 1:1 비교 막대그래프 & 스펙 대조
-                </h3>
-              </div>
-              <p className="text-xs text-[#8B95A1] font-medium mt-1">
-                두 개의 단지를 선택하여 평균 매매가, 평균 전세가, 전세가율을 막대그래프로 나란히 비교합니다.
-              </p>
-            </div>
-
-            {/* 1:1 비교 단지 선택 컨트롤러 (실시간 검색형 콤보박스) */}
-            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 bg-[#F9FAFB] p-2.5 rounded-xl border border-[#E5E8EB] w-full md:w-[520px] box-border">
-              {/* 단지 A 실시간 검색 콤보박스 */}
-              <div className="flex-1 min-w-0 w-full">
-                <SearchableComplexCombobox
-                  tag="단지 A"
-                  theme="navy"
-                  value={targetComplexA?.name || ""}
-                  options={availableComplexNames}
-                  onChange={(val) => setCompareComplexA(val)}
-                  placeholder="단지 A 검색..."
-                />
-              </div>
-
-              <div className="flex items-center justify-center py-0.5 md:py-0 shrink-0">
-                <span className="text-[11px] font-black text-[#7B2CBF] px-2 py-0.5 bg-[#7B2CBF]/10 rounded-md">VS</span>
-              </div>
-
-              {/* 단지 B 실시간 검색 콤보박스 */}
-              <div className="flex-1 min-w-0 w-full">
-                <SearchableComplexCombobox
-                  tag="단지 B"
-                  theme="purple"
-                  value={targetComplexB?.name || ""}
-                  options={availableComplexNames}
-                  onChange={(val) => setCompareComplexB(val)}
-                  placeholder="단지 B 검색..."
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* 1:1 비교 Recharts BarChart 시각화 영역 */}
-          {fetchError ? (
-            <div className="py-12 text-center space-y-2">
-              <p className="text-xs font-bold text-red-600">
-                국토부 공공데이터 서버 응답이 지연되어 비교 분석 데이터를 불러오지 못했습니다.
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setFetchError(null);
-                  fetchData(lawdCd, 1);
-                }}
-                className="px-3.5 py-1.5 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-md text-xs font-bold transition-all shadow-xs"
-              >
-                다시 시도
-              </button>
-            </div>
-          ) : isLoading ? (
-            <MatrixSkeleton regionLabel={currentRegionLabel} />
-          ) : !targetComplexA || !targetComplexB ? (
-            <div className="py-12 text-center text-[#64748B] text-xs font-medium space-y-1">
-              <p className="font-bold text-[#0F172A]">{currentRegionLabel}에 비교 가능한 단지 정보가 충분하지 않습니다.</p>
-              <p className="text-[11px] text-[#64748B]">해당 조건의 실거래 데이터가 없습니다. 다른 지역을 선택하시면 실거래 단지 데이터가 자동으로 동기화됩니다.</p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {/* 상단 1:1 나란히 세워진 2색 막대그래프 (매매가, 전세가, 전세가율) */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                {/* 1. 평균 매매가 & 전세가 비교 막대그래프 (2/3 너비) */}
-                <div className="lg:col-span-2 bg-[#F9FAFB] p-3.5 sm:p-5 rounded-xl border border-[#E5E8EB] space-y-3 w-full max-w-full box-border min-w-0">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            {/* ========================================================================= */}
+            {/* [실거래가 모드] 주식형 ComposedChart & 1:1 비교 매트릭스 (과거 분석용)      */}
+            {/* ========================================================================= */}
+            {viewMode === "transaction" && (
+              <>
+                <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-4 w-full max-w-full box-border min-w-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-3 border-b border-[#F2F4F6]">
                     <div>
-                      <h4 className="font-extrabold text-sm text-[#191F28]">평균 매매가 & 전세가 비교</h4>
-                      <p className="text-[11px] text-[#8B95A1]">단위: 만원 (축: 억 단위)</p>
+                      <div className="flex items-center gap-2">
+                        <span className="bg-[#E8F3FF] text-[#1e3a8a] text-xs font-black px-2.5 py-1 rounded-full">
+                          Stock Multi-Chart
+                        </span>
+                        <h3 className="text-lg font-black text-[#191F28] tracking-tight">
+                          {currentRegionLabel} 3개년 시세 추이 및 월간 거래량
+                        </h3>
+                      </div>
+                      <p className="text-xs text-[#8B95A1] font-medium mt-1">
+                        주식형 복합 차트: 좌측 Y축(매매/전세 시세 곡선)과 우측 Y축(하단 월간 거래량 Bar)을 결합하여 분석합니다.
+                      </p>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
-                      <span className="flex items-center gap-1 text-[#1e3a8a]">
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#0f172a]"></span>
-                        {targetComplexA.name}
-                      </span>
-                      <span className="flex items-center gap-1 text-[#7B2CBF]">
-                        <span className="w-2.5 h-2.5 rounded-full bg-[#7B2CBF]"></span>
-                        {targetComplexB.name}
-                      </span>
-                    </div>
-                  </div>
 
-                  <div className="w-full h-64 touch-pan-y" style={{ touchAction: "pan-y" }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={priceBarComparisonData} margin={{ top: 20, right: 15, left: -10, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E8EB" />
-                        <XAxis dataKey="metric" tickLine={false} axisLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: "#191F28" }} />
-                        <YAxis
-                          tickLine={false}
-                          axisLine={false}
-                          tickFormatter={(v) => `${Math.round(v / 10000)}억`}
-                          tick={{ fontSize: 10, fill: "#8B95A1", fontWeight: 600 }}
-                          width={48}
-                        />
-                        <Tooltip
-                          content={<ComparisonBarTooltip />}
-                          isAnimationActive={false}
-                          allowEscapeViewBox={{ x: false, y: false }}
-                          wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
-                        />
-                        <Bar
-                          dataKey={targetComplexA.name}
-                          name={targetComplexA.name}
-                          fill="#3182F6"
-                          radius={[6, 6, 0, 0]}
-                          maxBarSize={44}
-                        />
-                        <Bar
-                          dataKey={targetComplexB.name === targetComplexA.name ? `${targetComplexB.name} (대조)` : targetComplexB.name}
-                          name={targetComplexB.name}
-                          fill="#7B2CBF"
-                          radius={[6, 6, 0, 0]}
-                          maxBarSize={44}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* 2. 평균 전세가율 (%) 비교 막대그래프 (1/3 너비) */}
-                <div className="bg-[#F9FAFB] p-3.5 sm:p-5 rounded-xl border border-[#E5E8EB] space-y-3 flex flex-col justify-between w-full max-w-full box-border min-w-0">
-                  <div>
-                    <h4 className="font-extrabold text-sm text-[#191F28]">평균 전세가율 (%) 비교</h4>
-                    <p className="text-[11px] text-[#8B95A1]">매매가 대비 전세 보증금 비율</p>
-                  </div>
-
-                  <div className="w-full h-44 touch-pan-y" style={{ touchAction: "pan-y" }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={ratioBarComparisonData} margin={{ top: 15, right: 10, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E8EB" />
-                        <XAxis dataKey="metric" tickLine={false} axisLine={false} tick={{ fontSize: 11, fontWeight: 700, fill: "#191F28" }} />
-                        <YAxis
-                          domain={[0, 100]}
-                          tickLine={false}
-                          axisLine={false}
-                          tickFormatter={(v) => `${v}%`}
-                          tick={{ fontSize: 10, fill: "#8B95A1", fontWeight: 600 }}
-                          width={40}
-                        />
-                        <Tooltip
-                          content={<ComparisonBarTooltip />}
-                          isAnimationActive={false}
-                          allowEscapeViewBox={{ x: false, y: false }}
-                          wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
-                        />
-                        <Bar
-                          dataKey={targetComplexA.name}
-                          name={targetComplexA.name}
-                          fill="#3182F6"
-                          radius={[6, 6, 0, 0]}
-                          maxBarSize={36}
-                        />
-                        <Bar
-                          dataKey={targetComplexB.name === targetComplexA.name ? `${targetComplexB.name} (대조)` : targetComplexB.name}
-                          name={targetComplexB.name}
-                          fill="#7B2CBF"
-                          radius={[6, 6, 0, 0]}
-                          maxBarSize={36}
-                        />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-
-                  {/* 갭투자 분석 인디케이터 */}
-                  <div className="bg-white p-3 rounded-xl border border-[#E5E8EB] text-xs space-y-1">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[#1e3a8a] font-bold">{targetComplexA.name}</span>
-                      <span className="font-black text-sm">{targetComplexA.jeonseRatio}%</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-[#7B2CBF] font-bold">{targetComplexB.name}</span>
-                      <span className="font-black text-sm">{targetComplexB.jeonseRatio}%</span>
+                    {/* 차트 뷰 모드 탭 토글 */}
+                    <div className="flex items-center gap-1 bg-[#F2F4F6] p-1 rounded-full self-start">
+                      {[
+                        { id: "all", label: "매매+전세" },
+                        { id: "매매", label: "매매만" },
+                        { id: "전세", label: "전세만" }
+                      ].map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => setChartViewMode(tab.id)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${chartViewMode === tab.id
+                              ? "bg-white text-[#191F28] shadow-2xs font-extrabold"
+                              : "text-[#8B95A1] hover:text-[#191F28]"
+                            }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                </div>
-              </div>
 
-              {/* 하단 1:1 정밀 스펙 비교 테이블 */}
-              <div className="overflow-x-auto w-full max-w-full rounded-xl border border-[#E5E8EB]">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-[#F2F4F6] text-[#8B95A1] border-b border-[#E5E8EB]">
-                      <th className="py-3 px-4 font-bold w-40">비교 항목</th>
-                      <th className="py-3 px-4 font-extrabold text-[#1e3a8a] text-sm">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#0f172a]"></span>
-                          <span>[단지 A] {targetComplexA.name}</span>
+                  {/* 주식 앱 스타일 시세 & 등락률 상단 지표 바 (토스증권 스타일) */}
+                  {latestMonthStockMetric && (
+                    <div className="flex flex-wrap items-center gap-4 bg-[#F9FAFB] p-3.5 rounded-xl border border-[#E5E8EB]/60">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-[#8B95A1]">최근 기준월:</span>
+                        <span className="text-xs font-extrabold text-[#191F28] bg-white px-2 py-0.5 rounded-md border border-[#E5E8EB]">
+                          20{latestMonthStockMetric.month}
+                        </span>
+                      </div>
+
+                      <div className="h-3.5 w-px bg-[#E5E8EB]"></div>
+
+                      {/* 매매가 등락률 뱃지 */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-[#8B95A1]">매매가:</span>
+                        <span className="text-sm font-black text-[#191F28]">
+                          {formatTossMoney(latestMonthStockMetric.tradePrice)}
+                        </span>
+                        {latestMonthStockMetric.tradeDiff !== 0 && (
+                          <span
+                            className={`inline-flex items-center gap-0.5 text-xs font-black px-2 py-0.5 rounded-md ${latestMonthStockMetric.isTradeUp
+                                ? "bg-[#FEECEE] text-[#F04452]"
+                                : "bg-[#E8F3FF] text-[#1e3a8a]"
+                              }`}
+                          >
+                            {latestMonthStockMetric.isTradeUp ? "▲ +" : "▼ -"}
+                            {formatTossMoney(Math.abs(latestMonthStockMetric.tradeDiff))} (
+                            {latestMonthStockMetric.tradeRate > 0 ? `+${latestMonthStockMetric.tradeRate}` : latestMonthStockMetric.tradeRate}%)
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="h-3.5 w-px bg-[#E5E8EB] hidden sm:block"></div>
+
+                      {/* 전세가 등락률 뱃지 */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-[#8B95A1]">전세가:</span>
+                        <span className="text-sm font-black text-[#191F28]">
+                          {formatTossMoney(latestMonthStockMetric.jeonsePrice)}
+                        </span>
+                        {latestMonthStockMetric.jeonseDiff !== 0 && (
+                          <span
+                            className={`inline-flex items-center gap-0.5 text-xs font-black px-2 py-0.5 rounded-md ${latestMonthStockMetric.isJeonseUp
+                                ? "bg-[#FEECEE] text-[#F04452]"
+                                : "bg-[#E8F3FF] text-[#1e3a8a]"
+                              }`}
+                          >
+                            {latestMonthStockMetric.isJeonseUp ? "▲ +" : "▼ -"}
+                            {formatTossMoney(Math.abs(latestMonthStockMetric.jeonseDiff))} (
+                            {latestMonthStockMetric.jeonseRate > 0 ? `+${latestMonthStockMetric.jeonseRate}` : latestMonthStockMetric.jeonseRate}%)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 주식형 ComposedChart 렌더링 컨테이너 */}
+                  <div
+                    className="w-full h-80 min-h-[320px] pt-1 relative flex items-center justify-center touch-pan-y"
+                    style={{ height: "340px", minHeight: "340px", width: "100%", touchAction: "pan-y" }}
+                  >
+                    {fetchError ? (
+                      <div className="flex flex-col items-center justify-center h-full p-6 text-center space-y-3">
+                        <div className="w-10 h-10 rounded-full bg-red-50 border border-red-200 text-red-600 flex items-center justify-center">
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                          </svg>
                         </div>
-                      </th>
-                      <th className="py-3 px-4 font-extrabold text-[#7B2CBF] text-sm">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#7B2CBF]"></span>
-                          <span>[단지 B] {targetComplexB.name}</span>
+                        <div className="space-y-1 max-w-md">
+                          <p className="text-xs sm:text-sm font-bold text-[#0F172A]">
+                            국토부 공공데이터 서버 응답이 지연되어 데이터를 불러오지 못했습니다.
+                          </p>
+                          <p className="text-[11px] text-[#64748B]">
+                            잠시 후 다시 시도해주세요.
+                          </p>
                         </div>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#F2F4F6]">
-                    <tr>
-                      <td className="py-3.5 px-4 font-bold text-[#8B95A1] bg-[#FAFAFA]/70">위치 (법정동)</td>
-                      <td className="py-3.5 px-4 font-semibold text-[#191F28]">{targetComplexA.dong}</td>
-                      <td className="py-3.5 px-4 font-semibold text-[#191F28]">{targetComplexB.dong}</td>
-                    </tr>
-                    <tr>
-                      <td className="py-3.5 px-4 font-bold text-[#8B95A1] bg-[#FAFAFA]/70">평균 매매가</td>
-                      <td className="py-3.5 px-4">
-                        <span className="text-sm font-black text-[#F04452]">{formatTossMoney(targetComplexA.avgTrade)}</span>
-                        <span className="text-[11px] text-[#8B95A1] block font-medium">최근: {formatTossMoney(targetComplexA.latestTrade)}</span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="text-sm font-black text-[#F04452]">{formatTossMoney(targetComplexB.avgTrade)}</span>
-                        <span className="text-[11px] text-[#8B95A1] block font-medium">최근: {formatTossMoney(targetComplexB.latestTrade)}</span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-3.5 px-4 font-bold text-[#8B95A1] bg-[#FAFAFA]/70">평균 전세가</td>
-                      <td className="py-3.5 px-4">
-                        <span className="text-sm font-black text-[#1e3a8a]">{formatTossMoney(targetComplexA.avgJeonse)}</span>
-                        <span className="text-[11px] text-[#8B95A1] block font-medium">최근: {formatTossMoney(targetComplexA.latestJeonse)}</span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="text-sm font-black text-[#1e3a8a]">{formatTossMoney(targetComplexB.avgJeonse)}</span>
-                        <span className="text-[11px] text-[#8B95A1] block font-medium">최근: {formatTossMoney(targetComplexB.latestJeonse)}</span>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-3.5 px-4 font-bold text-[#8B95A1] bg-[#FAFAFA]/70">평균 전세가율</td>
-                      <td className="py-3.5 px-4 font-extrabold text-[#191F28] text-sm">
-                        {targetComplexA.jeonseRatio}%
-                      </td>
-                      <td className="py-3.5 px-4 font-extrabold text-[#191F28] text-sm">
-                        {targetComplexB.jeonseRatio}%
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-3.5 px-4 font-bold text-[#8B95A1] bg-[#FAFAFA]/70">평당 가격 (3.3㎡)</td>
-                      <td className="py-3.5 px-4 font-extrabold text-[#191F28]">
-                        {formatTossMoney(targetComplexA.pyeongPrice)} / 평
-                      </td>
-                      <td className="py-3.5 px-4 font-extrabold text-[#191F28]">
-                        {formatTossMoney(targetComplexB.pyeongPrice)} / 평
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="py-3.5 px-4 font-bold text-[#8B95A1] bg-[#FAFAFA]/70">전용면적 / 공급평형</td>
-                      <td className="py-3.5 px-4 text-[#4E5968] font-medium">
-                        {targetComplexA.avgArea}㎡ ({targetComplexA.avgPyeong}평)
-                      </td>
-                      <td className="py-3.5 px-4 text-[#4E5968] font-medium">
-                        {targetComplexB.avgArea}㎡ ({targetComplexB.avgPyeong}평)
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </section>
-        </>
-        )}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFetchError(null);
+                            fetchData(lawdCd, 1);
+                          }}
+                          className="mt-1 px-4 py-2 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-lg text-xs font-bold transition-all shadow-xs active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <span>다시 시도</span>
+                        </button>
+                      </div>
+                    ) : isLoading ? (
+                      <ChartSkeleton regionLabel={currentRegionLabel} />
+                    ) : enrichedStockChartData.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-xs text-[#64748B] font-medium space-y-2 p-6 text-center">
+                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <span className="font-bold text-[#0F172A]">{currentRegionLabel} 36개월 실거래 데이터가 없습니다.</span>
+                        <p className="text-[11px] text-[#64748B]">다른 시/군/구를 선택하시면 해당 지역의 데이터가 자동으로 동기화됩니다.</p>
+                      </div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={330}>
+                        <ComposedChart data={enrichedStockChartData} margin={{ top: 15, right: 15, left: -10, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="tradeGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#F04452" stopOpacity={0.28} />
+                              <stop offset="95%" stopColor="#F04452" stopOpacity={0.0} />
+                            </linearGradient>
+                            <linearGradient id="jeonseGrad" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#3182F6" stopOpacity={0.28} />
+                              <stop offset="95%" stopColor="#3182F6" stopOpacity={0.0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F2F4F6" />
+                          <XAxis
+                            dataKey="month"
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fill: "#8B95A1", fontSize: 10, fontWeight: 600 }}
+                            interval={4}
+                          />
+                          {/* 좌측 Y축: 실거래가 (억 단위) */}
+                          <YAxis
+                            yAxisId="price"
+                            tickLine={false}
+                            axisLine={false}
+                            tickFormatter={(val) => (val && val > 0 ? `${Math.round(val / 10000)}억` : "0")}
+                            tick={{ fill: "#8B95A1", fontSize: 11, fontWeight: 600 }}
+                            width={52}
+                            domain={["auto", "auto"]}
+                          />
+                          {/* 우측 Y축: 거래량 (차트 하단 35%에만 오버랩되도록 상한 도메인 설정) */}
+                          <YAxis
+                            yAxisId="volume"
+                            orientation="right"
+                            tickLine={false}
+                            axisLine={false}
+                            tick={{ fill: "#B0B8C1", fontSize: 9, fontWeight: 500 }}
+                            tickFormatter={(v) => `${v}건`}
+                            domain={[0, (dataMax) => Math.max(dataMax * 3.2, 40)]}
+                            width={38}
+                          />
+                          <Tooltip
+                            content={<TossStockChartTooltip />}
+                            isAnimationActive={false}
+                            allowEscapeViewBox={{ x: false, y: false }}
+                            wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
+                          />
+                          <Legend
+                            verticalAlign="top"
+                            align="right"
+                            wrapperStyle={{ paddingBottom: 10, fontSize: 11, fontWeight: 700 }}
+                          />
 
-        {/* ========================================================================= */}
-        {/* [중단] 인터랙티브 카카오맵 실거래 단지 & 매물 위치 지도 뷰                 */}
-        {/* ========================================================================= */}
-        <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-4 w-full max-w-full box-border min-w-0">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-3 border-b border-[#F2F4F6]">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded tracking-wide">Kakao Map GIS</span>
-                <h3 className="text-lg font-black text-[#191F28] tracking-tight">
-                  {viewMode === "listing"
-                    ? (selectedListing ? `${selectedListing.title}` : `${currentRegionLabel} B2B 제휴 매물 지도 (총 ${filteredRealListings.length}건)`)
-                    : (selectedMapTarget ? `${selectedMapTarget.apt_name} 실거래 위치 지도` : `${currentRegionLabel} 단지 & 매물 위치 지도`)}
-                </h3>
-              </div>
-              <p className="text-xs text-[#8B95A1] font-medium mt-1">
-                국토교통부 실거래 원장의 법정동 및 지번 주소를 좌표 변환하여 공간 위치를 표시합니다.
-              </p>
-            </div>
+                          {/* 하단 월간 거래량 막대 (주식 차트 거래량 스타일) */}
+                          <Bar
+                            yAxisId="volume"
+                            name="월간 거래량 (Volume)"
+                            dataKey="volume"
+                            radius={[4, 4, 0, 0]}
+                            maxBarSize={12}
+                          >
+                            {enrichedStockChartData.map((entry, index) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={entry.tradeDiff >= 0 ? "rgba(240, 68, 82, 0.40)" : "rgba(49, 130, 246, 0.40)"}
+                              />
+                            ))}
+                          </Bar>
 
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              <span className="text-xs font-bold text-[#4E5968] bg-[#F2F4F6] px-3 py-1.5 rounded-full truncate max-w-[220px]">
-                위치: {mapAddress || `${currentRegionLabel} 중심지`}
-              </span>
-              <button
-                onClick={() => {
-                  const targetQuery = mapAddress || currentRegionLabel;
-                  window.open(`https://map.kakao.com/link/search/${encodeURIComponent(targetQuery)}`, "_blank");
-                }}
-                className="px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 transition-all flex items-center gap-1 active:scale-95"
-              >
-                <span>카카오 지도 외부 연동</span>
-              </button>
-            </div>
-          </div>
+                          {/* 매매 평균가 곡선 */}
+                          {(chartViewMode === "all" || chartViewMode === "매매") && (
+                            <Area
+                              yAxisId="price"
+                              type="monotone"
+                              name="매매 평균가"
+                              dataKey="tradePrice"
+                              stroke="#F04452"
+                              strokeWidth={3}
+                              fill="url(#tradeGrad)"
+                              dot={{ r: 3, fill: "#F04452", strokeWidth: 1.5, stroke: "#fff" }}
+                              activeDot={{ r: 6 }}
+                              connectNulls={true}
+                            />
+                          )}
 
-          {/* 카카오맵 캔버스 영역 (모바일 h-[300px] 고정으로 스크롤 먹통 방지 & 데스크탑 h-[480px]) */}
-          <div className="relative w-full h-[300px] sm:h-[420px] md:h-[480px] rounded-xl overflow-hidden border border-[#E5E8EB] shadow-inner bg-[#F9FAFB] touch-pan-y">
-            <div
-              id="map"
-              ref={mapContainerRef}
-              style={{ width: "100%", height: "100%", minHeight: "300px" }}
-            ></div>
+                          {/* 전세 평균가 곡선 */}
+                          {(chartViewMode === "all" || chartViewMode === "전세") && (
+                            <Area
+                              yAxisId="price"
+                              type="monotone"
+                              name="전세 평균가"
+                              dataKey="jeonsePrice"
+                              stroke="#3182F6"
+                              strokeWidth={3}
+                              fill="url(#jeonseGrad)"
+                              dot={{ r: 3, fill: "#3182F6", strokeWidth: 1.5, stroke: "#fff" }}
+                              activeDot={{ r: 6 }}
+                              connectNulls={true}
+                            />
+                          )}
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                </section>
 
-            {/* 로딩 인디케이터 */}
-            {mapStatus === "loading" && (
-              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#F9FAFB]/90 backdrop-blur-xs space-y-3">
-                <div className="w-10 h-10 rounded-full border-3 border-[#0f172a] border-t-transparent animate-spin"></div>
-                <div className="text-center space-y-1">
-                  <p className="text-xs font-bold text-[#191F28]">카카오맵 지도를 불러오는 중입니다...</p>
-                  <p className="text-[11px] text-[#8B95A1]">정밀 도로망 및 단지 위치를 로딩하고 있습니다.</p>
-                </div>
-              </div>
+                {/* ========================================================================= */}
+                {/* [요구사항 2] 1:1 비교 막대그래프 & 매트릭스 신규 섹션                      */}
+                {/* ========================================================================= */}
+                <section className="bg-white rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-6 w-full max-w-full box-border min-w-0">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 gap-3 border-b border-[#F2F4F6]">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="bg-[#7B2CBF]/10 text-[#7B2CBF] text-xs font-black px-2.5 py-1 rounded-full">
+                          1:1 VS Analysis
+                        </span>
+                        <h3 className="text-lg font-black text-[#191F28] tracking-tight">
+                          단지 1:1 비교 막대그래프 & 스펙 대조
+                        </h3>
+                      </div>
+                      <p className="text-xs text-[#8B95A1] font-medium mt-1">
+                        두 개의 단지를 선택하여 평균 매매가, 평균 전세가, 전세가율을 막대그래프로 나란히 비교합니다.
+                      </p>
+                    </div>
+
+                    {/* 1:1 비교 단지 선택 컨트롤러 (실시간 검색형 콤보박스) */}
+                    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 bg-[#F9FAFB] p-2.5 rounded-xl border border-[#E5E8EB] w-full md:w-[520px] box-border">
+                      {/* 단지 A 실시간 검색 콤보박스 */}
+                      <div className="flex-1 min-w-0 w-full">
+                        <SearchableComplexCombobox
+                          tag="단지 A"
+                          theme="navy"
+                          value={targetComplexA?.name || ""}
+                          options={availableComplexNames}
+                          onChange={(val) => setCompareComplexA(val)}
+                          placeholder="단지 A 검색..."
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-center py-0.5 md:py-0 shrink-0">
+                        <span className="text-[11px] font-black text-[#7B2CBF] px-2 py-0.5 bg-[#7B2CBF]/10 rounded-md">VS</span>
+                      </div>
+
+                      {/* 단지 B 실시간 검색 콤보박스 */}
+                      <div className="flex-1 min-w-0 w-full">
+                        <SearchableComplexCombobox
+                          tag="단지 B"
+                          theme="purple"
+                          value={targetComplexB?.name || ""}
+                          options={availableComplexNames}
+                          onChange={(val) => setCompareComplexB(val)}
+                          placeholder="단지 B 검색..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 1:1 비교 Recharts BarChart 시각화 영역 */}
+                  {fetchError ? (
+                    <div className="py-12 text-center space-y-2">
+                      <p className="text-xs font-bold text-red-600">
+                        국토부 공공데이터 서버 응답이 지연되어 비교 분석 데이터를 불러오지 못했습니다.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFetchError(null);
+                          fetchData(lawdCd, 1);
+                        }}
+                        className="px-3.5 py-1.5 bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-md text-xs font-bold transition-all shadow-xs"
+                      >
+                        다시 시도
+                      </button>
+                    </div>
+                  ) : isLoading ? (
+                    <MatrixSkeleton regionLabel={currentRegionLabel} />
+                  ) : !targetComplexA || !targetComplexB ? (
+                    <div className="py-12 text-center text-[#64748B] text-xs font-medium space-y-1">
+                      <p className="font-bold text-[#0F172A]">{currentRegionLabel}에 비교 가능한 단지 정보가 충분하지 않습니다.</p>
+                      <p className="text-[11px] text-[#64748B]">해당 조건의 실거래 데이터가 없습니다. 다른 지역을 선택하시면 실거래 단지 데이터가 자동으로 동기화됩니다.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* 상단 1:1 나란히 세워진 2색 막대그래프 (매매가, 전세가, 전세가율) */}
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                        {/* 1. 평균 매매가 & 전세가 비교 막대그래프 (2/3 너비) */}
+                        <div className="lg:col-span-2 bg-[#F9FAFB] p-3.5 sm:p-5 rounded-xl border border-[#E5E8EB] space-y-3 w-full max-w-full box-border min-w-0">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <h4 className="font-extrabold text-sm text-[#191F28]">평균 매매가 & 전세가 비교</h4>
+                              <p className="text-[11px] text-[#8B95A1]">단위: 만원 (축: 억 단위)</p>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 text-xs font-bold">
+                              <span className="flex items-center gap-1 text-[#1e3a8a]">
+                                <span className="w-2.5 h-2.5 rounded-full bg-[#0f172a]"></span>
+                                {targetComplexA.name}
+                              </span>
+                              <span className="flex items-center gap-1 text-[#7B2CBF]">
+                                <span className="w-2.5 h-2.5 rounded-full bg-[#7B2CBF]"></span>
+                                {targetComplexB.name}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="w-full h-64 touch-pan-y" style={{ touchAction: "pan-y" }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={priceBarComparisonData} margin={{ top: 20, right: 15, left: -10, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E8EB" />
+                                <XAxis dataKey="metric" tickLine={false} axisLine={false} tick={{ fontSize: 12, fontWeight: 700, fill: "#191F28" }} />
+                                <YAxis
+                                  tickLine={false}
+                                  axisLine={false}
+                                  tickFormatter={(v) => `${Math.round(v / 10000)}억`}
+                                  tick={{ fontSize: 10, fill: "#8B95A1", fontWeight: 600 }}
+                                  width={48}
+                                />
+                                <Tooltip
+                                  content={<ComparisonBarTooltip />}
+                                  isAnimationActive={false}
+                                  allowEscapeViewBox={{ x: false, y: false }}
+                                  wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
+                                />
+                                <Bar
+                                  dataKey={targetComplexA.name}
+                                  name={targetComplexA.name}
+                                  fill="#3182F6"
+                                  radius={[6, 6, 0, 0]}
+                                  maxBarSize={44}
+                                />
+                                <Bar
+                                  dataKey={targetComplexB.name === targetComplexA.name ? `${targetComplexB.name} (대조)` : targetComplexB.name}
+                                  name={targetComplexB.name}
+                                  fill="#7B2CBF"
+                                  radius={[6, 6, 0, 0]}
+                                  maxBarSize={44}
+                                />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                        </div>
+
+                        {/* 2. 평균 전세가율 (%) 비교 막대그래프 (1/3 너비) */}
+                        <div className="bg-[#F9FAFB] p-3.5 sm:p-5 rounded-xl border border-[#E5E8EB] space-y-3 flex flex-col justify-between w-full max-w-full box-border min-w-0">
+                          <div>
+                            <h4 className="font-extrabold text-sm text-[#191F28]">평균 전세가율 (%) 비교</h4>
+                            <p className="text-[11px] text-[#8B95A1]">매매가 대비 전세 보증금 비율</p>
+                          </div>
+
+                          <div className="w-full h-44 touch-pan-y" style={{ touchAction: "pan-y" }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={ratioBarComparisonData} margin={{ top: 15, right: 10, left: -20, bottom: 0 }}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E8EB" />
+                                <XAxis dataKey="metric" tickLine={false} axisLine={false} tick={{ fontSize: 11, fontWeight: 700, fill: "#191F28" }} />
+                                <YAxis
+                                  domain={[0, 100]}
+                                  tickLine={false}
+                                  axisLine={false}
+                                  tickFormatter={(v) => `${v}%`}
+                                  tick={{ fontSize: 10, fill: "#8B95A1", fontWeight: 600 }}
+                                  width={40}
+                                />
+                                <Tooltip
+                                  content={<ComparisonBarTooltip />}
+                                  isAnimationActive={false}
+                                  allowEscapeViewBox={{ x: false, y: false }}
+                                  wrapperStyle={{ zIndex: 50, pointerEvents: "none" }}
+                                />
+                                <Bar
+                                  dataKey={targetComplexA.name}
+                                  name={targetComplexA.name}
+                                  fill="#3182F6"
+                                  radius={[6, 6, 0, 0]}
+                                  maxBarSize={36}
+                                />
+                                <Bar
+                                  dataKey={targetComplexB.name === targetComplexA.name ? `${targetComplexB.name} (대조)` : targetComplexB.name}
+                                  name={targetComplexB.name}
+                                  fill="#7B2CBF"
+                                  radius={[6, 6, 0, 0]}
+                                  maxBarSize={36}
+                                />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+
+                          {/* 갭투자 분석 인디케이터 */}
+                          <div className="bg-white p-3 rounded-xl border border-[#E5E8EB] text-xs space-y-1">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[#1e3a8a] font-bold">{targetComplexA.name}</span>
+                              <span className="font-black text-sm">{targetComplexA.jeonseRatio}%</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-[#7B2CBF] font-bold">{targetComplexB.name}</span>
+                              <span className="font-black text-sm">{targetComplexB.jeonseRatio}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* 하단 1:1 정밀 스펙 비교 테이블 */}
+                      <div className="overflow-x-auto w-full max-w-full rounded-xl border border-[#E5E8EB]">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-[#F2F4F6] text-[#8B95A1] border-b border-[#E5E8EB]">
+                              <th className="py-3 px-4 font-bold w-40">비교 항목</th>
+                              <th className="py-3 px-4 font-extrabold text-[#1e3a8a] text-sm">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-[#0f172a]"></span>
+                                  <span>[단지 A] {targetComplexA.name}</span>
+                                </div>
+                              </th>
+                              <th className="py-3 px-4 font-extrabold text-[#7B2CBF] text-sm">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="w-2.5 h-2.5 rounded-full bg-[#7B2CBF]"></span>
+                                  <span>[단지 B] {targetComplexB.name}</span>
+                                </div>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#F2F4F6]">
+                            <tr>
+                              <td className="py-3.5 px-4 font-bold text-[#8B95A1] bg-[#FAFAFA]/70">위치 (법정동)</td>
+                              <td className="py-3.5 px-4 font-semibold text-[#191F28]">{targetComplexA.dong}</td>
+                              <td className="py-3.5 px-4 font-semibold text-[#191F28]">{targetComplexB.dong}</td>
+                            </tr>
+                            <tr>
+                              <td className="py-3.5 px-4 font-bold text-[#8B95A1] bg-[#FAFAFA]/70">평균 매매가</td>
+                              <td className="py-3.5 px-4">
+                                <span className="text-sm font-black text-[#F04452]">{formatTossMoney(targetComplexA.avgTrade)}</span>
+                                <span className="text-[11px] text-[#8B95A1] block font-medium">최근: {formatTossMoney(targetComplexA.latestTrade)}</span>
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className="text-sm font-black text-[#F04452]">{formatTossMoney(targetComplexB.avgTrade)}</span>
+                                <span className="text-[11px] text-[#8B95A1] block font-medium">최근: {formatTossMoney(targetComplexB.latestTrade)}</span>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="py-3.5 px-4 font-bold text-[#8B95A1] bg-[#FAFAFA]/70">평균 전세가</td>
+                              <td className="py-3.5 px-4">
+                                <span className="text-sm font-black text-[#1e3a8a]">{formatTossMoney(targetComplexA.avgJeonse)}</span>
+                                <span className="text-[11px] text-[#8B95A1] block font-medium">최근: {formatTossMoney(targetComplexA.latestJeonse)}</span>
+                              </td>
+                              <td className="py-3.5 px-4">
+                                <span className="text-sm font-black text-[#1e3a8a]">{formatTossMoney(targetComplexB.avgJeonse)}</span>
+                                <span className="text-[11px] text-[#8B95A1] block font-medium">최근: {formatTossMoney(targetComplexB.latestJeonse)}</span>
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="py-3.5 px-4 font-bold text-[#8B95A1] bg-[#FAFAFA]/70">평균 전세가율</td>
+                              <td className="py-3.5 px-4 font-extrabold text-[#191F28] text-sm">
+                                {targetComplexA.jeonseRatio}%
+                              </td>
+                              <td className="py-3.5 px-4 font-extrabold text-[#191F28] text-sm">
+                                {targetComplexB.jeonseRatio}%
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="py-3.5 px-4 font-bold text-[#8B95A1] bg-[#FAFAFA]/70">평당 가격 (3.3㎡)</td>
+                              <td className="py-3.5 px-4 font-extrabold text-[#191F28]">
+                                {formatTossMoney(targetComplexA.pyeongPrice)} / 평
+                              </td>
+                              <td className="py-3.5 px-4 font-extrabold text-[#191F28]">
+                                {formatTossMoney(targetComplexB.pyeongPrice)} / 평
+                              </td>
+                            </tr>
+                            <tr>
+                              <td className="py-3.5 px-4 font-bold text-[#8B95A1] bg-[#FAFAFA]/70">전용면적 / 공급평형</td>
+                              <td className="py-3.5 px-4 text-[#4E5968] font-medium">
+                                {targetComplexA.avgArea}㎡ ({targetComplexA.avgPyeong}평)
+                              </td>
+                              <td className="py-3.5 px-4 text-[#4E5968] font-medium">
+                                {targetComplexB.avgArea}㎡ ({targetComplexB.avgPyeong}평)
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </section>
+              </>
             )}
 
-            {/* 에러 시 도메인 및 환경별 정밀 안내 카드 */}
-            {mapStatus === "error" && (
-              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/95 backdrop-blur-md p-6 text-center space-y-3">
-                <div className="w-14 h-14 rounded-xl bg-[#FFF0F0] text-[#F04452] flex items-center justify-center text-2xl font-bold shadow-xs">
-                  
-                </div>
-                <div className="space-y-1.5 max-w-md">
-                  <h4 className="text-base font-extrabold text-[#191F28]">카카오맵 로드 안내</h4>
-                  <p className="text-xs text-[#4E5968] leading-relaxed">
-                    카카오맵 SDK는 보안 정책상 카카오 개발자 콘솔에 등록된 <br />
-                    <span className="font-bold text-[#1e3a8a]">Web 플랫폼 사이트 도메인</span>에서만 정상 표시됩니다.
-                  </p>
-                  <div className="mt-2 p-2.5 bg-[#F2F4F6] rounded-xl text-left text-[11px] space-y-1 border border-[#E5E8EB]">
-                    <div className="flex items-center justify-between text-[#8B95A1]">
-                      <span>현재 브라우저 접속 주소:</span>
-                      <span className="font-mono font-bold text-[#191F28]">{typeof window !== "undefined" ? window.location.origin : "http://localhost:3001"}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-[#8B95A1]">
-                      <span>API 키 등록 권장 주소:</span>
-                      <span className="font-mono font-bold text-[#1e3a8a]">http://localhost:3001</span>
-                    </div>
+            {/* ========================================================================= */}
+            {/* [중단] 인터랙티브 카카오맵 실거래 단지 & 매물 위치 지도 뷰                 */}
+            {/* ========================================================================= */}
+            <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-4 w-full max-w-full box-border min-w-0">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-3 border-b border-[#F2F4F6]">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded tracking-wide">Kakao Map GIS</span>
+                    <h3 className="text-lg font-black text-[#191F28] tracking-tight">
+                      {viewMode === "listing"
+                        ? (selectedListing ? `${selectedListing.title}` : `${currentRegionLabel} B2B 제휴 매물 지도 (총 ${filteredRealListings.length}건)`)
+                        : (selectedMapTarget ? `${selectedMapTarget.apt_name} 실거래 위치 지도` : `${currentRegionLabel} 단지 & 매물 위치 지도`)}
+                    </h3>
                   </div>
+                  <p className="text-xs text-[#8B95A1] font-medium mt-1">
+                    국토교통부 실거래 원장의 법정동 및 지번 주소를 좌표 변환하여 공간 위치를 표시합니다.
+                  </p>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                  {typeof window !== "undefined" && window.location.port !== "3001" && (
-                    <a
-                      href="http://localhost:3001"
-                      className="px-4 py-2.5 bg-[#0f172a] hover:bg-[#1e293b] text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95 inline-flex items-center gap-1.5"
-                    >
-                      <span>3001번 포트로 이동</span>
-                    </a>
-                  )}
-                  <button
-                    onClick={() => {
-                      setMapStatus("loading");
-                      initMap();
-                    }}
-                    className="px-4 py-2.5 bg-[#191F28] hover:bg-[#333D4B] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer active:scale-95"
-                  >
-                    다시 시도
-                  </button>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <span className="text-xs font-bold text-[#4E5968] bg-[#F2F4F6] px-3 py-1.5 rounded-full truncate max-w-[220px]">
+                    위치: {mapAddress || `${currentRegionLabel} 중심지`}
+                  </span>
                   <button
                     onClick={() => {
                       const targetQuery = mapAddress || currentRegionLabel;
                       window.open(`https://map.kakao.com/link/search/${encodeURIComponent(targetQuery)}`, "_blank");
                     }}
-                    className="px-4 py-2.5 bg-[#FEE500] hover:bg-[#FADA0A] text-[#191F28] text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer active:scale-95"
+                    className="px-3 py-1.5 rounded-md text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 transition-all flex items-center gap-1 active:scale-95"
                   >
-                    카카오 지도 외부 보기
+                    <span>카카오 지도 외부 연동</span>
                   </button>
                 </div>
               </div>
-            )}
 
-            {/* [실거래가 모드] 지도 좌측 하단 활성 매물 요약 플로팅 카드 */}
-            {viewMode === "transaction" && mapStatus === "ready" && selectedMapTarget && (
-              <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:max-w-xs z-10 bg-white/95 backdrop-blur-md p-3.5 rounded-xl border border-[#E5E8EB] shadow-xs space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-[#E8F3FF] text-[#1e3a8a]">
-                    {selectedMapTarget.property_type || "아파트"}
-                  </span>
-                  <span className="text-[11px] font-bold text-[#8B95A1]">{selectedMapTarget.deal_date || "최근 거래"}</span>
-                </div>
-                <h4 className="text-sm font-black text-[#191F28] truncate">{selectedMapTarget.apt_name}</h4>
-                <p className="text-xs font-extrabold text-[#F04452]">
-                  {selectedMapTarget.price_formatted || formatTossMoney(selectedMapTarget.deal_amount || selectedMapTarget.deposit)}
-                </p>
-                <p className="text-[11px] text-[#8B95A1] truncate">
-                  {selectedMapTarget.dong} {selectedMapTarget.jibun} · {selectedMapTarget.exclu_use_ar}㎡ ({toPyeong(selectedMapTarget.exclu_use_ar)}평)
-                </p>
-              </div>
-            )}
+              {/* 카카오맵 캔버스 영역 (모바일 h-[300px] 고정으로 스크롤 먹통 방지 & 데스크탑 h-[480px]) */}
+              <div className="relative w-full h-[300px] sm:h-[420px] md:h-[480px] rounded-xl overflow-hidden border border-[#E5E8EB] shadow-inner bg-[#F9FAFB] touch-pan-y">
+                <div
+                  id="map"
+                  ref={mapContainerRef}
+                  style={{ width: "100%", height: "100%", minHeight: "300px" }}
+                ></div>
 
-            {/* [현재 매물 모드] 지도 좌측 하단 활성 제휴 매물 플로팅 카드 */}
-            {viewMode === "listing" && mapStatus === "ready" && selectedListing && (
-              <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:max-w-sm z-10 bg-white/95 backdrop-blur-md p-3.5 sm:p-4 rounded-xl border border-[#E5E8EB] shadow-xs space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-[#E8F3FF] text-[#1e3a8a]">
-                      {selectedListing.property_type}
-                    </span>
-                    <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-[#FFF0F0] text-[#F04452]">
-                      {selectedListing.deal_type}
-                    </span>
+                {/* 로딩 인디케이터 */}
+                {mapStatus === "loading" && (
+                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#F9FAFB]/90 backdrop-blur-xs space-y-3">
+                    <div className="w-10 h-10 rounded-full border-3 border-[#0f172a] border-t-transparent animate-spin"></div>
+                    <div className="text-center space-y-1">
+                      <p className="text-xs font-bold text-[#191F28]">카카오맵 지도를 불러오는 중입니다...</p>
+                      <p className="text-[11px] text-[#8B95A1]">정밀 도로망 및 단지 위치를 로딩하고 있습니다.</p>
+                    </div>
                   </div>
-                  <span className="text-[10px] font-bold text-[#8B95A1]">{selectedListing.maintenance_fee}</span>
-                </div>
-                <div>
-                  <h4 className="text-sm font-black text-[#191F28] leading-tight line-clamp-1">{selectedListing.title}</h4>
-                  <p className="text-base font-black text-[#F04452] mt-0.5">{selectedListing.price_summary}</p>
-                </div>
-                <div className="text-[11px] text-[#4E5968] flex items-center gap-2">
-                  <span>{selectedListing.floor}</span>
-                  <span>•</span>
-                  <span>{selectedListing.area}</span>
-                </div>
-                <div className="pt-2 border-t border-[#F2F4F6] flex items-center justify-between gap-2">
-                  <span className="text-[11px] text-[#8B95A1] truncate max-w-[170px]">중개사: {selectedListing.agency_name}</span>
-                  <a
-                    href={`tel:${selectedListing.contact}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      showToast(`[중개사 문의] ${selectedListing.agency_name} (${selectedListing.contact})`);
-                    }}
-                    className="px-3 py-1.5 bg-[#0f172a] hover:bg-[#1e293b] text-white text-[11px] font-black rounded-lg transition-all shadow-xs flex items-center gap-1 active:scale-95"
-                  >
-                    <span>문의하기</span>
-                  </a>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
+                )}
 
-        {/* ========================================================================= */}
-        {/* [조건부 렌더링] 과거 실거래가 표 vs 현재 제휴 매물(Demo) 카드 리스트      */}
-        {/* ========================================================================= */}
-        {viewMode === "transaction" ? (
-        <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-4 animate-in fade-in duration-200 w-full max-w-full box-border min-w-0">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="bg-slate-100 text-slate-800 text-[10px] font-bold px-2 py-0.5 rounded border border-slate-300">RAW DATA</span>
-                <h3 className="text-lg font-black text-[#191F28] tracking-tight">
-                  {currentRegionLabel} 국토교통부 실거래 계약 상세 내역 ({totalCount.toLocaleString()}건)
-                </h3>
-              </div>
-              <p className="text-xs text-[#8B95A1] font-medium mt-1">
-                국토교통부 실거래가 공개시스템 및 클라우드 원장 DB 기준 정합성 검증 완료 데이터입니다.
-              </p>
-            </div>
+                {/* 에러 시 도메인 및 환경별 정밀 안내 카드 */}
+                {mapStatus === "error" && (
+                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/95 backdrop-blur-md p-6 text-center space-y-3">
+                    <div className="w-14 h-14 rounded-xl bg-[#FFF0F0] text-[#F04452] flex items-center justify-center text-2xl font-bold shadow-xs">
 
-            {/* 테이블 내부 검색창 (스마트 검색어 양방향 바인딩) */}
-            <div className="relative w-full sm:w-64">
-              <input
-                type="text"
-                placeholder="단지명 검색 (예: 래미안, 자이)"
-                value={searchKeyword}
-                onChange={(e) => {
-                  setSearchKeyword(e.target.value);
-                  setSearchQuery(e.target.value);
-                }}
-                className="w-full bg-[#F2F4F6] text-xs px-3.5 py-2 pl-9 pr-7 rounded-full border border-transparent outline-none focus:border-[#0f172a] focus:bg-white transition-all font-medium"
-              />
-              
-              {searchKeyword && (
-                <button
-                  onClick={() => setSearchKeyword("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold cursor-pointer"
-                >
-                  <span className="text-[11px] font-bold">x</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* 부동산 유형 및 거래 유형 필터 버튼군 */}
-          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[#F2F4F6]">
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                { id: "all", label: "전체 유형" },
-                { id: "아파트", label: "아파트" },
-                { id: "오피스텔", label: "오피스텔" },
-                { id: "연립다세대", label: "빌라/투룸(연립/다세대)" },
-                { id: "단독다가구", label: "원룸(단독/다가구)" }
-              ].map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setPropertyTypeFilter(p.id)}
-                  className={`px-3.5 py-2 min-h-[40px] rounded-full text-xs sm:text-sm font-bold transition-all active:scale-95 ${
-                    propertyTypeFilter === p.id
-                      ? "bg-[#0f172a] text-white shadow-xs font-black"
-                      : "bg-[#F2F4F6] text-[#4E5968] hover:bg-[#E5E8EB]"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="flex gap-1.5">
-              {[
-                { id: "all", label: "전체 거래" },
-                { id: "매매", label: "매매" },
-                { id: "전세", label: "전세" },
-                { id: "월세", label: "월세" }
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setTradeTypeFilter(t.id)}
-                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${
-                    tradeTypeFilter === t.id
-                      ? "bg-[#191F28] text-white"
-                      : "bg-[#F2F4F6] text-[#6B7684] hover:bg-[#E5E8EB]"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* [스켈레톤 및 에러 렌더링] */}
-          {fetchError ? (
-            <div className="py-14 px-6 flex flex-col items-center justify-center text-center bg-red-50/40 rounded-xl border border-red-200">
-              <svg className="w-8 h-8 text-red-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              <h3 className="text-sm font-bold text-slate-900 mb-1">
-                실거래가 원장 조회 지연
-              </h3>
-              <p className="text-xs text-slate-600 mb-4 max-w-md">
-                {fetchError}
-              </p>
-              <button
-                onClick={() => fetchData()}
-                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-md transition-colors shadow-xs"
-              >
-                다시 시도
-              </button>
-            </div>
-          ) : isLoading ? (
-            <TableSkeleton regionLabel={currentRegionLabel} />
-          ) : (
-            <div className="overflow-x-auto rounded-xl border border-[#F2F4F6]">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-[#FAFAFA] border-b border-[#F2F4F6] text-[#8B95A1]">
-                    <th className="py-3 px-3.5 font-bold">계약일자</th>
-                    <th className="py-3 px-3.5 font-bold">유형</th>
-                    <th className="py-3 px-3.5 font-bold">단지/건물명</th>
-                    <th className="py-3 px-3.5 font-bold">동/위치</th>
-                    <th className="py-3 px-3.5 font-bold">거래구분</th>
-                    <th className="py-3 px-3.5 font-bold">실거래 가격 / 보증금</th>
-                    <th className="py-3 px-3.5 font-bold">전용면적</th>
-                    <th className="py-3 px-3.5 font-bold">층수</th>
-                    <th className="py-3 px-3.5 font-bold">구조</th>
-                    <th className="py-3 px-3.5 font-bold">중개방식</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F2F4F6]">
-                  {paginatedTrades.length === 0 ? (
-                    <tr>
-                      <td colSpan="10" className="py-16 text-center">
-                        <div className="flex flex-col items-center justify-center space-y-3">
-                          <div className="space-y-1">
-                            <h4 className="text-sm font-bold text-slate-800">
-                              {searchKeyword.trim() ? `"${searchKeyword}" 검색 조건과 일치하는 실거래 내역이 없습니다` : "조회된 실거래 내역이 없습니다"}
-                            </h4>
-                            <p className="text-xs text-slate-500">
-                              {searchKeyword.trim()
-                                ? "단지명이나 법정동 표기를 확인하시거나 검색어를 초기화해 주십시오."
-                                : "상단 지역 필터 또는 거래 구분을 조정해 주십시오."}
-                            </p>
-                          </div>
-                          {searchKeyword.trim() && (
-                            <button
-                              onClick={() => setSearchKeyword("")}
-                              className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-md transition-all cursor-pointer active:scale-95"
-                            >
-                              전체 원장 내역 조회
-                            </button>
-                          )}
+                    </div>
+                    <div className="space-y-1.5 max-w-md">
+                      <h4 className="text-base font-extrabold text-[#191F28]">카카오맵 로드 안내</h4>
+                      <p className="text-xs text-[#4E5968] leading-relaxed">
+                        카카오맵 SDK는 보안 정책상 카카오 개발자 콘솔에 등록된 <br />
+                        <span className="font-bold text-[#1e3a8a]">Web 플랫폼 사이트 도메인</span>에서만 정상 표시됩니다.
+                      </p>
+                      <div className="mt-2 p-2.5 bg-[#F2F4F6] rounded-xl text-left text-[11px] space-y-1 border border-[#E5E8EB]">
+                        <div className="flex items-center justify-between text-[#8B95A1]">
+                          <span>현재 브라우저 접속 주소:</span>
+                          <span className="font-mono font-bold text-[#191F28]">{typeof window !== "undefined" ? window.location.origin : "http://localhost:3001"}</span>
                         </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    paginatedTrades.map((item, idx) => {
-                      const isTrade = item.trade_type === "매매";
-                      const isJeonse = item.trade_type === "전세";
-                      const formattedPrice = item.price_formatted || (item.trade_type === "월세"
-                        ? `보증금 ${formatTossMoney(item.deposit)} / 월 ${item.monthly_rent}만`
-                        : formatTossMoney(item.deal_amount || item.deposit));
+                        <div className="flex items-center justify-between text-[#8B95A1]">
+                          <span>API 키 등록 권장 주소:</span>
+                          <span className="font-mono font-bold text-[#1e3a8a]">http://localhost:3001</span>
+                        </div>
+                      </div>
+                    </div>
 
-                      return (
-                        <tr
-                          key={item.id || idx}
-                          onClick={() => {
-                            handleSelectPropertyForMap(item);
-                            const { title } = buildPropertyAddressAndTitle(item);
-                            showToast(`[위치 이동] ${title}`);
-                          }}
-                          className={`hover:bg-[#F9FAFB] cursor-pointer transition-colors ${
-                            selectedMapTarget?.id === item.id ? "bg-[#E8F3FF]/40 border-l-4 border-l-[#3182F6]" : ""
-                          }`}
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                      {typeof window !== "undefined" && window.location.port !== "3001" && (
+                        <a
+                          href="http://localhost:3001"
+                          className="px-4 py-2.5 bg-[#0f172a] hover:bg-[#1e293b] text-white text-xs font-bold rounded-xl shadow-xs transition-all active:scale-95 inline-flex items-center gap-1.5"
                         >
-                          <td className="py-3 px-3.5 text-[#4E5968] font-medium whitespace-nowrap">
-                            {item.deal_date || `${item.deal_year}.${String(item.deal_month).padStart(2, "0")}.${String(item.deal_day || 1).padStart(2, "0")}`}
-                          </td>
-                          <td className="py-3 px-3.5 whitespace-nowrap">
-                            <span
-                              className={`text-[11px] font-bold px-2.5 py-0.5 rounded-md ${
-                                item.property_type === "아파트"
-                                  ? "bg-[#E8F3FF] text-[#1e3a8a]"
-                                  : item.property_type === "오피스텔"
-                                  ? "bg-[#F0EBFE] text-[#7B2CBF]"
-                                  : item.property_type === "연립다세대"
-                                  ? "bg-[#FFF4E6] text-[#FF8800]"
-                                  : "bg-[#E6F9F5] text-[#00A455]"
-                              }`}
-                            >
-                              {item.property_type === "연립다세대"
-                                ? "빌라/투룸"
-                                : item.property_type === "단독다가구"
-                                ? "원룸/다가구"
-                                : item.property_type || "아파트"}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3.5 font-extrabold text-[#191F28] whitespace-nowrap">
-                            {item.apt_name || (item.dong ? `${item.dong} (${item.property_type || "원룸"})` : item.property_type || "단독/원룸")}
-                          </td>
-                          <td className="py-3 px-3.5 text-[#4E5968] whitespace-nowrap">
-                            {item.dong || item.jibun || "-"}
-                          </td>
-                          <td className="py-3 px-3.5">
-                            <span
-                              className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full ${
-                                isTrade
-                                  ? "bg-[#FEECEE] text-[#F04452]"
-                                  : isJeonse
-                                  ? "bg-[#E8F3FF] text-[#1e3a8a]"
-                                  : "bg-[#E6F9F5] text-[#00B493]"
-                              }`}
-                            >
-                              {item.trade_type}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3.5 font-black text-[#191F28] text-sm whitespace-nowrap">
-                            <span className={isTrade ? "text-[#F04452]" : isJeonse ? "text-[#1e3a8a]" : "text-[#191F28]"}>
-                              {formattedPrice}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3.5 text-[#4E5968] font-medium whitespace-nowrap">
-                            {item.exclu_use_ar || item.exclusive_area || "-"}㎡ ({toPyeong(item.exclu_use_ar || item.exclusive_area)}평)
-                          </td>
-                          <td className="py-3 px-3.5 text-[#4E5968] font-medium whitespace-nowrap">
-                            {item.floor ? `${item.floor}층` : "-"}
-                          </td>
-                          <td className="py-3 px-3.5 text-[#191F28] font-semibold whitespace-nowrap">
-                            방 {item.rooms || 3} / 욕실 {item.bathrooms || 1}
-                          </td>
-                          <td className="py-3 px-3.5 text-[#8B95A1] whitespace-nowrap">{item.req_gbn || "중개거래"}</td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
+                          <span>3001번 포트로 이동</span>
+                        </a>
+                      )}
+                      <button
+                        onClick={() => {
+                          setMapStatus("loading");
+                          initMap();
+                        }}
+                        className="px-4 py-2.5 bg-[#191F28] hover:bg-[#333D4B] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer active:scale-95"
+                      >
+                        다시 시도
+                      </button>
+                      <button
+                        onClick={() => {
+                          const targetQuery = mapAddress || currentRegionLabel;
+                          window.open(`https://map.kakao.com/link/search/${encodeURIComponent(targetQuery)}`, "_blank");
+                        }}
+                        className="px-4 py-2.5 bg-[#FEE500] hover:bg-[#FADA0A] text-[#191F28] text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer active:scale-95"
+                      >
+                        카카오 지도 외부 보기
+                      </button>
+                    </div>
+                  </div>
+                )}
 
-          {/* 테이블 페이지네이션 컨트롤 (토스 스타일 고성능 서버사이드 페이징) */}
-          {!isLoading && totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-[#F2F4F6]">
-              <div className="text-xs font-semibold text-[#8B95A1]">
-                총 <span className="font-extrabold text-[#191F28]">{totalCount.toLocaleString()}</span>건 중{" "}
-                <span className="text-[#1e3a8a] font-bold">
-                  {((tablePage - 1) * ROWS_PER_PAGE + 1).toLocaleString()} - {Math.min(tablePage * ROWS_PER_PAGE, totalCount).toLocaleString()}
-                </span>
-                건 표시 (페이지 {tablePage} / {totalPages.toLocaleString()})
+                {/* [실거래가 모드] 지도 좌측 하단 활성 매물 요약 플로팅 카드 */}
+                {viewMode === "transaction" && mapStatus === "ready" && selectedMapTarget && (
+                  <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:max-w-xs z-10 bg-white/95 backdrop-blur-md p-3.5 rounded-xl border border-[#E5E8EB] shadow-xs space-y-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-[#E8F3FF] text-[#1e3a8a]">
+                        {selectedMapTarget.property_type || "아파트"}
+                      </span>
+                      <span className="text-[11px] font-bold text-[#8B95A1]">{selectedMapTarget.deal_date || "최근 거래"}</span>
+                    </div>
+                    <h4 className="text-sm font-black text-[#191F28] truncate">{selectedMapTarget.apt_name}</h4>
+                    <p className="text-xs font-extrabold text-[#F04452]">
+                      {selectedMapTarget.price_formatted || formatTossMoney(selectedMapTarget.deal_amount || selectedMapTarget.deposit)}
+                    </p>
+                    <p className="text-[11px] text-[#8B95A1] truncate">
+                      {selectedMapTarget.dong} {selectedMapTarget.jibun} · {selectedMapTarget.exclu_use_ar}㎡ ({toPyeong(selectedMapTarget.exclu_use_ar)}평)
+                    </p>
+                  </div>
+                )}
+
+                {/* [현재 매물 모드] 지도 좌측 하단 활성 제휴 매물 플로팅 카드 */}
+                {viewMode === "listing" && mapStatus === "ready" && selectedListing && (
+                  <div className="absolute bottom-3 left-3 right-3 sm:right-auto sm:max-w-sm z-10 bg-white/95 backdrop-blur-md p-3.5 sm:p-4 rounded-xl border border-[#E5E8EB] shadow-xs space-y-2 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-[#E8F3FF] text-[#1e3a8a]">
+                          {selectedListing.property_type}
+                        </span>
+                        <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md bg-[#FFF0F0] text-[#F04452]">
+                          {selectedListing.deal_type}
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-[#8B95A1]">{selectedListing.maintenance_fee}</span>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-[#191F28] leading-tight line-clamp-1">{selectedListing.title}</h4>
+                      <p className="text-base font-black text-[#F04452] mt-0.5">{selectedListing.price_summary}</p>
+                    </div>
+                    <div className="text-[11px] text-[#4E5968] flex items-center gap-2">
+                      <span>{selectedListing.floor}</span>
+                      <span>•</span>
+                      <span>{selectedListing.area}</span>
+                    </div>
+                    <div className="pt-2 border-t border-[#F2F4F6] flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-[#8B95A1] truncate max-w-[170px]">중개사: {selectedListing.agency_name}</span>
+                      <a
+                        href={`tel:${selectedListing.contact}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          showToast(`[중개사 문의] ${selectedListing.agency_name} (${selectedListing.contact})`);
+                        }}
+                        className="px-3 py-1.5 bg-[#0f172a] hover:bg-[#1e293b] text-white text-[11px] font-black rounded-lg transition-all shadow-xs flex items-center gap-1 active:scale-95"
+                      >
+                        <span>문의하기</span>
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
+            </section>
 
-              <div className="flex items-center gap-1">
-                {/* 맨 처음 페이지 */}
-                <button
-                  onClick={() => handlePageChange(1)}
-                  disabled={tablePage === 1}
-                  title="첫 페이지"
-                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-[#6B7684] hover:bg-[#F2F4F6] disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-                >
-                  ⏮
-                </button>
-                {/* 이전 페이지 */}
-                <button
-                  onClick={() => handlePageChange(tablePage - 1)}
-                  disabled={tablePage === 1}
-                  title="이전 페이지"
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-[#6B7684] hover:bg-[#F2F4F6] disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-                >
-                  ◀ 이전
-                </button>
+            {/* ========================================================================= */}
+            {/* [조건부 렌더링] 과거 실거래가 표 vs 현재 제휴 매물(Demo) 카드 리스트      */}
+            {/* ========================================================================= */}
+            {viewMode === "transaction" ? (
+              <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-4 animate-in fade-in duration-200 w-full max-w-full box-border min-w-0">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="bg-slate-100 text-slate-800 text-[10px] font-bold px-2 py-0.5 rounded border border-slate-300">RAW DATA</span>
+                      <h3 className="text-lg font-black text-[#191F28] tracking-tight">
+                        {currentRegionLabel} 국토교통부 실거래 계약 상세 내역 ({totalCount.toLocaleString()}건)
+                      </h3>
+                    </div>
+                    <p className="text-xs text-[#8B95A1] font-medium mt-1">
+                      국토교통부 실거래가 공개시스템 및 클라우드 원장 DB 기준 정합성 검증 완료 데이터입니다.
+                    </p>
+                  </div>
 
-                {/* 동적 5개 페이지 번호 윈도우 */}
-                {(() => {
-                  const windowSize = 5;
-                  let start = Math.max(1, tablePage - Math.floor(windowSize / 2));
-                  let end = start + windowSize - 1;
-                  if (end > totalPages) {
-                    end = totalPages;
-                    start = Math.max(1, end - windowSize + 1);
-                  }
-                  const pages = [];
-                  for (let i = start; i <= end; i++) {
-                    pages.push(i);
-                  }
-                  return pages.map((pageNum) => (
+                  {/* 테이블 내부 검색창 (스마트 검색어 양방향 바인딩) */}
+                  <div className="relative w-full sm:w-64">
+                    <input
+                      type="text"
+                      placeholder="단지명 검색 (예: 래미안, 자이)"
+                      value={searchKeyword}
+                      onChange={(e) => {
+                        setSearchKeyword(e.target.value);
+                        setSearchQuery(e.target.value);
+                      }}
+                      className="w-full bg-[#F2F4F6] text-xs px-3.5 py-2 pl-9 pr-7 rounded-full border border-transparent outline-none focus:border-[#0f172a] focus:bg-white transition-all font-medium"
+                    />
+
+                    {searchKeyword && (
+                      <button
+                        onClick={() => setSearchKeyword("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 text-xs font-bold cursor-pointer"
+                      >
+                        <span className="text-[11px] font-bold">x</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 부동산 유형 및 거래 유형 필터 버튼군 */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-[#F2F4F6]">
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { id: "all", label: "전체 유형" },
+                      { id: "아파트", label: "아파트" },
+                      { id: "오피스텔", label: "오피스텔" },
+                      { id: "연립다세대", label: "빌라/투룸(연립/다세대)" },
+                      { id: "단독다가구", label: "원룸(단독/다가구)" }
+                    ].map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => setPropertyTypeFilter(p.id)}
+                        className={`px-3.5 py-2 min-h-[40px] rounded-full text-xs sm:text-sm font-bold transition-all active:scale-95 ${propertyTypeFilter === p.id
+                            ? "bg-[#0f172a] text-white shadow-xs font-black"
+                            : "bg-[#F2F4F6] text-[#4E5968] hover:bg-[#E5E8EB]"
+                          }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-1.5">
+                    {[
+                      { id: "all", label: "전체 거래" },
+                      { id: "매매", label: "매매" },
+                      { id: "전세", label: "전세" },
+                      { id: "월세", label: "월세" }
+                    ].map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => setTradeTypeFilter(t.id)}
+                        className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition-all ${tradeTypeFilter === t.id
+                            ? "bg-[#191F28] text-white"
+                            : "bg-[#F2F4F6] text-[#6B7684] hover:bg-[#E5E8EB]"
+                          }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* [스켈레톤 및 에러 렌더링] */}
+                {fetchError ? (
+                  <div className="py-14 px-6 flex flex-col items-center justify-center text-center bg-red-50/40 rounded-xl border border-red-200">
+                    <svg className="w-8 h-8 text-red-500 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    <h3 className="text-sm font-bold text-slate-900 mb-1">
+                      실거래가 원장 조회 지연
+                    </h3>
+                    <p className="text-xs text-slate-600 mb-4 max-w-md">
+                      {fetchError}
+                    </p>
                     <button
-                      key={pageNum}
-                      onClick={() => handlePageChange(pageNum)}
-                      className={`w-8 h-8 rounded-full text-xs font-bold transition-all ${
-                        tablePage === pageNum
-                          ? "bg-[#0f172a] text-white shadow-xs font-extrabold scale-105"
-                          : "bg-transparent text-[#4E5968] hover:bg-[#F2F4F6]"
-                      }`}
+                      onClick={() => fetchData()}
+                      className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-md transition-colors shadow-xs"
                     >
-                      {pageNum}
+                      다시 시도
                     </button>
-                  ));
-                })()}
+                  </div>
+                ) : isLoading ? (
+                  <TableSkeleton regionLabel={currentRegionLabel} />
+                ) : (
+                  <div className="overflow-x-auto rounded-xl border border-[#F2F4F6]">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-[#FAFAFA] border-b border-[#F2F4F6] text-[#8B95A1]">
+                          <th className="py-3 px-3.5 font-bold">계약일자</th>
+                          <th className="py-3 px-3.5 font-bold">유형</th>
+                          <th className="py-3 px-3.5 font-bold">단지/건물명</th>
+                          <th className="py-3 px-3.5 font-bold">동/위치</th>
+                          <th className="py-3 px-3.5 font-bold">거래구분</th>
+                          <th className="py-3 px-3.5 font-bold">실거래 가격 / 보증금</th>
+                          <th className="py-3 px-3.5 font-bold">전용면적</th>
+                          <th className="py-3 px-3.5 font-bold">층수</th>
+                          <th className="py-3 px-3.5 font-bold">구조</th>
+                          <th className="py-3 px-3.5 font-bold">중개방식</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#F2F4F6]">
+                        {paginatedTrades.length === 0 ? (
+                          <tr>
+                            <td colSpan="10" className="py-16 text-center">
+                              <div className="flex flex-col items-center justify-center space-y-3">
+                                <div className="space-y-1">
+                                  <h4 className="text-sm font-bold text-slate-800">
+                                    {searchKeyword.trim() ? `"${searchKeyword}" 검색 조건과 일치하는 실거래 내역이 없습니다` : "조회된 실거래 내역이 없습니다"}
+                                  </h4>
+                                  <p className="text-xs text-slate-500">
+                                    {searchKeyword.trim()
+                                      ? "단지명이나 법정동 표기를 확인하시거나 검색어를 초기화해 주십시오."
+                                      : "상단 지역 필터 또는 거래 구분을 조정해 주십시오."}
+                                  </p>
+                                </div>
+                                {searchKeyword.trim() && (
+                                  <button
+                                    onClick={() => setSearchKeyword("")}
+                                    className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-md transition-all cursor-pointer active:scale-95"
+                                  >
+                                    전체 원장 내역 조회
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          paginatedTrades.map((item, idx) => {
+                            const isTrade = item.trade_type === "매매";
+                            const isJeonse = item.trade_type === "전세";
+                            const formattedPrice = item.price_formatted || (item.trade_type === "월세"
+                              ? `보증금 ${formatTossMoney(item.deposit)} / 월 ${item.monthly_rent}만`
+                              : formatTossMoney(item.deal_amount || item.deposit));
 
-                {/* 다음 페이지 */}
-                <button
-                  onClick={() => handlePageChange(tablePage + 1)}
-                  disabled={tablePage === totalPages}
-                  title="다음 페이지"
-                  className="px-3 py-1.5 rounded-lg text-xs font-bold text-[#6B7684] hover:bg-[#F2F4F6] disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-                >
-                  다음 ▶
-                </button>
-                {/* 맨 끝 페이지 */}
-                <button
-                  onClick={() => handlePageChange(totalPages)}
-                  disabled={tablePage === totalPages}
-                  title="마지막 페이지"
-                  className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-[#6B7684] hover:bg-[#F2F4F6] disabled:opacity-30 disabled:hover:bg-transparent transition-all"
-                >
-                  ⏭
-                </button>
-              </div>
-            </div>
-          )}
-        </section>
-        ) : (
-        /* ========================================================================= */
-        /* [현재 매물 모드 (Demo)] 직방/다방 스타일 B2B 제휴 매물 카드 그리드        */
-        /* ========================================================================= */
-        <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-5 sm:space-y-6 animate-in fade-in duration-300 w-full max-w-full box-border min-w-0">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-3 border-b border-[#F2F4F6]">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="bg-[#0f172a] text-white text-xs font-black px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
-                  <span>B2B 제휴 검증 매물</span>
-                </span>
-                <h3 className="text-lg font-black text-[#191F28] tracking-tight">
-                  {currentRegionLabel} 제휴 공인중개사 실시간 매물 ({filteredRealListings.length}건)
-                </h3>
-              </div>
-              <p className="text-xs text-[#8B95A1] font-medium mt-1">
-                공인중개사 네트워크를 통해 실시간 등록된 현장 검증 호가 매물 데이터입니다.
-              </p>
-            </div>
+                            return (
+                              <tr
+                                key={item.id || idx}
+                                onClick={() => {
+                                  handleSelectPropertyForMap(item);
+                                  const { title } = buildPropertyAddressAndTitle(item);
+                                  showToast(`[위치 이동] ${title}`);
+                                }}
+                                className={`hover:bg-[#F9FAFB] cursor-pointer transition-colors ${selectedMapTarget?.id === item.id ? "bg-[#E8F3FF]/40 border-l-4 border-l-[#3182F6]" : ""
+                                  }`}
+                              >
+                                <td className="py-3 px-3.5 text-[#4E5968] font-medium whitespace-nowrap">
+                                  {item.deal_date || `${item.deal_year}.${String(item.deal_month).padStart(2, "0")}.${String(item.deal_day || 1).padStart(2, "0")}`}
+                                </td>
+                                <td className="py-3 px-3.5 whitespace-nowrap">
+                                  <span
+                                    className={`text-[11px] font-bold px-2.5 py-0.5 rounded-md ${item.property_type === "아파트"
+                                        ? "bg-[#E8F3FF] text-[#1e3a8a]"
+                                        : item.property_type === "오피스텔"
+                                          ? "bg-[#F0EBFE] text-[#7B2CBF]"
+                                          : item.property_type === "연립다세대"
+                                            ? "bg-[#FFF4E6] text-[#FF8800]"
+                                            : "bg-[#E6F9F5] text-[#00A455]"
+                                      }`}
+                                  >
+                                    {item.property_type === "연립다세대"
+                                      ? "빌라/투룸"
+                                      : item.property_type === "단독다가구"
+                                        ? "원룸/다가구"
+                                        : item.property_type || "아파트"}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3.5 font-extrabold text-[#191F28] whitespace-nowrap">
+                                  {item.apt_name || (item.dong ? `${item.dong} (${item.property_type || "원룸"})` : item.property_type || "단독/원룸")}
+                                </td>
+                                <td className="py-3 px-3.5 text-[#4E5968] whitespace-nowrap">
+                                  {item.dong || item.jibun || "-"}
+                                </td>
+                                <td className="py-3 px-3.5">
+                                  <span
+                                    className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full ${isTrade
+                                        ? "bg-[#FEECEE] text-[#F04452]"
+                                        : isJeonse
+                                          ? "bg-[#E8F3FF] text-[#1e3a8a]"
+                                          : "bg-[#E6F9F5] text-[#00B493]"
+                                      }`}
+                                  >
+                                    {item.trade_type}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3.5 font-black text-[#191F28] text-sm whitespace-nowrap">
+                                  <span className={isTrade ? "text-[#F04452]" : isJeonse ? "text-[#1e3a8a]" : "text-[#191F28]"}>
+                                    {formattedPrice}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3.5 text-[#4E5968] font-medium whitespace-nowrap">
+                                  {item.exclu_use_ar || item.exclusive_area || "-"}㎡ ({toPyeong(item.exclu_use_ar || item.exclusive_area)}평)
+                                </td>
+                                <td className="py-3 px-3.5 text-[#4E5968] font-medium whitespace-nowrap">
+                                  {item.floor ? `${item.floor}층` : "-"}
+                                </td>
+                                <td className="py-3 px-3.5 text-[#191F28] font-semibold whitespace-nowrap">
+                                  방 {item.rooms || 3} / 욕실 {item.bathrooms || 1}
+                                </td>
+                                <td className="py-3 px-3.5 text-[#8B95A1] whitespace-nowrap">{item.req_gbn || "중개거래"}</td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
 
-            {/* 매물 등록 제휴 문의 버튼 */}
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              <button
-                onClick={() => {
-                  window.location.href = "mailto:partners@zipview.co.kr?subject=[ZipView] B2B 제휴 매물 등록 문의";
-                  showToast("[제휴 등록 접수] partners@zipview.co.kr 제휴 문의로 연결합니다.");
-                }}
-                className="px-3.5 py-2 rounded-full text-xs font-bold bg-[#E8F3FF] hover:bg-[#D5E8FF] text-[#1e3a8a] transition-all flex items-center gap-1 cursor-pointer active:scale-95"
-              >
-                <span>제휴 매물 등록 안내</span>
-              </button>
-            </div>
-          </div>
+                {/* 테이블 페이지네이션 컨트롤 (토스 스타일 고성능 서버사이드 페이징) */}
+                {!isLoading && totalPages > 1 && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-[#F2F4F6]">
+                    <div className="text-xs font-semibold text-[#8B95A1]">
+                      총 <span className="font-extrabold text-[#191F28]">{totalCount.toLocaleString()}</span>건 중{" "}
+                      <span className="text-[#1e3a8a] font-bold">
+                        {((tablePage - 1) * ROWS_PER_PAGE + 1).toLocaleString()} - {Math.min(tablePage * ROWS_PER_PAGE, totalCount).toLocaleString()}
+                      </span>
+                      건 표시 (페이지 {tablePage} / {totalPages.toLocaleString()})
+                    </div>
 
-          {/* 매물 카테고리 & 거래 유형 2단 필터 버튼군 */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-            {/* 1) 주택 유형 필터 */}
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                { id: "all", label: "전체 매물" },
-                { id: "아파트", label: "아파트" },
-                { id: "원룸", label: "원룸" },
-                { id: "오피스텔", label: "오피스텔" },
-                { id: "빌라/투룸", label: "빌라/투룸" }
-              ].map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => setListingPropertyFilter(p.id)}
-                  className={`px-3.5 py-2 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer active:scale-95 ${
-                    listingPropertyFilter === p.id
-                      ? "bg-[#0f172a] text-white shadow-xs font-black"
-                      : "bg-[#F2F4F6] text-[#4E5968] hover:bg-[#E5E8EB]"
-                  }`}
-                >
-                  {p.label}
-                </button>
-              ))}
-            </div>
+                    <div className="flex items-center gap-1">
+                      {/* 맨 처음 페이지 */}
+                      <button
+                        onClick={() => handlePageChange(1)}
+                        disabled={tablePage === 1}
+                        title="첫 페이지"
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-[#6B7684] hover:bg-[#F2F4F6] disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                      >
+                        ⏮
+                      </button>
+                      {/* 이전 페이지 */}
+                      <button
+                        onClick={() => handlePageChange(tablePage - 1)}
+                        disabled={tablePage === 1}
+                        title="이전 페이지"
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-[#6B7684] hover:bg-[#F2F4F6] disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                      >
+                        ◀ 이전
+                      </button>
 
-            {/* 2) 거래 유형 필터 */}
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                { id: "all", label: "전체 거래" },
-                { id: "매매", label: "매매" },
-                { id: "전세", label: "전세" },
-                { id: "월세", label: "월세" }
-              ].map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setListingTradeFilter(t.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer active:scale-95 ${
-                    listingTradeFilter === t.id
-                      ? "bg-[#191F28] text-white font-black"
-                      : "bg-[#F2F4F6] text-[#6B7684] hover:bg-[#E5E8EB]"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 직방/다방 스타일 매물 카드 그리드 (반응형 3열) */}
-          {filteredRealListings.length === 0 ? (
-            <div className="py-16 text-center space-y-3 bg-white rounded-xl border border-[#E5E8EB]">
-              
-              <div className="space-y-1">
-                <h4 className="text-sm font-extrabold text-[#191F28]">
-                  {searchKeyword.trim() ? `"${searchKeyword}" 조건에 맞는 제휴 매물이 없습니다` : "조회된 제휴 매물이 없습니다"}
-                </h4>
-                <p className="text-xs text-[#8B95A1]">
-                  {searchKeyword.trim()
-                    ? "단지명이나 동 이름을 확인하시거나, 다른 검색어로 검색해 보세요."
-                    : "해당 조건의 실거래 데이터가 없습니다. 해당 지역의 실거래 검증 매물이 아직 없거나 필터 조건에 부합하는 매물이 없습니다."}
-                </p>
-              </div>
-              {(searchKeyword.trim() || listingPropertyFilter !== "all" || listingTradeFilter !== "all") && (
-                <button
-                  onClick={() => {
-                    setSearchKeyword("");
-                    setListingPropertyFilter("all");
-                    setListingTradeFilter("all");
-                  }}
-                  className="px-4 py-2 bg-[#E8F3FF] hover:bg-[#D4E8FF] text-[#1e3a8a] text-xs font-bold rounded-xl transition-all cursor-pointer active:scale-95"
-                >
-                  전체 매물 보기 (필터 및 검색 초기화)
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4.5">
-              {filteredRealListings.map((item) => {
-                const isSelected = selectedListing?.id === item.id;
-                const priceColor = item.deal_type === "매매" ? "text-[#F04452]" : item.deal_type === "전세" ? "text-[#1e3a8a]" : "text-[#00B493]";
-
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => handleSelectListing(item)}
-                    className={`bg-white rounded-xl border p-4 sm:p-5 transition-all cursor-pointer space-y-2.5 sm:space-y-3 relative overflow-hidden flex flex-col justify-between ${
-                      isSelected
-                        ? "border-[#0f172a] ring-2 ring-[#3182F6]/30 shadow-xs bg-[#F8FAFF]"
-                        : "border-[#E5E8EB] hover:border-[#0f172a]/50 hover:shadow-xs hover:-translate-y-0.5"
-                    }`}
-                  >
-                    {/* 상단 뱃지 & 관리비 */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-md bg-[#E8F3FF] text-[#1e3a8a]">
-                            {item.property_type}
-                          </span>
-                          <span
-                            className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-md ${
-                              item.deal_type === "매매"
-                                ? "bg-[#FFF0F0] text-[#F04452]"
-                                : item.deal_type === "전세"
-                                ? "bg-[#E8F3FF] text-[#1e3a8a]"
-                                : "bg-[#E6F9F5] text-[#00A455]"
-                            }`}
+                      {/* 동적 5개 페이지 번호 윈도우 */}
+                      {(() => {
+                        const windowSize = 5;
+                        let start = Math.max(1, tablePage - Math.floor(windowSize / 2));
+                        let end = start + windowSize - 1;
+                        if (end > totalPages) {
+                          end = totalPages;
+                          start = Math.max(1, end - windowSize + 1);
+                        }
+                        const pages = [];
+                        for (let i = start; i <= end; i++) {
+                          pages.push(i);
+                        }
+                        return pages.map((pageNum) => (
+                          <button
+                            key={pageNum}
+                            onClick={() => handlePageChange(pageNum)}
+                            className={`w-8 h-8 rounded-full text-xs font-bold transition-all ${tablePage === pageNum
+                                ? "bg-[#0f172a] text-white shadow-xs font-extrabold scale-105"
+                                : "bg-transparent text-[#4E5968] hover:bg-[#F2F4F6]"
+                              }`}
                           >
-                            {item.deal_type}
-                          </span>
-                        </div>
-                        <span className="text-[11px] font-bold text-[#8B95A1]">{item.maintenance_fee}</span>
-                      </div>
+                            {pageNum}
+                          </button>
+                        ));
+                      })()}
 
-                      {/* 가격 & 건물명 & 제목 */}
-                      <div>
-                        <h4 className={`text-lg sm:text-xl font-black tracking-tight ${priceColor}`}>
-                          {item.price_summary}
-                        </h4>
-                        <p className="text-xs sm:text-sm font-extrabold text-[#191F28] line-clamp-1 mt-0.5 sm:mt-1">
-                          {item.title}
-                        </p>
-                        <p className="text-xs text-[#8B95A1] mt-0.5 font-medium">
-                          {item.apt_name} · {item.floor} · {item.area}
-                        </p>
-                      </div>
+                      {/* 다음 페이지 */}
+                      <button
+                        onClick={() => handlePageChange(tablePage + 1)}
+                        disabled={tablePage === totalPages}
+                        title="다음 페이지"
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold text-[#6B7684] hover:bg-[#F2F4F6] disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                      >
+                        다음 ▶
+                      </button>
+                      {/* 맨 끝 페이지 */}
+                      <button
+                        onClick={() => handlePageChange(totalPages)}
+                        disabled={tablePage === totalPages}
+                        title="마지막 페이지"
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-[#6B7684] hover:bg-[#F2F4F6] disabled:opacity-30 disabled:hover:bg-transparent transition-all"
+                      >
+                        ⏭
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </section>
+            ) : (
+              /* ========================================================================= */
+              /* [현재 매물 모드 (Demo)] 직방/다방 스타일 B2B 제휴 매물 카드 그리드        */
+              /* ========================================================================= */
+              <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-5 sm:space-y-6 animate-in fade-in duration-300 w-full max-w-full box-border min-w-0">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-3 border-b border-[#F2F4F6]">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="bg-[#0f172a] text-white text-xs font-black px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-2xs">
+                        <span>B2B 제휴 검증 매물</span>
+                      </span>
+                      <h3 className="text-lg font-black text-[#191F28] tracking-tight">
+                        {currentRegionLabel} 제휴 공인중개사 실시간 매물 ({filteredRealListings.length}건)
+                      </h3>
+                    </div>
+                    <p className="text-xs text-[#8B95A1] font-medium mt-1">
+                      공인중개사 네트워크를 통해 실시간 등록된 현장 검증 호가 매물 데이터입니다.
+                    </p>
+                  </div>
 
-                      {/* 태그 리스트 */}
-                      <div className="flex flex-wrap gap-1 pt-1">
-                        {item.tags.map((tag, tIdx) => (
-                          <span
-                            key={tIdx}
-                            className="text-[10px] font-bold bg-[#F2F4F6] text-[#6B7684] px-2 py-0.5 rounded-md"
-                          >
-                            #{tag}
-                          </span>
-                        ))}
-                      </div>
+                  {/* 매물 등록 제휴 문의 버튼 */}
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <button
+                      onClick={() => {
+                        window.location.href = "mailto:partners@zipview.co.kr?subject=[ZipView] B2B 제휴 매물 등록 문의";
+                        showToast("[제휴 등록 접수] partners@zipview.co.kr 제휴 문의로 연결합니다.");
+                      }}
+                      className="px-3.5 py-2 rounded-full text-xs font-bold bg-[#E8F3FF] hover:bg-[#D5E8FF] text-[#1e3a8a] transition-all flex items-center gap-1 cursor-pointer active:scale-95"
+                    >
+                      <span>제휴 매물 등록 안내</span>
+                    </button>
+                  </div>
+                </div>
 
-                      {/* 매물 핵심 설명 */}
-                      <p className="text-[11px] text-[#4E5968] bg-[#F9FAFB] p-2.5 rounded-xl border border-[#F2F4F6] leading-relaxed line-clamp-2">
-                        {item.description}
+                {/* 매물 카테고리 & 거래 유형 2단 필터 버튼군 */}
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                  {/* 1) 주택 유형 필터 */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { id: "all", label: "전체 매물" },
+                      { id: "아파트", label: "아파트" },
+                      { id: "원룸", label: "원룸" },
+                      { id: "오피스텔", label: "오피스텔" },
+                      { id: "빌라/투룸", label: "빌라/투룸" }
+                    ].map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => setListingPropertyFilter(p.id)}
+                        className={`px-3.5 py-2 rounded-full text-xs sm:text-sm font-bold transition-all cursor-pointer active:scale-95 ${listingPropertyFilter === p.id
+                            ? "bg-[#0f172a] text-white shadow-xs font-black"
+                            : "bg-[#F2F4F6] text-[#4E5968] hover:bg-[#E5E8EB]"
+                          }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* 2) 거래 유형 필터 */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { id: "all", label: "전체 거래" },
+                      { id: "매매", label: "매매" },
+                      { id: "전세", label: "전세" },
+                      { id: "월세", label: "월세" }
+                    ].map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => setListingTradeFilter(t.id)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer active:scale-95 ${listingTradeFilter === t.id
+                            ? "bg-[#191F28] text-white font-black"
+                            : "bg-[#F2F4F6] text-[#6B7684] hover:bg-[#E5E8EB]"
+                          }`}
+                      >
+                        {t.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 직방/다방 스타일 매물 카드 그리드 (반응형 3열) */}
+                {filteredRealListings.length === 0 ? (
+                  <div className="py-16 text-center space-y-3 bg-white rounded-xl border border-[#E5E8EB]">
+
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-extrabold text-[#191F28]">
+                        {searchKeyword.trim() ? `"${searchKeyword}" 조건에 맞는 제휴 매물이 없습니다` : "조회된 제휴 매물이 없습니다"}
+                      </h4>
+                      <p className="text-xs text-[#8B95A1]">
+                        {searchKeyword.trim()
+                          ? "단지명이나 동 이름을 확인하시거나, 다른 검색어로 검색해 보세요."
+                          : "해당 조건의 실거래 데이터가 없습니다. 해당 지역의 실거래 검증 매물이 아직 없거나 필터 조건에 부합하는 매물이 없습니다."}
                       </p>
                     </div>
-
-                    {/* 하단 중개사 정보 & 인터랙션 버튼군 */}
-                    <div className="pt-3 border-t border-[#F2F4F6] flex items-center justify-between gap-2 mt-2">
-                      <div className="text-[11px] text-[#8B95A1] truncate max-w-[150px]">
-                        <div className="font-extrabold text-[#191F28] truncate">중개사: {item.agency_name}</div>
-                        <div className="text-[10px] text-[#8B95A1]">{item.agent_name}</div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSelectListing(item);
-                          }}
-                          className="px-2.5 py-1.5 bg-[#F2F4F6] hover:bg-[#E5E8EB] text-[#191F28] text-xs font-bold rounded-xl transition-all cursor-pointer"
-                        >
-                          위치 확인
-                        </button>
-                        <a
-                          href={`tel:${item.contact}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            showToast(`[중개사 문의] ${item.agency_name} (${item.contact})`);
-                          }}
-                          className="px-3 py-1.5 bg-[#0f172a] hover:bg-[#1e293b] text-white text-xs font-black rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
-                        >
-                          <span>문의하기</span>
-                        </a>
-                      </div>
-                    </div>
+                    {(searchKeyword.trim() || listingPropertyFilter !== "all" || listingTradeFilter !== "all") && (
+                      <button
+                        onClick={() => {
+                          setSearchKeyword("");
+                          setListingPropertyFilter("all");
+                          setListingTradeFilter("all");
+                        }}
+                        className="px-4 py-2 bg-[#E8F3FF] hover:bg-[#D4E8FF] text-[#1e3a8a] text-xs font-bold rounded-xl transition-all cursor-pointer active:scale-95"
+                      >
+                        전체 매물 보기 (필터 및 검색 초기화)
+                      </button>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </section>
-        )}
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4.5">
+                    {filteredRealListings.map((item) => {
+                      const isSelected = selectedListing?.id === item.id;
+                      const priceColor = item.deal_type === "매매" ? "text-[#F04452]" : item.deal_type === "전세" ? "text-[#1e3a8a]" : "text-[#00B493]";
+
+                      return (
+                        <div
+                          key={item.id}
+                          onClick={() => handleSelectListing(item)}
+                          className={`bg-white rounded-xl border p-4 sm:p-5 transition-all cursor-pointer space-y-2.5 sm:space-y-3 relative overflow-hidden flex flex-col justify-between ${isSelected
+                              ? "border-[#0f172a] ring-2 ring-[#3182F6]/30 shadow-xs bg-[#F8FAFF]"
+                              : "border-[#E5E8EB] hover:border-[#0f172a]/50 hover:shadow-xs hover:-translate-y-0.5"
+                            }`}
+                        >
+                          {/* 상단 뱃지 & 관리비 */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-md bg-[#E8F3FF] text-[#1e3a8a]">
+                                  {item.property_type}
+                                </span>
+                                <span
+                                  className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-md ${item.deal_type === "매매"
+                                      ? "bg-[#FFF0F0] text-[#F04452]"
+                                      : item.deal_type === "전세"
+                                        ? "bg-[#E8F3FF] text-[#1e3a8a]"
+                                        : "bg-[#E6F9F5] text-[#00A455]"
+                                    }`}
+                                >
+                                  {item.deal_type}
+                                </span>
+                              </div>
+                              <span className="text-[11px] font-bold text-[#8B95A1]">{item.maintenance_fee}</span>
+                            </div>
+
+                            {/* 가격 & 건물명 & 제목 */}
+                            <div>
+                              <h4 className={`text-lg sm:text-xl font-black tracking-tight ${priceColor}`}>
+                                {item.price_summary}
+                              </h4>
+                              <p className="text-xs sm:text-sm font-extrabold text-[#191F28] line-clamp-1 mt-0.5 sm:mt-1">
+                                {item.title}
+                              </p>
+                              <p className="text-xs text-[#8B95A1] mt-0.5 font-medium">
+                                {item.apt_name} · {item.floor} · {item.area}
+                              </p>
+                            </div>
+
+                            {/* 태그 리스트 */}
+                            <div className="flex flex-wrap gap-1 pt-1">
+                              {item.tags.map((tag, tIdx) => (
+                                <span
+                                  key={tIdx}
+                                  className="text-[10px] font-bold bg-[#F2F4F6] text-[#6B7684] px-2 py-0.5 rounded-md"
+                                >
+                                  #{tag}
+                                </span>
+                              ))}
+                            </div>
+
+                            {/* 매물 핵심 설명 */}
+                            <p className="text-[11px] text-[#4E5968] bg-[#F9FAFB] p-2.5 rounded-xl border border-[#F2F4F6] leading-relaxed line-clamp-2">
+                              {item.description}
+                            </p>
+                          </div>
+
+                          {/* 하단 중개사 정보 & 인터랙션 버튼군 */}
+                          <div className="pt-3 border-t border-[#F2F4F6] flex items-center justify-between gap-2 mt-2">
+                            <div className="text-[11px] text-[#8B95A1] truncate max-w-[150px]">
+                              <div className="font-extrabold text-[#191F28] truncate">중개사: {item.agency_name}</div>
+                              <div className="text-[10px] text-[#8B95A1]">{item.agent_name}</div>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSelectListing(item);
+                                }}
+                                className="px-2.5 py-1.5 bg-[#F2F4F6] hover:bg-[#E5E8EB] text-[#191F28] text-xs font-bold rounded-xl transition-all cursor-pointer"
+                              >
+                                위치 확인
+                              </button>
+                              <a
+                                href={`tel:${item.contact}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  showToast(`[중개사 문의] ${item.agency_name} (${item.contact})`);
+                                }}
+                                className="px-3 py-1.5 bg-[#0f172a] hover:bg-[#1e293b] text-white text-xs font-black rounded-xl transition-all shadow-xs flex items-center gap-1 cursor-pointer active:scale-95"
+                              >
+                                <span>문의하기</span>
+                              </a>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
+            )}
           </>
         )}
       </main>
@@ -3922,16 +3947,14 @@ export default function TossStyleRealEstateDashboard() {
               {chatMessages.map((m, i) => (
                 <div
                   key={i}
-                  className={`flex flex-col ${
-                    m.sender === "user" ? "items-end" : "items-start"
-                  }`}
+                  className={`flex flex-col ${m.sender === "user" ? "items-end" : "items-start"
+                    }`}
                 >
                   <div
-                    className={`max-w-[85%] px-3.5 py-2.5 rounded-xl whitespace-pre-wrap leading-relaxed ${
-                      m.sender === "user"
+                    className={`max-w-[85%] px-3.5 py-2.5 rounded-xl whitespace-pre-wrap leading-relaxed ${m.sender === "user"
                         ? "bg-[#0f172a] text-white rounded-br-none"
                         : "bg-white text-[#191F28] border border-[#E5E8EB] rounded-bl-none shadow-2xs"
-                    }`}
+                      }`}
                   >
                     {m.text}
                   </div>
@@ -3994,7 +4017,7 @@ export default function TossStyleRealEstateDashboard() {
       {/* ========================================================================= */}
       {toastMessage && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-32px)] bg-[#191F28]/95 backdrop-blur-sm text-white text-xs font-semibold px-4 sm:px-5 py-2.5 sm:py-3 rounded-full shadow-sm flex items-center gap-2 border border-white/10 animate-in fade-in slide-in-from-bottom-3 duration-200 text-center">
-          
+
           <span className="truncate">{toastMessage}</span>
         </div>
       )}

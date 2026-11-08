@@ -156,6 +156,22 @@ def parse_korean_number_to_manwon(text: str) -> int:
     return 0
 
 
+# 조회 화면 타겟(target_view) 의도 감지 키워드 (대시보드 탭 전환용)
+TARGET_VIEW_KEYWORDS: Dict[str, List[str]] = {
+    "TRANSACTION": ["실거래", "원장", "시세 분석", "시세분석", "거래 내역", "거래내역", "실거래가 분석"],
+    "B2B": ["b2b", "제휴", "매물 현황", "매물현황", "매물이", "매물을", "매물 보", "매물 찾", "매물 알려", "매물 좀", "매물 리스트", "호가"],
+}
+
+
+def extract_target_view(prompt: str) -> Optional[str]:
+    """발화에서 사용자가 보고 싶은 대시보드 화면(B2B 제휴 매물 현황 / 실거래 원장 분석)을 규칙 기반으로 추출"""
+    p_lower = (prompt or "").lower()
+    for view in ("TRANSACTION", "B2B"):
+        if any(k in p_lower for k in TARGET_VIEW_KEYWORDS[view]):
+            return view
+    return None
+
+
 def extract_conditions_nlp(
     prompt: str,
     current_lawd_cd: Optional[str] = None,
@@ -342,6 +358,7 @@ def extract_conditions_nlp(
         "apt_name": apt_name,
         "target_dongs": target_dongs,
         "hotspot_coord": hotspot_coord,
+        "target_view": extract_target_view(p),
         "landmark_info": landmark_info
     }
 
@@ -396,6 +413,7 @@ async def parse_conditions_with_openai(
             "- max_monthly_rent: 월세 상한선(만원 단위 정수, 예: 70이하는 70) 또는 null\n"
             "- max_price: 매매가 상한선(만원 단위 정수, 예: 15억은 150000) 또는 null\n"
             "- apt_name: 특정 단지명 또는 건물명 (예: '힐스테이트', '은마', '자이') 또는 null\n"
+            "- target_view: 사용자가 보고 싶어 하는 대시보드 화면. 'B2B' (B2B 제휴 매물 현황, 현재 매물/호가 매물 조회 의도), 'TRANSACTION' (실거래 원장 분석, 과거 실거래가/시세 추이 조회 의도) 또는 null\n"
             "반드시 유효한 JSON 문자열만 출력해."
         )
 
@@ -433,6 +451,8 @@ async def parse_conditions_with_openai(
         final_rent = data.get("max_monthly_rent") if data.get("max_monthly_rent") is not None else nlp_cond.get("max_monthly_rent")
         final_price = data.get("max_price") if data.get("max_price") is not None else nlp_cond.get("max_price")
         final_apt = data.get("apt_name") or nlp_cond.get("apt_name")
+        llm_view = str(data.get("target_view") or "").strip().upper()
+        final_view = llm_view if llm_view in TARGET_VIEW_KEYWORDS else nlp_cond.get("target_view")
 
         landmark_info = nlp_cond.get("landmark_info") or {}
         if data.get("landmark_name"):
@@ -459,6 +479,7 @@ async def parse_conditions_with_openai(
             "apt_name": final_apt,
             "target_dongs": final_target_dongs,
             "hotspot_coord": final_hotspot_coord,
+            "target_view": final_view,
             "landmark_info": landmark_info if landmark_info else None
         }
     except Exception as e:
@@ -739,7 +760,9 @@ async def run_ai_consultant(
                 "new_district_name": district_name,
                 "target_dongs": target_dongs,
                 "hotspot_coord": hotspot_coord,
-                "landmark_name": landmark_name
+                "landmark_name": landmark_name,
+                "target_view": conditions.get("target_view"),
+                "trade_type": conditions.get("trade_type")
             }
 
         briefing_text = await _format_briefing_response(
@@ -779,7 +802,9 @@ async def run_ai_consultant(
             "new_district_name": district_name,
             "target_dongs": target_dongs,
             "hotspot_coord": hotspot_coord,
-            "landmark_name": landmark_name
+            "landmark_name": landmark_name,
+            "target_view": conditions.get("target_view"),
+            "trade_type": conditions.get("trade_type")
         }
 
     # ---------------- 2단계: 신규 질의 자연어 조건 파싱 & 대명사/이전 맥락 복원 ----------------
@@ -880,7 +905,9 @@ async def run_ai_consultant(
                 "disambiguation": disambiguation_payload,
                 "target_dongs": lm.get("target_dongs"),
                 "hotspot_coord": lm.get("hotspot_coord"),
-                "landmark_name": lm["landmark_name"]
+                "landmark_name": lm["landmark_name"],
+                "target_view": conditions.get("target_view"),
+                "trade_type": conditions.get("trade_type")
             }
         else:
             if lm.get("target_dongs"):
@@ -1010,7 +1037,9 @@ async def run_ai_consultant(
             "new_district_name": district_name,
             "target_dongs": conditions.get("target_dongs"),
             "hotspot_coord": conditions.get("hotspot_coord"),
-            "landmark_name": conditions.get("landmark_name")
+            "landmark_name": conditions.get("landmark_name"),
+            "target_view": conditions.get("target_view"),
+            "trade_type": conditions.get("trade_type")
         }
 
     # ---------------- 6단계: 실제 데이터 브리핑 생성 ----------------
@@ -1057,7 +1086,9 @@ async def run_ai_consultant(
         "new_district_name": district_name,
         "target_dongs": conditions.get("target_dongs"),
         "hotspot_coord": conditions.get("hotspot_coord"),
-        "landmark_name": conditions.get("landmark_name")
+        "landmark_name": conditions.get("landmark_name"),
+        "target_view": conditions.get("target_view"),
+        "trade_type": conditions.get("trade_type")
     }
 
 

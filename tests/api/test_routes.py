@@ -366,3 +366,35 @@ async def test_spatial_reasoning_and_active_clarification():
         assert abs(hotspot.get("lng") - 128.0872) < 0.01
 
     app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("prompt,expected_view,expected_trade", [
+    ("진주시 월세 매물이 보고 싶어", "B2B", "월세"),
+    ("진주시 전세 실거래 내역 보여줘", "TRANSACTION", "전세"),
+    ("진주시 B2B 제휴 매물 현황 탭으로 이동해서 매매 보여줘", "B2B", "매매"),
+])
+async def test_dashboard_intent_target_view_and_trade_type(prompt, expected_view, expected_trade):
+    """
+    [대시보드 UI 제어 의도 추출]
+    발화에서 지역뿐 아니라 조회 화면 타겟(target_view)과 거래 유형(trade_type)이
+    응답 JSON 최상단에 명시적으로 내려오는지 검증
+    """
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = []
+    mock_db.execute = AsyncMock(return_value=mock_result)
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post("/api/chat", json={"prompt": prompt, "model_choice": "gpt"})
+        assert res.status_code == 200, res.text
+        data = res.json()
+
+        assert data.get("status") == "success", data
+        assert data.get("new_lawd_cd") == "48170"
+        assert data.get("target_view") == expected_view, data
+        assert data.get("trade_type") == expected_trade, data
+
+    app.dependency_overrides.clear()

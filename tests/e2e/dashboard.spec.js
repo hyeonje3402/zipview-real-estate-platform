@@ -75,7 +75,24 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
       const postData = route.request().postDataJSON() || {};
       const prompt = postData.prompt || postData.query || '';
 
-      if (prompt.includes('남강축제')) {
+      if (prompt.includes('월세 매물')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'success',
+            reply: '요청하신 [경상남도 진주시]의 월세 매물을 분석했습니다.',
+            new_regional_code: '48170',
+            new_lawd_cd: '48170',
+            new_city_name: '경상남도',
+            new_district_name: '진주시',
+            new_region_label: '경상남도 진주시',
+            override_region: true,
+            target_view: 'B2B',
+            trade_type: '월세'
+          })
+        });
+      } else if (prompt.includes('남강축제')) {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -253,6 +270,31 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
     // 사용자가 드롭다운을 직접 변경하면 칩이 사라져야 한다
     await selectDistrict.selectOption('48220');
     await expect(chip).toHaveCount(0);
+  });
+
+  test('"진주시 월세 매물이 보고 싶어" 입력 시 B2B 제휴 매물 현황 탭으로 전환되고 월세 필터가 자동 적용되어야 한다', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    const selectSido = page.locator('[data-testid="select-sido"]');
+    const selectDistrict = page.locator('[data-testid="select-district"]');
+    await expect(selectSido).toBeVisible({ timeout: 15000 });
+
+    // 초기 상태: 실거래 원장 분석 탭 (B2B 제휴 매물 헤더가 보이지 않아야 함)
+    await expect(page.locator('text=제휴 공인중개사 실시간 매물')).toHaveCount(0);
+
+    await page.locator('[data-testid="chat-trigger-btn"]').click();
+    await page.locator('[data-testid="chat-input"]').fill('진주시 월세 매물이 보고 싶어');
+    await page.locator('[data-testid="chat-submit-btn"]').click();
+
+    // 1) 지역 동기화
+    await expect(selectSido).toHaveValue('경상남도', { timeout: 10000 });
+    await expect(selectDistrict).toHaveValue('48170', { timeout: 10000 });
+
+    // 2) 활성 탭이 B2B 제휴 매물 현황으로 강제 전환
+    await expect(page.locator('text=제휴 공인중개사 실시간 매물').first()).toBeVisible({ timeout: 10000 });
+
+    // 3) 거래 유형 필터가 월세로 자동 세팅 (활성 필터 버튼은 어두운 배경)
+    await expect(page.locator('button.bg-\\[\\#191F28\\]', { hasText: '월세' }).first()).toBeVisible({ timeout: 10000 });
   });
 });
 

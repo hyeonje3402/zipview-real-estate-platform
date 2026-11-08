@@ -6,7 +6,7 @@ import axios from "axios";
  * - 국토교통부 실거래 원장 데이터 및 시장 분석 LLM 연동
  * - 간결하고 정제된 실무 인터페이스 및 타이포그래피 정보 위계 적용
  */
-export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegionLabel, onRegionOverride }) {
+export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegionLabel, onDashboardSync }) {
   const activeRegion = currentRegionLabel || "현재 지역";
 
   const [messages, setMessages] = useState([
@@ -86,16 +86,25 @@ export default function GeminiChatModal({ isOpen, onClose, lawdCd, currentRegion
         setPendingDisambiguation(null);
       }
 
-      // new_lawd_cd 가 존재하면 무조건 부모 대시보드의 지역 변경 콜백을 즉시 실행 (State Lifting)
+      // 챗봇 응답을 부모 대시보드의 전역 UI 제어 콜백으로 즉시 전달 (지역 + 탭 + 거래유형 필터 + 원본 질문)
       const newLawdCd = res.data?.new_lawd_cd || res.data?.new_regional_code;
-      if (status !== "needs_clarification" && newLawdCd && typeof onRegionOverride === "function") {
-        onRegionOverride(newLawdCd, res.data.new_region_label, {
-          city_name: res.data.new_city_name || res.data.new_sido_name,
-          district_name: res.data.new_district_name,
-          hotspot_coord: res.data.hotspot_coord,
-          target_dongs: res.data.target_dongs,
-          user_message: pendingDisambiguation?.original_prompt || userMsg.text
-        });
+      if (status !== "needs_clarification" && typeof onDashboardSync === "function") {
+        const regionInfo = newLawdCd
+          ? {
+              code: newLawdCd,
+              label: res.data.new_region_label,
+              sidoName: res.data.new_city_name || res.data.new_sido_name,
+              districtName: res.data.new_district_name,
+              hotspotCoord: res.data.hotspot_coord,
+              targetDongs: res.data.target_dongs
+            }
+          : null;
+        onDashboardSync(
+          regionInfo,
+          res.data?.target_view,
+          res.data?.trade_type,
+          pendingDisambiguation?.original_prompt || userMsg.text
+        );
       }
 
       const aiMsg = {
