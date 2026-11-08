@@ -203,20 +203,42 @@ def extract_conditions_nlp(
         if candidate not in stop_words and len(candidate) >= 2:
             apt_name = candidate
 
-    # 7. [맥락 복원] 직전 세션 컨텍스트 복원 ('그 단지', '아까 거기', '그 아파트' 등)
+    # 6-1. 혁신도시 / 혁샌도시 오타 교정 시 충무공동 자동 매핑
+    if any(k in p_lower for k in ["혁샌도시", "혁신도시", "진주혁신"]):
+        if not dong_name:
+            dong_name = "충무공동"
+        target_lawd_cd = "48170"
+        extracted_region = "경상남도 진주시"
+
+    # 7. [맥락 복원] 직전 세션 컨텍스트 복원 ('그 단지', '아까 거기', '그 아파트', '그중에서 제일 최근' 등)
     if session_context:
-        has_followup_apt = any(kw in p_lower for kw in ["그 단지", "그단지", "그 아파트", "그아파트", "아까 그", "해당 단지", "해당단지", "그곳"])
-        if has_followup_apt and not apt_name and session_context.get("last_apt_name"):
-            apt_name = session_context["last_apt_name"]
+        has_followup = any(kw in p_lower for kw in [
+            "그 단지", "그단지", "그 아파트", "그아파트", "아까 그", "해당 단지", "해당단지", "그곳",
+            "거기", "이곳", "그지역", "아까", "방금", "그중", "그중에", "그중에서", "제일", "가장", "최근", "최신", "얼마"
+        ])
+        if has_followup:
+            last_cond = session_context.get("last_conditions") or {}
+            if not apt_name and session_context.get("last_apt_name"):
+                apt_name = session_context["last_apt_name"]
 
-        has_followup_dong = any(kw in p_lower for kw in ["거기", "그곳", "이곳", "그지역", "아까", "방금"])
-        if has_followup_dong and not dong_name and session_context.get("last_dong_name"):
-            dong_name = session_context["last_dong_name"]
+            if not dong_name:
+                dong_name = session_context.get("last_dong_name") or last_cond.get("dong_name")
 
-        if not target_lawd_cd and session_context.get("last_active_region"):
-            last_reg = session_context["last_active_region"]
-            if isinstance(last_reg, dict) and last_reg.get("code"):
-                target_lawd_cd = last_reg["code"]
+            if not target_lawd_cd:
+                if session_context.get("last_active_region"):
+                    last_reg = session_context["last_active_region"]
+                    if isinstance(last_reg, dict) and last_reg.get("code"):
+                        target_lawd_cd = last_reg["code"]
+                        extracted_region = last_reg.get("label") or get_region_name(target_lawd_cd)
+                if not target_lawd_cd and last_cond.get("regional_code"):
+                    target_lawd_cd = last_cond["regional_code"]
+                    extracted_region = last_cond.get("region_name") or get_region_name(target_lawd_cd)
+
+            if not trade_type:
+                trade_type = session_context.get("last_trade_type") or last_cond.get("trade_type")
+
+            if not property_type and last_cond.get("property_type"):
+                property_type = last_cond["property_type"]
 
     return {
         "dong_name": dong_name,
@@ -628,20 +650,35 @@ async def run_ai_consultant(
     dong = conditions.get("dong_name")
     extracted_reg = conditions.get("region_name")
 
-    # '그 단지', '아까 그 아파트', '거기', '그곳', '이곳' 등 이전 맥락/대명사 질의인 경우 세션 메모리에서 복원
+    # '그 단지', '아까 그 아파트', '거기', '그곳', '이곳', '그중에서 제일 최근' 등 이전 맥락/대명사 질의인 경우 세션 메모리에서 복원
     p_lower = prompt.lower()
     is_followup = any(kw in p_lower for kw in [
         "거기", "그곳", "이곳", "그지역", "해당지역", "해당 지역", "그 지역",
-        "그 단지", "그단지", "그 아파트", "그아파트", "그 매물", "아까", "방금", "얼마야", "얼마인가요", "시세는"
+        "그 단지", "그단지", "그 아파트", "그아파트", "그 매물", "아까", "방금", "얼마야", "얼마인가요", "시세는",
+        "그중", "그중에", "그중에서", "제일", "가장", "최근", "최신"
     ])
     last_active = session_data.get("last_active_region")
+    last_cond = session_data.get("last_conditions") or {}
     if is_followup:
-        if last_active:
-            if not conditions.get("regional_code"):
-                conditions["regional_code"] = last_active.get("code")
-            if not dong and last_active.get("dong"):
+        if not conditions.get("regional_code"):
+            if last_active and last_active.get("code"):
+                conditions["regional_code"] = last_active["code"]
+            elif last_cond.get("regional_code"):
+                conditions["regional_code"] = last_cond["regional_code"]
+        if not dong:
+            if last_active and last_active.get("dong"):
                 conditions["dong_name"] = last_active["dong"]
                 dong = last_active["dong"]
+            elif last_cond.get("dong_name"):
+                conditions["dong_name"] = last_cond["dong_name"]
+                dong = last_cond["dong_name"]
+        if not conditions.get("trade_type"):
+            if session_data.get("last_trade_type"):
+                conditions["trade_type"] = session_data["last_trade_type"]
+            elif last_cond.get("trade_type"):
+                conditions["trade_type"] = last_cond["trade_type"]
+        if not conditions.get("property_type") and last_cond.get("property_type"):
+            conditions["property_type"] = last_cond["property_type"]
         if not conditions.get("apt_name") and session_data.get("last_apt_name"):
             conditions["apt_name"] = session_data["last_apt_name"]
         if not dong and session_data.get("last_dong_name"):
@@ -742,7 +779,19 @@ async def run_ai_consultant(
             cond_parts.append(f"단지명 '{conditions['apt_name']}'")
 
         cond_desc = ", ".join(cond_parts) if cond_parts else f"'{prompt}'"
-        empty_lead = f"**요청하신 [{full_target_name}]의 거래 내역을 새로 분석했습니다.**\n\n" if is_new_override else ""
+        empty_lead = ""
+        if "혁샌도시" in prompt:
+            empty_lead = "말씀하신 '혁샌도시'를 충무공동(진주 혁신도시)으로 자동 교정하여 분석했습니다.\n\n"
+        elif is_new_override:
+            empty_lead = f"**요청하신 [{full_target_name}]의 거래 내역을 새로 분석했습니다.**\n\n"
+
+        session_data["last_conditions"] = conditions
+        if conditions.get("trade_type"):
+            session_data["last_trade_type"] = conditions["trade_type"]
+        if conditions.get("dong_name"):
+            session_data["last_dong_name"] = conditions["dong_name"]
+        session_data.setdefault("history", []).append({"role": "user", "content": prompt})
+
         sido_name, district_name = get_sido_and_district(target_code)
         return {
             "status": "success",
@@ -766,6 +815,8 @@ async def run_ai_consultant(
         is_new_region_override=is_new_override,
         history=session_data.get("history")
     )
+    if "혁샌도시" in prompt:
+        briefing_text = "말씀하신 '혁샌도시'를 충무공동(진주 혁신도시)으로 자동 교정하여 분석했습니다.\n\n" + briefing_text
 
     # 세션 메모리 갱신 (다음 턴에서 '아까 그 단지' 질의 시 참조)
     if records:
@@ -778,6 +829,10 @@ async def run_ai_consultant(
         session_data["last_apt_name"] = conditions["apt_name"]
 
     session_data["last_conditions"] = conditions
+    if conditions.get("trade_type"):
+        session_data["last_trade_type"] = conditions["trade_type"]
+    if conditions.get("dong_name"):
+        session_data["last_dong_name"] = conditions["dong_name"]
     session_data.setdefault("history", []).append({"role": "user", "content": prompt})
     session_data.setdefault("history", []).append({"role": "assistant", "content": briefing_text})
 

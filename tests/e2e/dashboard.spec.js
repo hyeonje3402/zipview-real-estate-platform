@@ -6,27 +6,42 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
     await page.route('**/api/trades/**', async (route) => {
       const url = route.request().url();
       const isIncheon = url.includes('28260');
+      const isJinju = url.includes('48170');
+
+      let targetCode = '11680';
+      let aptName = '래미안대치팰리스';
+      let dongName = '대치동';
+
+      if (isIncheon) {
+        targetCode = '28260';
+        aptName = '청라국제도시한화꿈에그린';
+        dongName = '청라동';
+      } else if (isJinju) {
+        targetCode = '48170';
+        aptName = '진주혁신도시대방노블랜드';
+        dongName = '충무공동';
+      }
 
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
           status: 'success',
-          regional_code: isIncheon ? '28260' : '11680',
+          regional_code: targetCode,
           data: [
             {
               id: 'trade_1',
               deal_year: 2024,
               deal_month: 5,
               deal_day: 15,
-              apt_name: isIncheon ? '청라국제도시한화꿈에그린' : '래미안대치팰리스',
+              apt_name: aptName,
               trade_type: '전세',
               deal_amount: 0,
               deposit_amount: 45000,
               monthly_amount: 0,
               exclusive_area: 84.99,
               floor: 12,
-              dong: isIncheon ? '청라동' : '대치동'
+              dong: dongName
             }
           ],
           chart: [
@@ -55,12 +70,27 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
       });
     });
 
-    // 3. 챗봇 질문 처리 Mock: '인천 서구 전세 찾아줘' 질의 시 타겟 지역 오버라이드 응답
+    // 3. 챗봇 질문 처리 Mock: 질의에 따른 타겟 지역 오버라이드 응답
     await page.route('**/api/chat', async (route) => {
       const postData = route.request().postDataJSON() || {};
       const prompt = postData.prompt || postData.query || '';
 
-      if (prompt.includes('인천') || prompt.includes('서구')) {
+      if (prompt.includes('혁샌도시') || prompt.includes('혁신도시')) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            status: 'success',
+            reply: '말씀하신 "혁샌도시"를 충무공동(진주 혁신도시)으로 자동 교정하여 분석했습니다.',
+            new_regional_code: '48170',
+            new_lawd_cd: '48170',
+            new_city_name: '경상남도',
+            new_district_name: '진주시',
+            new_region_label: '경상남도 진주시',
+            override_region: true
+          })
+        });
+      } else if (prompt.includes('인천') || prompt.includes('서구')) {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -121,6 +151,43 @@ test.describe('ZipView 대시보드 및 챗봇 E2E 자동화 테스트', () => {
       message: '브라우저 URL 파라미터에 lawdCd=28260이 포함되어야 합니다',
       timeout: 10000
     }).toContain('lawdCd=28260');
+  });
+
+  test('사용자가 고의 오타 "혁샌도시 쪽은 읎어?" 입력 시 충무공동(진주 혁신도시)으로 자동 교정되고 부모 대시보드가 스위칭되어야 한다', async ({ page }) => {
+    // 1. 대시보드 메인 페이지 접속
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    // 2. 셀렉터 확인
+    const selectSido = page.locator('[data-testid="select-sido"]');
+    const selectDistrict = page.locator('[data-testid="select-district"]');
+    await expect(selectSido).toBeVisible({ timeout: 15000 });
+    await expect(selectDistrict).toBeVisible();
+
+    // 3. 플로팅 AI 상담 챗 모달 열기
+    const chatTriggerBtn = page.locator('[data-testid="chat-trigger-btn"]');
+    await expect(chatTriggerBtn).toBeVisible();
+    await chatTriggerBtn.click();
+
+    // 4. 챗봇 입력창에 고의 오타 "혁샌도시 쪽은 읎어?" 입력 후 전송
+    const chatInput = page.locator('[data-testid="chat-input"]');
+    const chatSubmitBtn = page.locator('[data-testid="chat-submit-btn"]');
+    await expect(chatInput).toBeVisible();
+
+    await chatInput.fill('혁샌도시 쪽은 읎어?');
+    await chatSubmitBtn.click();
+
+    // 5. 챗봇 응답에 교정 메시지('충무공동(진주 혁신도시)')가 렌더링되는지 검증
+    await expect(page.locator('text=충무공동(진주 혁신도시)')).toBeVisible({ timeout: 10000 });
+
+    // 6. 부모 대시보드의 지역 드롭다운 UI가 '경상남도 진주시' (lawdCd: 48170)로 자동 스위칭되는지 검증
+    await expect(selectSido).toHaveValue('경상남도', { timeout: 10000 });
+    await expect(selectDistrict).toHaveValue('48170', { timeout: 10000 });
+
+    // 7. 브라우저 URL 파라미터가 lawdCd=48170 으로 동적 갱신되는지 검증
+    await expect.poll(() => page.url(), {
+      message: '브라우저 URL 파라미터에 lawdCd=48170이 포함되어야 합니다',
+      timeout: 10000
+    }).toContain('lawdCd=48170');
   });
 });
 

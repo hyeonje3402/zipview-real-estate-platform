@@ -18,10 +18,11 @@ import ai_agent
 def clean_cache_and_mock_external():
     """테스트 전후로 캐시를 초기화하고 외부 통신(MOLIT API, OpenAI 네트워크)을 격리"""
     TRADES_CACHE.clear()
+    ai_agent.SESSION_CONTEXT_CACHE.clear()
 
     # 외부 국토부 API 및 LLM 네트워크 호출을 hermetic하게 모킹
     async def fake_parse_conditions(prompt, current_lawd_cd=None, session_context=None):
-        return ai_agent.extract_conditions_nlp(prompt)
+        return ai_agent.extract_conditions_nlp(prompt, current_lawd_cd=current_lawd_cd, session_context=session_context)
 
     async def fake_briefing(*args, **kwargs):
         return f"요청하신 {kwargs.get('region_name', '')} 실거래 분석 결과입니다."
@@ -36,6 +37,7 @@ def clean_cache_and_mock_external():
         yield
 
     TRADES_CACHE.clear()
+    ai_agent.SESSION_CONTEXT_CACHE.clear()
 
 
 @pytest.mark.asyncio
@@ -185,5 +187,90 @@ async def test_nationwide_252_region_routing(prompt, expected_code, expected_sid
         assert data.get("new_regional_code") == expected_code
         assert data.get("new_city_name") == expected_sido
         assert data.get("new_district_name") == expected_dist
+
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_landmark_inference_and_lawd_cd_routing():
+    """
+    [극한 시나리오 1: 랜드마크 추론 및 모호성 검증]
+    질의어로 "진주 남강 근처 싼 전세 찾아줘"를 전송했을 때,
+    AI가 '남강' 랜드마크를 이해하고 응답 페이로드의 new_lawd_cd를 진주시(48170) 코드로 정확히 파싱하는지 검증
+    """
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = []
+    mock_db.execute = AsyncMock(return_value=mock_result)
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        payload = {
+            "prompt": "진주 남강 근처 싼 전세 찾아줘",
+            "model_choice": "gpt"
+        }
+        res = await client.post("/api/chat", json=payload)
+        assert res.status_code == 200, f"남강 질의 실패: {res.text}"
+        data = res.json()
+
+        assert data.get("status") == "success"
+        assert data.get("new_lawd_cd") == "48170", f"남강 랜드마크는 진주시(48170)로 파싱되어야 합니다. (실제: {data.get('new_lawd_cd')})"
+        assert data.get("new_regional_code") == "48170"
+        assert data.get("new_city_name") == "경상남도"
+        assert data.get("new_district_name") == "진주시"
+
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_session_memory_context_retention():
+    """
+    [극한 시나리오 3: 대화 맥락(Session Memory) 복원 테스트]
+    1차 질의("진주 남강 근처 싼 전세 찾아줘") 이후 session_id를 유지한 채
+    2차 질의("그중에서 제일 최근에 거래된 건?")를 연속으로 던졌을 때,
+    AI가 직전의 지역(진주시 48170)과 거래 유형(전세) 컨텍스트를 상실하지 않고 유지하는지 검증
+    """
+    mock_db = AsyncMock()
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = []
+    mock_db.execute = AsyncMock(return_value=mock_result)
+    app.dependency_overrides[get_db] = lambda: mock_db
+
+    session_id = "test_stress_session_777"
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1차 질의: 진주 남강 전세 질의
+        p1 = {
+            "prompt": "진주 남강 근처 싼 전세 찾아줘",
+            "session_id": session_id,
+            "model_choice": "gpt"
+        }
+        res1 = await client.post("/api/chat", json=p1)
+        assert res1.status_code == 200
+        d1 = res1.json()
+        assert d1.get("new_lawd_cd") == "48170"
+        assert d1.get("new_district_name") == "진주시"
+
+        # 2차 질의: 세션 ID 유지 후 지시대명사/후속 질의 전송
+        p2 = {
+            "prompt": "그중에서 제일 최근에 거래된 건?",
+            "session_id": session_id,
+            "model_choice": "gpt"
+        }
+        res2 = await client.post("/api/chat", json=p2)
+        assert res2.status_code == 200, f"2차 후속 질의 실패: {res2.text}"
+        d2 = res2.json()
+
+        assert d2.get("status") == "success"
+        # 직전 지역(진주시 48170) 및 거래유형(전세) 컨텍스트가 유지되어 동일한 new_lawd_cd 반환 확인
+        assert d2.get("new_lawd_cd") == "48170", f"2차 질의에서도 진주시(48170) 컨텍스트가 유지되어야 합니다. (실제: {d2.get('new_lawd_cd')})"
+        assert d2.get("new_regional_code") == "48170"
+        assert d2.get("new_district_name") == "진주시"
+
+        # 세션 컨텍스트 캐시에 직전 거래유형(전세)이 보존되어 있는지 직접 검증
+        session_obj = ai_agent.SESSION_CONTEXT_CACHE.get(session_id, {})
+        last_trade_type = session_obj.get("last_trade_type") or session_obj.get("last_conditions", {}).get("trade_type")
+        assert last_trade_type == "전세", f"세션 메모리에 거래 유형 '전세'가 보존되어야 합니다. (실제: {last_trade_type})"
 
     app.dependency_overrides.clear()
