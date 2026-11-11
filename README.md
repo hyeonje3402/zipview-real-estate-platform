@@ -73,4 +73,49 @@ python -m pytest
 npm run test:e2e
 ```
 
+## 운영 데이터 흐름
+
+```text
+브라우저 대시보드
+  ├─ 지역·거래 조회 ──> FastAPI ──> 캐시 ──> Supabase PostgreSQL
+  │                                  └─ 누락 데이터 ──> 국토교통부 Open API
+  └─ AI 상담 ─────────> FastAPI ──> OpenAI 또는 Gemini
+```
+
+FastAPI는 실거래 조회 시 캐시와 PostgreSQL을 확인하고, 필요한 경우 국토교통부 API에서 데이터를 수집합니다. 데이터베이스 연결은 비동기 SQLAlchemy와 `asyncpg`를 사용합니다. 검색 성능용 PostgreSQL 인덱스는 `zipview-backend/supabase_indexes.sql`에 있습니다.
+
+## CI/CD 및 클라우드
+
+| 구분 | 사용 기술 | 저장소에서 확인되는 설정 |
+| --- | --- | --- |
+| CI | GitHub Actions | `main` 대상 push/PR 때 백엔드 Pytest와 프론트엔드 빌드·Playwright E2E 실행 |
+| 프론트엔드 빌드 | Node.js, Vercel | `vercel.json`이 `npm run build`와 `dist`를 지정하고 SPA 경로 재작성을 설정 |
+| 프론트엔드 배포 | Vercel | Vercel 배포용 설정과 도메인이 코드에 있음. Git 연동 자동 배포 여부는 Vercel 프로젝트 설정에서 확인 |
+| 백엔드 호스팅 | Render | 백엔드 CORS 허용 목록에 Render 도메인이 있음. 배포 명령·자동 배포 설정은 저장소에 포함되어 있지 않음 |
+| 데이터베이스 | Supabase PostgreSQL | 비동기 PostgreSQL 연결 및 Supabase 인덱스 SQL 사용 |
+| 외부 데이터·AI | 국토교통부 Open API, OpenAI, Gemini | 키는 환경 변수로 관리 |
+
+CI 워크플로는 `.github/workflows/test.yml`입니다. 현재 저장소의 GitHub Actions는 테스트와 빌드를 수행하며, 배포 단계는 포함하지 않습니다. Vercel과 Render의 실제 자동 배포 연결 및 환경 변수는 각 서비스 대시보드에서 별도로 관리해야 합니다.
+
+### 코드 변경부터 서비스 반영까지
+
+1. 브랜치에 변경사항을 push하거나 `main` 대상으로 PR을 엽니다.
+2. GitHub Actions에서 API 테스트, 프론트엔드 빌드, 브라우저 E2E 테스트를 실행합니다.
+3. 프론트엔드는 Vercel 프로젝트의 Git 연동 설정에 따라 배포됩니다. 백엔드는 Render 서비스의 배포 설정에 따라 배포됩니다.
+4. 프론트엔드와 백엔드가 같은 환경의 API 주소·환경 변수를 사용하고 있는지 확인합니다.
+
+> 3번의 자동 배포는 Vercel/Render 프로젝트 설정에 달려 있습니다. 이 저장소의 CI 파일만으로 배포 성공이나 자동 배포 연결을 보장하지는 않습니다.
+
+## 릴리스 계획
+
+현재 저장소에는 `v0.2.0` 릴리스 태그가 없으므로 아래 내용은 **다음 마일스톤 제안**입니다. 현재 `package.json`의 버전은 `1.0.0`이며, 실제 릴리스 전에 제품 버전 표기와 함께 정리해야 합니다.
+
+### v0.2.0 — 데이터 운영과 검색 경험 개선 (예정)
+
+- **수집 상태를 화면에서 확인:** 지역·기간별 마지막 동기화 시각, 성공/실패 상태를 표시하고 실패한 기간을 다시 요청할 수 있게 합니다.
+- **검색 결과 탐색 개선:** 거래 유형·기간·가격 조건을 결과와 동기화하고, 로딩·빈 결과·API 오류 상태를 구분해 보여줍니다.
+- **운영 안정성 보강:** 백엔드 상태 확인(health/readiness)과 주요 오류 로그를 정리하고, CI에 배포 전 API 상태 확인 단계를 추가합니다.
+
+**완료 기준:** 수집 실패를 사용자가 알아볼 수 있고 재시도할 수 있을 것, 검색 조건이 URL과 결과에 일관되게 반영될 것, CI에서 백엔드 테스트·프론트엔드 E2E·배포 전 상태 확인이 모두 통과할 것.
+
 `.env`에는 실제 인증 정보를 입력하고 Git에 커밋하지 마세요.
