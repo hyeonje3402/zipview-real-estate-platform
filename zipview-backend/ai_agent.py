@@ -7,6 +7,7 @@ ZipView 지능형 AI 부동산 상담 에이전트 (Text-to-SQL & RAG 파이프�
 - '만원만원' 단위 중복 방지 엄격 포맷팅
 """
 
+import asyncio
 import os
 import re
 import json
@@ -61,9 +62,14 @@ async def _generate_gemini_text(
 
     models = [GEMINI_MODEL, *GEMINI_FALLBACK_MODELS]
     last_error = None
+    deadline = asyncio.get_running_loop().time() + timeout
     for index, model in enumerate(models):
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            break
+        attempt_timeout = min(timeout, remaining)
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=attempt_timeout) as client:
                 response = await client.post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                     headers={"x-goog-api-key": GEMINI_API_KEY},
@@ -85,12 +91,14 @@ async def _generate_gemini_text(
             return text
         except httpx.HTTPStatusError as exc:
             last_error = exc
-            if exc.response.status_code not in (429, 500, 502, 503, 504) or index == len(models) - 1:
+            if (exc.response.status_code not in (429, 500, 502, 503, 504)
+                    or index == len(models) - 1
+                    or asyncio.get_running_loop().time() >= deadline):
                 raise
             print(f"[Gemini] {model} returned HTTP {exc.response.status_code}; trying the next configured model.")
         except httpx.TimeoutException as exc:
             last_error = exc
-            if index == len(models) - 1:
+            if index == len(models) - 1 or asyncio.get_running_loop().time() >= deadline:
                 raise
             print(f"[Gemini] {model} timed out; trying the next configured model.")
 
