@@ -32,6 +32,11 @@ load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+GEMINI_FALLBACK_MODELS = [
+    model.strip()
+    for model in os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.7-flash,gemini-2.5-flash").split(",")
+    if model.strip() and model.strip() != GEMINI_MODEL
+]
 
 
 async def _generate_gemini_text(
@@ -54,24 +59,42 @@ async def _generate_gemini_text(
     if response_mime_type:
         generation_config["responseMimeType"] = response_mime_type
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-            headers={"x-goog-api-key": GEMINI_API_KEY},
-            json={
-                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                "generationConfig": generation_config,
-            },
-        )
-        response.raise_for_status()
-        payload = response.json()
+    models = [GEMINI_MODEL, *GEMINI_FALLBACK_MODELS]
+    last_error = None
+    for index, model in enumerate(models):
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                    headers={"x-goog-api-key": GEMINI_API_KEY},
+                    json={
+                        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                        "generationConfig": generation_config,
+                    },
+                )
+                response.raise_for_status()
+                payload = response.json()
 
-    candidates = payload.get("candidates") or []
-    parts = (candidates[0].get("content") or {}).get("parts") or [] if candidates else []
-    text = "".join(part.get("text", "") for part in parts if isinstance(part, dict)).strip()
-    if not text:
-        raise ValueError("Gemini returned an empty response")
-    return text
+            candidates = payload.get("candidates") or []
+            parts = (candidates[0].get("content") or {}).get("parts") or [] if candidates else []
+            text = "".join(part.get("text", "") for part in parts if isinstance(part, dict)).strip()
+            if not text:
+                raise ValueError("Gemini returned an empty response")
+            if index:
+                print(f"[Gemini] {GEMINI_MODEL} unavailable; response served by {model}.")
+            return text
+        except httpx.HTTPStatusError as exc:
+            last_error = exc
+            if exc.response.status_code not in (429, 500, 502, 503, 504) or index == len(models) - 1:
+                raise
+        except httpx.TimeoutException as exc:
+            last_error = exc
+            if index == len(models) - 1:
+                raise
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("No Gemini models are configured")
 
 # 다중 턴 세션 컨텍스트 캐시 (1시간 TTL, 최대 2048개 동시 세션 메모리 보존)
 SESSION_CONTEXT_CACHE: TTLCache = TTLCache(maxsize=2048, ttl=3600)

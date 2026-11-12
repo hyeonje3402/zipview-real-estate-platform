@@ -46,6 +46,36 @@ async def test_gemini_request_keeps_api_key_server_side(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_gemini_retries_a_free_fallback_model_after_503(monkeypatch):
+    monkeypatch.setattr(ai_agent, "GEMINI_API_KEY", "test-key")
+    monkeypatch.setattr(ai_agent, "GEMINI_MODEL", "gemini-3.8-flash")
+    monkeypatch.setattr(ai_agent, "GEMINI_FALLBACK_MODELS", ["gemini-3.7-flash"])
+    requested_models = []
+
+    def handler(request):
+        requested_models.append(request.url.path.rsplit("/models/", 1)[-1])
+        if "gemini-3.8-flash" in request.url.path:
+            return httpx.Response(503, json={"error": {"message": "temporary overload"}})
+        return httpx.Response(
+            200,
+            json={"candidates": [{"content": {"parts": [{"text": "fallback ok"}]}}]},
+        )
+
+    real_async_client = httpx.AsyncClient
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: real_async_client(transport=transport, **kwargs),
+    )
+
+    result = await ai_agent._generate_gemini_text("hello")
+
+    assert result == "fallback ok"
+    assert requested_models == ["gemini-3.8-flash:generateContent", "gemini-3.7-flash:generateContent"]
+
+
+@pytest.mark.asyncio
 async def test_gemini_choice_uses_gemini_for_condition_extraction(monkeypatch):
     monkeypatch.setattr(ai_agent, "GEMINI_API_KEY", "test-key")
     generate = AsyncMock(return_value=json.dumps({"trade_type": "매매", "property_type": "아파트"}))
