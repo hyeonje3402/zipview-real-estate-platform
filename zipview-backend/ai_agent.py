@@ -35,9 +35,11 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 GEMINI_FALLBACK_MODELS = [
     model.strip()
-    for model in os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash-lite").split(",")
+    for model in os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.5-flash-lite,gemini-3.5-flash,gemini-3.7-flash,gemini-3.6-flash").split(",")
     if model.strip() and model.strip() != GEMINI_MODEL
 ]
+GEMINI_COOLDOWN_SECONDS = 60
+GEMINI_UNAVAILABLE_UNTIL = 0.0
 
 
 async def _generate_gemini_text(
@@ -60,24 +62,30 @@ async def _generate_gemini_text(
     if response_mime_type:
         generation_config["responseMimeType"] = response_mime_type
 
+    global GEMINI_UNAVAILABLE_UNTIL
+    loop = asyncio.get_running_loop()
+    if loop.time() < GEMINI_UNAVAILABLE_UNTIL:
+        raise RuntimeError("Gemini is temporarily unavailable; use the database-backed fallback")
+
     models = [GEMINI_MODEL, *GEMINI_FALLBACK_MODELS]
     last_error = None
-    deadline = asyncio.get_running_loop().time() + timeout
+    deadline = loop.time() + timeout
     for index, model in enumerate(models):
-        remaining = deadline - asyncio.get_running_loop().time()
+        remaining = deadline - loop.time()
         if remaining <= 0:
             break
-        attempt_timeout = min(timeout, remaining)
+        attempt_timeout = min(6.0, remaining)
         try:
-            async with httpx.AsyncClient(timeout=attempt_timeout) as client:
-                response = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                    headers={"x-goog-api-key": GEMINI_API_KEY},
-                    json={
-                        "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                        "generationConfig": generation_config,
-                    },
-                )
+            async with asyncio.timeout(attempt_timeout):
+                async with httpx.AsyncClient(timeout=attempt_timeout) as client:
+                    response = await client.post(
+                        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                        headers={"x-goog-api-key": GEMINI_API_KEY},
+                        json={
+                            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                            "generationConfig": generation_config,
+                        },
+                    )
                 response.raise_for_status()
                 payload = response.json()
 
@@ -93,17 +101,24 @@ async def _generate_gemini_text(
             last_error = exc
             if (exc.response.status_code not in (429, 500, 502, 503, 504)
                     or index == len(models) - 1
-                    or asyncio.get_running_loop().time() >= deadline):
+                    or loop.time() >= deadline):
+                GEMINI_UNAVAILABLE_UNTIL = loop.time() + GEMINI_COOLDOWN_SECONDS
                 raise
             print(f"[Gemini] {model} returned HTTP {exc.response.status_code}; trying the next configured model.")
-        except httpx.TimeoutException as exc:
+        except (httpx.TimeoutException, TimeoutError) as exc:
             last_error = exc
-            if index == len(models) - 1 or asyncio.get_running_loop().time() >= deadline:
+            if index == len(models) - 1 or loop.time() >= deadline:
+                GEMINI_UNAVAILABLE_UNTIL = loop.time() + GEMINI_COOLDOWN_SECONDS
                 raise
             print(f"[Gemini] {model} timed out; trying the next configured model.")
+        except Exception:
+            GEMINI_UNAVAILABLE_UNTIL = loop.time() + GEMINI_COOLDOWN_SECONDS
+            raise
 
     if last_error:
+        GEMINI_UNAVAILABLE_UNTIL = loop.time() + GEMINI_COOLDOWN_SECONDS
         raise last_error
+    GEMINI_UNAVAILABLE_UNTIL = loop.time() + GEMINI_COOLDOWN_SECONDS
     raise RuntimeError("No Gemini models are configured")
 
 # 다중 턴 세션 컨텍스트 캐시 (1시간 TTL, 최대 2048개 동시 세션 메모리 보존)
@@ -519,6 +534,7 @@ async def parse_conditions_with_openai(
     provider = (model_choice or "gpt").lower()
     use_gemini = provider in ("gemini", "google")
     if (use_gemini and not GEMINI_API_KEY) or (not use_gemini and not OPENAI_API_KEY):
+        nlp_cond["_llm_fallback"] = True
         return nlp_cond
 
     try:
@@ -643,6 +659,7 @@ async def parse_conditions_with_openai(
         provider_label = "Gemini" if use_gemini else "OpenAI"
         reason = str(e) or "request failed without a response body"
         print(f"⚠️ [{provider_label} Parser fallback] {type(e).__name__}: {reason}")
+        nlp_cond["_llm_fallback"] = True
         return nlp_cond
 
 
@@ -744,6 +761,7 @@ async def _format_briefing_response(
     full_target_name = f"{region_name}{dong_title}".strip()
     gemini_selected = model_choice.lower() in ["gemini", "google"]
     gemini_fallback = gemini_selected and not GEMINI_API_KEY
+    rules_fallback = model_choice == "rules_fallback"
 
     if GEMINI_API_KEY and gemini_selected:
         try:
@@ -812,7 +830,10 @@ async def _format_briefing_response(
             print(f"⚠️ [OpenAI Completion Err]: {llm_err}")
 
     header_title = f"**요청하신 [{full_target_name}]의 거래 내역을 새로 분석했습니다.**\n\n" if is_new_region_override else f"**[{full_target_name}] 조건 부합 국토교통부 실거래 매물 분석 결과**\n\n"
-    res_str = ("※ Gemini 응답을 사용할 수 없어 데이터베이스 결과를 규칙 기반으로 정리했습니다.\n\n" if gemini_fallback else "") + (
+    res_str = (
+        "※ AI 응답을 사용할 수 없어 데이터베이스 결과를 규칙 기반으로 정리했습니다.\n\n"
+        if gemini_fallback or rules_fallback else ""
+    ) + (
         f"{header_title}"
         f"조건에 부합하는 최근 국토교통부 실제 거래 내역 총 {len(records)}건을 데이터베이스에서 확인했습니다:\n\n"
         f"{listings_text}\n\n"
@@ -873,6 +894,7 @@ async def run_ai_consultant(
 
         # 이전 대화의 원본 질문 조건(보증금, 월세, 거래유형 등) 복원 및 결합 (맥락 유지)
         conditions = dict(pending_ctx.get("pending_conditions") or {}) if pending_ctx else {}
+        completion_model_choice = "rules_fallback" if conditions.pop("_llm_fallback", False) else model_choice
         conditions["regional_code"] = target_code
         if resolved_dong:
             conditions["dong_name"] = resolved_dong
@@ -955,7 +977,7 @@ async def run_ai_consultant(
             region_name=resolved_label,
             conditions=conditions,
             records=records,
-            model_choice=model_choice,
+            model_choice=completion_model_choice,
             is_new_region_override=True,
             history=session_data.get("history")
         )
@@ -1000,6 +1022,8 @@ async def run_ai_consultant(
         session_context=session_data,
         model_choice=model_choice,
     )
+    llm_fallback = bool(conditions.pop("_llm_fallback", False))
+    completion_model_choice = "rules_fallback" if llm_fallback else model_choice
     dong = conditions.get("dong_name")
     extracted_reg = conditions.get("region_name")
 
@@ -1084,7 +1108,7 @@ async def run_ai_consultant(
                 "target_dongs": lm.get("target_dongs"),
                 "hotspot_coord": lm.get("hotspot_coord"),
                 "original_prompt": prompt,
-                "pending_conditions": conditions,
+                "pending_conditions": ({**conditions, "_llm_fallback": True} if llm_fallback else conditions),
                 "options": options
             }
 
@@ -1126,7 +1150,7 @@ async def run_ai_consultant(
                 "keyword": kw,
                 "entity_type": ambig_res.get("entity_type"),
                 "original_prompt": prompt,
-                "pending_conditions": conditions,
+                "pending_conditions": ({**conditions, "_llm_fallback": True} if llm_fallback else conditions),
                 "options": opts
             }
 
@@ -1244,7 +1268,7 @@ async def run_ai_consultant(
         region_name=region_name,
         conditions=conditions,
         records=records,
-        model_choice=model_choice,
+        model_choice=completion_model_choice,
         is_new_region_override=is_new_override,
         history=session_data.get("history")
     )
