@@ -114,6 +114,8 @@ SYNC_STATUS = {
     "is_syncing": False,
     "monitored_regions": ["11680", "11650", "11710", "48170"]
 }
+SYNC_QUEUED_REGIONS: Set[str] = set()
+ACTIVE_SYNC_REGIONS: Set[str] = set()
 
 
 # ==================== 2. 단일 월 비동기 수집 워커 (독립 DB 세션 & Semaphore) ====================
@@ -185,7 +187,11 @@ async def execute_sync_for_region_chunked(
     if not target_ymds:
         return {"status": "skipped", "added_count": 0}
 
+    if regional_code in ACTIVE_SYNC_REGIONS:
+        return {"status": "already_syncing", "regional_code": regional_code}
+
     total_added = 0
+    ACTIVE_SYNC_REGIONS.add(regional_code)
     SYNC_STATUS["is_syncing"] = True
     sem = asyncio.Semaphore(12)  # 상용 프로덕션 트래픽 고속 비동기 처리
 
@@ -238,7 +244,8 @@ async def execute_sync_for_region_chunked(
             "synced_at": SYNC_STATUS["last_synced_at"]
         }
     finally:
-        SYNC_STATUS["is_syncing"] = False
+        ACTIVE_SYNC_REGIONS.discard(regional_code)
+        SYNC_STATUS["is_syncing"] = bool(ACTIVE_SYNC_REGIONS)
 
 
 async def execute_sync_for_region(regional_code: str, deal_ymd: Optional[str] = None) -> dict:
@@ -253,6 +260,14 @@ async def execute_sync_for_region(regional_code: str, deal_ymd: Optional[str] = 
         target_ymds = [deal_ymd]
 
     return await execute_sync_for_region_chunked(regional_code, target_ymds, chunk_size=6)
+
+
+async def _run_queued_region_sync(regional_code: str, target_ymds: List[str]) -> None:
+    """Run missing-month ingestion after the API has returned its existing DB data."""
+    try:
+        await execute_sync_for_region_chunked(regional_code, target_ymds, chunk_size=3)
+    finally:
+        SYNC_QUEUED_REGIONS.discard(regional_code)
 
 
 # ==================== 4. 기본 엔드포인트 ====================
@@ -393,19 +408,24 @@ async def get_trades(
     missing_months.sort(reverse=True)  # 최신 데이터 우선 동기화
 
     # 빈 구간(누락된 월)만 선별하여 병렬 청크로 국토부 API 호출
-    # 최초 동기화 시 3~4초 내 무조건 응답할 수 있도록 최신 1개월을 즉시 동기화하고, 나머지 35개월은 백그라운드 태스크로 자동 적재
-    if missing_months and auto_sync:
+    # DB에 데이터가 이미 있으면 조회 응답을 먼저 반환하고, 누락 월 수집은 백그라운드에서 진행한다.
+    if missing_months and auto_sync and target_code not in SYNC_QUEUED_REGIONS:
         try:
             print(f"⚡ [스마트 캐싱] 지역({target_code}) 36개월 중 {len(existing_ym_set)}개월 DB 보유 ➜ 누락된 {len(missing_months)}개월 수집 시작")
-            first_batch_size = 1 if len(existing_ym_set) == 0 else 2
-            if len(missing_months) > first_batch_size:
-                first_batch = missing_months[:first_batch_size]
-                remaining_batch = missing_months[first_batch_size:]
-                await execute_sync_for_region_chunked(target_code, first_batch, chunk_size=first_batch_size)
-                if background_tasks:
-                    background_tasks.add_task(execute_sync_for_region_chunked, target_code, remaining_batch, 3)
+            if existing_ym_set and background_tasks:
+                SYNC_QUEUED_REGIONS.add(target_code)
+                background_tasks.add_task(_run_queued_region_sync, target_code, missing_months)
             else:
-                await execute_sync_for_region_chunked(target_code, missing_months, chunk_size=len(missing_months))
+                # 새 지역처럼 아직 DB가 비어 있으면 최신 한 달만 확보해 빈 화면을 방지한다.
+                first_month, *remaining_months = missing_months
+                SYNC_QUEUED_REGIONS.add(target_code)
+                try:
+                    await execute_sync_for_region_chunked(target_code, [first_month], chunk_size=1)
+                finally:
+                    SYNC_QUEUED_REGIONS.discard(target_code)
+                if remaining_months and background_tasks:
+                    SYNC_QUEUED_REGIONS.add(target_code)
+                    background_tasks.add_task(_run_queued_region_sync, target_code, remaining_months)
         except Exception as sync_err:
             print(f"⚠️ [자동 동기화 경고]: {sync_err}")
 
