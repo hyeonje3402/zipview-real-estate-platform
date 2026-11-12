@@ -34,7 +34,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 GEMINI_FALLBACK_MODELS = [
     model.strip()
-    for model in os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.7-flash,gemini-2.5-flash").split(",")
+    for model in os.getenv("GEMINI_FALLBACK_MODELS", "gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash-lite").split(",")
     if model.strip() and model.strip() != GEMINI_MODEL
 ]
 
@@ -87,10 +87,12 @@ async def _generate_gemini_text(
             last_error = exc
             if exc.response.status_code not in (429, 500, 502, 503, 504) or index == len(models) - 1:
                 raise
+            print(f"[Gemini] {model} returned HTTP {exc.response.status_code}; trying the next configured model.")
         except httpx.TimeoutException as exc:
             last_error = exc
             if index == len(models) - 1:
                 raise
+            print(f"[Gemini] {model} timed out; trying the next configured model.")
 
     if last_error:
         raise last_error

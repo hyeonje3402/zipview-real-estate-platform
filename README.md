@@ -103,7 +103,7 @@ CI 워크플로는 `.github/workflows/test.yml`입니다. GitHub Actions는 테�
 
 1. GitHub에서 이 저장소를 Vercel에 연결하고 Root Directory를 저장소 루트, Build Command를 `npm run build`, Output Directory를 `dist`로 설정합니다. 설정은 `vercel.json`에도 포함되어 있습니다.
 2. Render에서 저장소의 `render.yaml`로 Blueprint를 생성합니다. Render 웹 서비스의 Root Directory는 `zipview-backend`입니다.
-3. Render 환경 변수에 `DATABASE_URL`, `MOLIT_API_KEY`, `GEMINI_API_KEY`를 등록합니다. `DATABASE_URL`은 Supabase Session Pooler URI를 `postgresql+asyncpg://` 형식으로 맞춥니다. AI 상담은 Gemini 3.8 Flash를 기본으로 사용하고, 일시적 429/5xx 또는 타임아웃이면 Gemini 3.7 Flash와 2.5 Flash 순서로 재시도합니다. OpenAI는 선택 시 별도 API 사용료가 생길 수 있습니다.
+3. Render 환경 변수에 `DATABASE_URL`, `MOLIT_API_KEY`, `GEMINI_API_KEY`를 등록합니다. `DATABASE_URL`은 Supabase Session Pooler URI를 `postgresql+asyncpg://` 형식으로 맞춥니다. AI 상담은 Gemini 3.8 Flash를 기본으로 사용하고, 일시적 429/5xx 또는 타임아웃이면 Gemini 3.7, 3.6, 3.5 Flash-Lite 순서로 재시도합니다. OpenAI는 선택 시 별도 API 사용료가 생길 수 있습니다.
 4. Render의 `ALLOWED_ORIGINS`에 프런트엔드 도메인을 등록합니다. 현재 기본값은 Vercel 도메인입니다. 별도 도메인을 연결할 경우 `https://`를 포함한 전체 주소를 여기에 추가합니다.
 5. 각 서비스의 자동 배포가 켜져 있는지 확인하고, 배포 후 `https://zipview-real-estate-platform.onrender.com/`에서 백엔드 상태를 확인합니다. 첫 요청은 무료 Render 인스턴스가 깨어나느라 지연될 수 있습니다.
 
