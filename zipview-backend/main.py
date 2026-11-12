@@ -1,9 +1,10 @@
 import os
 import sys
 import asyncio
-from datetime import datetime
+import secrets
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from typing import Optional, List, Dict, Any, Set
+from typing import Optional, List, Dict, Any, Set, Literal
 from collections import defaultdict
 import math
 from cachetools import TTLCache
@@ -16,14 +17,14 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 
 import aiohttp
-from fastapi import FastAPI, Depends, Query, HTTPException, BackgroundTasks
+from fastapi import FastAPI, Depends, Query, HTTPException, BackgroundTasks, Header
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func, desc, select, or_
 
 from database import engine, get_db, SessionLocal, Base
-from models import ApartmentTrade
+from models import ApartmentTrade, PropertyListing
 from ai_agent import run_ai_consultant, ask_multi_llm_agent
 from lawd_cd_registry import (
     resolve_lawd_cd,
@@ -116,6 +117,119 @@ SYNC_STATUS = {
 }
 SYNC_QUEUED_REGIONS: Set[str] = set()
 ACTIVE_SYNC_REGIONS: Set[str] = set()
+
+
+@app.on_event("startup")
+async def ensure_property_listing_table():
+    """신규 매물 테이블만 비파괴적으로 생성한다. 실거래 테이블에는 변경을 가하지 않는다."""
+    async with engine.begin() as conn:
+        await conn.run_sync(lambda sync_conn: PropertyListing.__table__.create(sync_conn, checkfirst=True))
+
+
+class ListingCreateRequest(BaseModel):
+    property_type: Literal["아파트", "오피스텔", "연립다세대", "단독다가구"]
+    trade_type: Literal["매매", "전세", "월세"]
+    title: str = Field(min_length=3, max_length=160)
+    description: str = Field(min_length=5, max_length=3000)
+    regional_code: str = Field(pattern=r"^\d{5}$")
+    sido: Optional[str] = Field(default=None, max_length=40)
+    sigungu: Optional[str] = Field(default=None, max_length=60)
+    dong: str = Field(min_length=1, max_length=60)
+    address: str = Field(min_length=3, max_length=240)
+    building_name: Optional[str] = Field(default=None, max_length=120)
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    sale_price: Optional[int] = Field(default=None, ge=1)
+    deposit: Optional[int] = Field(default=None, ge=0)
+    monthly_rent: Optional[int] = Field(default=None, ge=0)
+    maintenance_fee: Optional[int] = Field(default=None, ge=0)
+    exclusive_area: float = Field(gt=0, le=10000)
+    supply_area: Optional[float] = Field(default=None, gt=0, le=10000)
+    floor: Optional[str] = Field(default=None, max_length=30)
+    total_floors: Optional[int] = Field(default=None, ge=1, le=200)
+    rooms: Optional[int] = Field(default=None, ge=0, le=30)
+    bathrooms: Optional[int] = Field(default=None, ge=0, le=20)
+    tags: List[str] = Field(default_factory=list, max_length=10)
+    photos: List[str] = Field(default_factory=list, max_length=10)
+    broker_office_name: str = Field(min_length=2, max_length=120)
+    broker_name: str = Field(min_length=2, max_length=80)
+    broker_phone: str = Field(min_length=8, max_length=30)
+    broker_registration_number: str = Field(min_length=3, max_length=80)
+
+    @model_validator(mode="after")
+    def validate_price_for_trade_type(self):
+        if self.trade_type == "매매" and not self.sale_price:
+            raise ValueError("매매 매물은 sale_price(만원 단위)가 필요합니다.")
+        if self.trade_type == "전세" and self.deposit is None:
+            raise ValueError("전세 매물은 deposit(만원 단위)이 필요합니다.")
+        if self.trade_type == "월세" and (self.deposit is None or not self.monthly_rent):
+            raise ValueError("월세 매물은 deposit과 monthly_rent(만원 단위)가 필요합니다.")
+        return self
+
+
+class ListingStatusRequest(BaseModel):
+    status: Literal["active", "closed", "rejected"]
+
+
+def require_listing_admin_key(provided_key: Optional[str]) -> None:
+    expected_key = os.getenv("LISTING_ADMIN_API_KEY", "").strip()
+    if len(expected_key) < 32:
+        raise HTTPException(status_code=503, detail="32자 이상의 매물 관리자 키를 설정해야 등록·승인 기능을 사용할 수 있습니다.")
+    if not provided_key or not secrets.compare_digest(provided_key, expected_key):
+        raise HTTPException(status_code=401, detail="매물 관리자 인증에 실패했습니다.")
+
+
+def serialize_listing(item: PropertyListing) -> dict:
+    if item.trade_type == "매매":
+        raw_price = item.sale_price or 0
+        price_summary = f"매매 {format_korean_money(item.sale_price)}"
+    elif item.trade_type == "전세":
+        raw_price = item.deposit or 0
+        price_summary = f"전세 {format_korean_money(item.deposit)}"
+    else:
+        raw_price = item.deposit or 0
+        price_summary = f"월세 {format_korean_money(item.deposit)} / 월 {item.monthly_rent or 0:,}만원"
+
+    area_label = f"{item.exclusive_area:g}㎡"
+    floor_label = item.floor or "층 정보 미등록"
+    region = " ".join(part for part in (item.sido, item.sigungu, item.dong) if part)
+    if not region:
+        region = get_region_name(item.regional_code) or item.dong
+    return {
+        "id": item.id,
+        "status": item.status,
+        "property_type": item.property_type,
+        "deal_type": item.trade_type,
+        "title": item.title,
+        "description": item.description,
+        "regional_code": item.regional_code,
+        "region": region,
+        "address": item.address,
+        "apt_name": item.building_name or item.address,
+        "dong": item.dong,
+        "price_summary": price_summary,
+        "raw_price": raw_price,
+        "sale_price": item.sale_price,
+        "deposit": item.deposit,
+        "monthly_rent": item.monthly_rent,
+        "floor": floor_label,
+        "area": area_label,
+        "exclusive_area": item.exclusive_area,
+        "maintenance_fee": f"관리비 {item.maintenance_fee:,}만원" if item.maintenance_fee is not None else "관리비 정보 미등록",
+        "tags": item.tags or [],
+        "photos": item.photos or [],
+        "image": (item.photos or [None])[0],
+        "lat": item.lat,
+        "lng": item.lng,
+        "contact": item.broker_phone,
+        "agency_name": item.broker_office_name,
+        "agent_name": item.broker_name,
+        "broker_registration_number": item.broker_registration_number,
+        "published_at": item.published_at.isoformat() if item.published_at else None,
+        "expires_at": item.expires_at.isoformat() if item.expires_at else None,
+        "last_verified_at": item.last_verified_at.isoformat() if item.last_verified_at else None,
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+    }
 
 
 # ==================== 2. 단일 월 비동기 수집 워커 (독립 DB 세션 & Semaphore) ====================
@@ -745,7 +859,122 @@ async def get_trades(
 
     return response_payload
 
-# ==================== 7. AI 부동산 상담 챗봇 엔드포인트 (Text-to-SQL & RAG 파이프라인) ====================
+# ==================== 6-1. 현재 제휴 매물 API (실거래 원장과 분리) ====================
+@app.get("/api/listings")
+async def get_active_listings(
+    regional_code: Optional[str] = Query(None, pattern=r"^\d{5}$"),
+    property_type: Optional[str] = Query(None),
+    trade_type: Optional[str] = Query(None),
+    q: Optional[str] = Query(None, max_length=100),
+    page: int = Query(1, ge=1),
+    limit: int = Query(24, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """현재 공개 승인된 중개 매물만 조회한다. 실거래 데이터로 매물을 만들어내지 않는다."""
+    filters = [
+        PropertyListing.status == "active",
+        or_(PropertyListing.expires_at.is_(None), PropertyListing.expires_at >= datetime.utcnow())
+    ]
+    if regional_code:
+        filters.append(PropertyListing.regional_code == regional_code)
+    if property_type and property_type != "all":
+        filters.append(PropertyListing.property_type == property_type)
+    if trade_type and trade_type != "all":
+        filters.append(PropertyListing.trade_type == trade_type)
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        filters.append(or_(
+            PropertyListing.title.ilike(term),
+            PropertyListing.description.ilike(term),
+            PropertyListing.address.ilike(term),
+            PropertyListing.building_name.ilike(term),
+            PropertyListing.dong.ilike(term)
+        ))
+
+    count_result = await db.execute(select(func.count(PropertyListing.id)).where(*filters))
+    total_count = count_result.scalar() or 0
+    rows_result = await db.execute(
+        select(PropertyListing).where(*filters)
+        .order_by(desc(PropertyListing.published_at), desc(PropertyListing.id))
+        .offset((page - 1) * limit).limit(limit)
+    )
+    listings = rows_result.scalars().all()
+    return {
+        "status": "success", "regional_code": regional_code,
+        "page": page, "limit": limit, "total_count": total_count,
+        "total_pages": math.ceil(total_count / limit) if total_count else 0,
+        "listings": [serialize_listing(item) for item in listings]
+    }
+
+
+@app.get("/api/listings/{listing_id}")
+async def get_active_listing_detail(listing_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(PropertyListing).where(
+        PropertyListing.id == listing_id,
+        PropertyListing.status == "active",
+        or_(PropertyListing.expires_at.is_(None), PropertyListing.expires_at >= datetime.utcnow())
+    ))
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="공개 중인 매물을 찾을 수 없습니다.")
+    return {"status": "success", "listing": serialize_listing(item)}
+
+
+@app.get("/api/admin/listings")
+async def get_listing_review_queue(
+    x_listing_admin_key: Optional[str] = Header(default=None, alias="X-Listing-Admin-Key"),
+    db: AsyncSession = Depends(get_db)
+):
+    require_listing_admin_key(x_listing_admin_key)
+    rows = await db.execute(select(PropertyListing)
+        .order_by(desc(PropertyListing.created_at), desc(PropertyListing.id)).limit(200))
+    return {"listings": [serialize_listing(item) for item in rows.scalars().all()]}
+
+
+@app.post("/api/admin/listings", status_code=201)
+async def create_listing_for_review(
+    req: ListingCreateRequest,
+    x_listing_admin_key: Optional[str] = Header(default=None, alias="X-Listing-Admin-Key"),
+    db: AsyncSession = Depends(get_db)
+):
+    """초기 파트너 파일럿용 등록 API. 검수 전까지 공개 매물로 조회되지 않는다."""
+    require_listing_admin_key(x_listing_admin_key)
+    item = PropertyListing(**req.model_dump(), status="pending")
+    db.add(item)
+    await db.commit()
+    await db.refresh(item)
+    return {"status": "pending_review", "listing": serialize_listing(item)}
+
+
+@app.patch("/api/admin/listings/{listing_id}/status")
+async def update_listing_review_status(
+    listing_id: int,
+    req: ListingStatusRequest,
+    x_listing_admin_key: Optional[str] = Header(default=None, alias="X-Listing-Admin-Key"),
+    db: AsyncSession = Depends(get_db)
+):
+    require_listing_admin_key(x_listing_admin_key)
+    result = await db.execute(select(PropertyListing).where(PropertyListing.id == listing_id))
+    item = result.scalar_one_or_none()
+    if not item:
+        raise HTTPException(status_code=404, detail="매물을 찾을 수 없습니다.")
+    now = datetime.utcnow()
+    if req.status == "active":
+        if not item.broker_registration_number.strip() or not item.broker_phone.strip() or item.lat is None or item.lng is None:
+            raise HTTPException(status_code=422, detail="중개사 정보와 지도 좌표가 있어야 공개할 수 있습니다.")
+        item.published_at = now
+        item.last_verified_at = now
+        item.expires_at = now + timedelta(days=30)
+    elif req.status == "closed":
+        item.expires_at = now
+    item.status = req.status
+    item.updated_at = now
+    await db.commit()
+    await db.refresh(item)
+    return {"status": "success", "listing": serialize_listing(item)}
+
+
+# ==================== 7. AI 부동산 상담 챗봇 엔드포인트 (Text-to-SQL / RAG 파이프라인) ====================
 class ChatRequest(BaseModel):
     prompt: Optional[str] = None
     query: Optional[str] = None

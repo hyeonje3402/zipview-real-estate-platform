@@ -1,5 +1,5 @@
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Float, DateTime, Index
+from sqlalchemy import Column, Integer, String, Float, DateTime, Index, JSON, Text
 from database import Base
 
 def infer_rooms_and_bathrooms(exclu_use_ar: float, property_type: str = "아파트") -> tuple[int, int]:
@@ -104,3 +104,53 @@ class ApartmentTrade(Base):
     def __repr__(self):
         amount_desc = f"매매 {self.deal_amount}만원" if self.trade_type == "매매" else f"{self.trade_type} 보증금 {self.deposit}/월세 {self.monthly_rent}만원"
         return f"<ApartmentTrade([{self.property_type}] {self.deal_date} {self.apt_name} {self.floor}층 {self.exclu_use_ar}㎡ 방{self.rooms}/욕실{self.bathrooms} [{amount_desc}])>"
+
+
+class PropertyListing(Base):
+    """현재 거래 가능한 중개 매물. 과거 실거래 원장과 분리해 저장한다."""
+    __tablename__ = "property_listing"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    property_type = Column(String(30), nullable=False, index=True)
+    trade_type = Column(String(20), nullable=False, index=True)
+    title = Column(String(160), nullable=False)
+    description = Column(Text, nullable=False, default="")
+
+    regional_code = Column(String(5), nullable=False, index=True)
+    sido = Column(String(40), nullable=True)
+    sigungu = Column(String(60), nullable=True)
+    dong = Column(String(60), nullable=False, index=True)
+    address = Column(String(240), nullable=False)
+    building_name = Column(String(120), nullable=True, index=True)
+    lat = Column(Float, nullable=False)
+    lng = Column(Float, nullable=False)
+
+    sale_price = Column(Integer, nullable=True)       # 만원 단위
+    deposit = Column(Integer, nullable=True)          # 만원 단위
+    monthly_rent = Column(Integer, nullable=True)     # 만원 단위
+    maintenance_fee = Column(Integer, nullable=True)  # 만원 단위
+    exclusive_area = Column(Float, nullable=False)    # ㎡
+    supply_area = Column(Float, nullable=True)         # ㎡
+    floor = Column(String(30), nullable=True)
+    total_floors = Column(Integer, nullable=True)
+    rooms = Column(Integer, nullable=True)
+    bathrooms = Column(Integer, nullable=True)
+
+    tags = Column(JSON, nullable=False, default=list)
+    photos = Column(JSON, nullable=False, default=list)
+    broker_office_name = Column(String(120), nullable=False)
+    broker_name = Column(String(80), nullable=False)
+    broker_phone = Column(String(30), nullable=False)
+    broker_registration_number = Column(String(80), nullable=False)
+
+    published_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True, index=True)
+    last_verified_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    __table_args__ = (
+        Index("ix_listing_region_status_trade", "regional_code", "status", "trade_type"),
+        Index("ix_listing_region_status_type", "regional_code", "status", "property_type"),
+    )

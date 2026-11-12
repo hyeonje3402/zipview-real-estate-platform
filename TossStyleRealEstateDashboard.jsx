@@ -954,7 +954,7 @@ const ComparisonBarTooltip = ({ active, payload, label }) => {
 // =========================================================================
 // 메인 대시보드 컴포넌트
 // =========================================================================
-// ==================== B2B 제휴 공인중개사 현재 매물(Demo) 목업 데이터 생성기 ====================
+// ==================== 실제 API에서 조회하는 B2B 제휴 현재 매물 ====================
 const REGION_CENTERS = {
   "11680": { lat: 37.4979, lng: 127.0276 }, // 서울 강남구
   "11650": { lat: 37.4837, lng: 127.0324 }, // 서울 서초구
@@ -974,45 +974,6 @@ const REGION_CENTERS = {
   "27260": { lat: 35.8584, lng: 128.6306 }  // 대구 수성구
 };
 
-// ==================== [B2B 제휴 매물] 국토부/Supabase 실거래 원장 기반 100% 동적 생성기 ====================
-const generateListingsFromTrades = (trades, centerLat, centerLng, regionName) => {
-  if (!trades || trades.length === 0) return [];
-  const cLat = Number(centerLat) || 37.4979;
-  const cLng = Number(centerLng) || 127.0276;
-  const reg = regionName || "해당 지역";
-
-  return trades.slice(0, 30).map((t, idx) => {
-    const formattedPrice = t.price_formatted || (t.trade_type === "월세"
-      ? `보증금 ${formatTossMoney(t.deposit)} / 월 ${t.monthly_rent}만`
-      : formatTossMoney(t.deal_amount || t.deposit));
-    const title = `${t.apt_name || t.dong || "검증 단지"} ${t.trade_type || "실거래"} 확인 매물`;
-    const dLat = (idx % 6 - 2.5) * 0.0018;
-    const dLng = (Math.floor(idx / 6) - 2.5) * 0.0022;
-
-    return {
-      id: `real-listing-${t.id || idx}`,
-      property_type: t.property_type || "아파트",
-      deal_type: t.trade_type || "매매",
-      title,
-      apt_name: t.apt_name || (t.dong ? `${t.dong} (${t.property_type || "단지"})` : "실거래 단지"),
-      dong: t.dong || "",
-      price_summary: `${t.trade_type || "실거래"} ${formattedPrice}`,
-      raw_price: t.deal_amount || t.deposit || 0,
-      floor: t.floor ? `${t.floor}층` : "-",
-      area: t.exclu_use_ar ? `${t.exclu_use_ar}㎡ (${toPyeong(t.exclu_use_ar)}평)` : "-",
-      maintenance_fee: "관리비 실비 정산",
-      tags: ["실거래검증", t.trade_type || "매매", t.property_type || "아파트", t.dong].filter(Boolean),
-      contact: "집뷰 공인중개 네트워크",
-      agency_name: `집뷰 B2B 파트너스 (${reg})`,
-      agent_name: "공인중개사 네트워크",
-      description: `국토교통부 실거래 원장 연동 검증 매물 (${t.deal_date || "최근 실거래"}), 전용 ${t.exclu_use_ar || "-"}㎡`,
-      region: reg,
-      lat: Number((cLat + dLat).toFixed(6)),
-      lng: Number((cLng + dLng).toFixed(6))
-    };
-  });
-};
-
 // ==================== Render 클라우드 배포 백엔드 API 주소 ====================
 const RENDER_BACKEND_URL = "https://zipview-real-estate-platform.onrender.com";
 
@@ -1025,7 +986,7 @@ const getApiBaseUrl = () => {
 
 export default function TossStyleRealEstateDashboard() {
   // ==================== 1. 전국 지역 상태 (lawdCd 필수 바인딩) ====================
-  // ==================== 1. [B2B 확장] View Mode (실거래가 vs 현재 매물 Demo) ====================
+  // ==================== 1. [B2B 확장] View Mode (실거래가 vs 공개 제휴 매물) ====================
   const [viewMode, setViewMode] = useState("transaction"); // "transaction" | "listing"
   // [B2B 탭 제어] activeTab 상태 ('실거래 원장 분석' | 'B2B 제휴 매물 현황')
   const [activeTab, setActiveTabState] = useState("실거래 원장 분석");
@@ -1106,6 +1067,11 @@ export default function TossStyleRealEstateDashboard() {
   const [fetchError, setFetchError] = useState(null);
   const [apiPort, setApiPort] = useState(8001);
   const [rawTrades, setRawTrades] = useState([]);
+  const [rawListings, setRawListings] = useState([]);
+  const [listingTotalCount, setListingTotalCount] = useState(0);
+  const [listingsLoading, setListingsLoading] = useState(false);
+  const [listingsError, setListingsError] = useState(null);
+  const [listingReloadKey, setListingReloadKey] = useState(0);
   const [chartData, setChartData] = useState([]);
   // [Global Unique List] 해당 지역 전체 3개년 고유 단지 목록 및 사전 집계 통계
   const [allBuildings, setAllBuildings] = useState([]);
@@ -1119,15 +1085,15 @@ export default function TossStyleRealEstateDashboard() {
     lastSyncedAt: "-"
   });
 
-  // ==================== [B2B 제휴 매물] 국토부/Supabase 실거래 원장 동적 바인딩 ====================
-  const dynamicListings = useMemo(() => {
-    const center = REGION_CENTERS[lawdCd] || regionCoords;
-    return generateListingsFromTrades(rawTrades, center.lat, center.lng, currentRegionLabel);
-  }, [rawTrades, lawdCd, regionCoords, currentRegionLabel]);
+  // 현재 매물은 별도 PostgreSQL 테이블의 공개 승인 데이터만 사용한다.
+  const dynamicListings = rawListings;
 
   const filteredRealListings = useMemo(() => {
     return dynamicListings.filter((item) => {
-      const matchProp = listingPropertyFilter === "all" || item.property_type === listingPropertyFilter;
+      const matchProp = listingPropertyFilter === "all"
+        || item.property_type === listingPropertyFilter
+        || (listingPropertyFilter === "원룸" && item.property_type === "단독다가구")
+        || (listingPropertyFilter === "빌라/투룸" && item.property_type === "연립다세대");
       const matchTrade = listingTradeFilter === "all" || item.deal_type === listingTradeFilter;
       if (!matchProp || !matchTrade) return false;
       if (!searchKeyword.trim()) return true;
@@ -1142,6 +1108,48 @@ export default function TossStyleRealEstateDashboard() {
       return title.includes(kw) || apt.includes(kw) || dong.includes(kw) || desc.includes(kw) || tags.includes(kw) || price.includes(kw) || pt.includes(kw);
     });
   }, [dynamicListings, listingPropertyFilter, listingTradeFilter, searchKeyword]);
+
+  useEffect(() => {
+    if (viewMode !== "listing") return undefined;
+
+    const controller = new AbortController();
+    const listingType = listingPropertyFilter === "원룸"
+      ? "단독다가구"
+      : listingPropertyFilter === "빌라/투룸"
+        ? "연립다세대"
+        : listingPropertyFilter;
+    const params = {
+      regional_code: lawdCd,
+      property_type: listingType,
+      trade_type: listingTradeFilter,
+      q: searchKeyword.trim() || undefined,
+      page: 1,
+      limit: 100
+    };
+
+    setListingsLoading(true);
+    setListingsError(null);
+    setSelectedListing(null);
+    axios.get(`${getApiBaseUrl()}/api/listings`, {
+      params,
+      signal: controller.signal,
+      timeout: 25000
+    }).then(({ data }) => {
+      if (controller.signal.aborted) return;
+      const rows = Array.isArray(data?.listings) ? data.listings : [];
+      setRawListings(rows);
+      setListingTotalCount(Number(data?.total_count) || 0);
+    }).catch((error) => {
+      if (controller.signal.aborted || axios.isCancel(error)) return;
+      setRawListings([]);
+      setListingTotalCount(0);
+      setListingsError("현재 매물 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }).finally(() => {
+      if (!controller.signal.aborted) setListingsLoading(false);
+    });
+
+    return () => controller.abort();
+  }, [viewMode, lawdCd, listingPropertyFilter, listingTradeFilter, searchKeyword, listingReloadKey]);
 
   // ==================== [카카오맵 인터랙티브 지도] 상태 및 Ref ====================
   const mapContainerRef = useRef(null);
@@ -1806,20 +1814,24 @@ export default function TossStyleRealEstateDashboard() {
     }
 
     const priceColor = item.deal_type === "매매" ? "#F04452" : item.deal_type === "전세" ? "#3182F6" : "#00B493";
+    const escapeInfo = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    }[char]));
+    const safeContact = String(item.contact ?? "").replace(/[^0-9+]/g, "");
     const infoContent = `
       <div style="padding:14px 16px;background:#ffffff;border-radius:14px;border:1px solid #E5E8EB;box-shadow:0 12px 28px rgba(0,0,0,0.12);font-family:Pretendard,sans-serif;min-width:240px;max-width:290px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-          <span style="font-size:10px;font-weight:700;color:#0f172a;background:#f1f5f9;border:1px solid #e2e8f0;padding:2px 6px;border-radius:4px;">B2B 제휴 검증 매물</span>
-          <span style="font-size:10px;font-weight:800;color:#6B7684;background:#F2F4F6;padding:2px 6px;border-radius:5px;">${item.property_type} · ${item.deal_type}</span>
+          <span style="font-size:10px;font-weight:700;color:#0f172a;background:#f1f5f9;border:1px solid #e2e8f0;padding:2px 6px;border-radius:4px;">공개 승인 매물</span>
+          <span style="font-size:10px;font-weight:800;color:#6B7684;background:#F2F4F6;padding:2px 6px;border-radius:5px;">${escapeInfo(item.property_type)} · ${escapeInfo(item.deal_type)}</span>
         </div>
-        <div style="font-size:13px;font-weight:900;color:#191F28;line-height:1.3;margin-bottom:4px;">${item.title}</div>
-        <div style="font-size:15px;font-weight:900;color:${priceColor};margin-bottom:4px;">${item.price_summary}</div>
-        <div style="font-size:11px;font-weight:600;color:#4E5968;margin-bottom:8px;">${item.floor} · ${item.area}</div>
+        <div style="font-size:13px;font-weight:900;color:#191F28;line-height:1.3;margin-bottom:4px;">${escapeInfo(item.title)}</div>
+        <div style="font-size:15px;font-weight:900;color:${priceColor};margin-bottom:4px;">${escapeInfo(item.price_summary)}</div>
+        <div style="font-size:11px;font-weight:600;color:#4E5968;margin-bottom:8px;">${escapeInfo(item.floor)} · ${escapeInfo(item.area)}</div>
         <div style="font-size:11px;color:#8B95A1;margin-bottom:8px;padding-top:6px;border-top:1px solid #F2F4F6;">
-          중개사: ${item.agency_name} (${item.agent_name || "담당자"})
+          중개사: ${escapeInfo(item.agency_name)} (${escapeInfo(item.agent_name || "담당자")})
         </div>
-        <a href="tel:${item.contact}" onclick="event.stopPropagation();" style="display:flex;align-items:center;justify-content:center;gap:4px;padding:8px 0;background:#0f172a;color:#ffffff;font-size:11px;font-weight:800;border-radius:8px;text-decoration:none;box-shadow:0 2px 6px rgba(49,130,246,0.3);">
-          <span>문의: ${item.contact}</span>
+        <a href="tel:${safeContact}" onclick="event.stopPropagation();" style="display:flex;align-items:center;justify-content:center;gap:4px;padding:8px 0;background:#0f172a;color:#ffffff;font-size:11px;font-weight:800;border-radius:8px;text-decoration:none;box-shadow:0 2px 6px rgba(49,130,246,0.3);">
+          <span>문의: ${escapeInfo(item.contact)}</span>
         </a>
       </div>
     `;
@@ -2571,7 +2583,7 @@ export default function TossStyleRealEstateDashboard() {
               <button
                 onClick={() => {
                   setActiveTab("B2B 제휴 매물 현황");
-                  showToast("[제휴 매물 현황] B2B 제휴 중개사 현장 확인 매물을 표시합니다.");
+                  showToast("[제휴 매물 현황] 공개 승인된 실제 제휴 매물을 조회합니다.");
                 }}
                 className={`flex-1 sm:flex-initial px-3 sm:px-4 py-2 min-h-[42px] rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 ${viewMode === "listing"
                     ? "bg-[#0f172a] text-white shadow-xs font-black"
@@ -2676,8 +2688,8 @@ export default function TossStyleRealEstateDashboard() {
             {/* 실시간 필터링 결과 요약 배지 */}
             <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
               <span className="text-xs font-bold text-[#4E5968] bg-[#F2F4F6] px-3 py-2 rounded-xl">
-                {viewMode === "listing"
-                  ? `검증 매물 ${filteredRealListings.length}건`
+              {viewMode === "listing"
+                  ? `공개 매물 ${listingTotalCount}건`
                   : `실거래 ${filteredTrades.length.toLocaleString()}건`}
               </span>
               {searchKeyword && (
@@ -2788,7 +2800,7 @@ export default function TossStyleRealEstateDashboard() {
               <p className="text-2xl font-black text-slate-400 mt-1">-</p>
             ) : (
               <p className="text-2xl font-black text-[#191F28] mt-1 tracking-tight">
-                {viewMode === "listing" ? filteredRealListings.length : availableComplexNames.length}
+                {viewMode === "listing" ? listingTotalCount : availableComplexNames.length}
                 <span className="text-sm font-bold text-[#8B95A1] ml-1">
                   {viewMode === "listing" ? "개 매물" : "개 단지"}
                 </span>
@@ -3365,7 +3377,7 @@ export default function TossStyleRealEstateDashboard() {
                     <span className="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded tracking-wide">Kakao Map GIS</span>
                     <h3 className="text-lg font-black text-[#191F28] tracking-tight">
                       {viewMode === "listing"
-                        ? (selectedListing ? `${selectedListing.title}` : `${currentRegionLabel} B2B 제휴 매물 지도 (총 ${filteredRealListings.length}건)`)
+                        ? (selectedListing ? `${selectedListing.title}` : `${currentRegionLabel} 공개 매물 지도 (총 ${listingTotalCount}건)`)
                         : (selectedMapTarget ? `${selectedMapTarget.apt_name} 실거래 위치 지도` : `${currentRegionLabel} 단지 & 매물 위치 지도`)}
                     </h3>
                   </div>
@@ -3525,7 +3537,7 @@ export default function TossStyleRealEstateDashboard() {
             </section>
 
             {/* ========================================================================= */}
-            {/* [조건부 렌더링] 과거 실거래가 표 vs 현재 제휴 매물(Demo) 카드 리스트      */}
+            {/* [조건부 렌더링] 과거 실거래가 표 vs 공개 승인된 제휴 매물 카드 리스트 */}
             {/* ========================================================================= */}
             {viewMode === "transaction" ? (
               <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-4 animate-in fade-in duration-200 w-full max-w-full box-border min-w-0">
@@ -3838,7 +3850,7 @@ export default function TossStyleRealEstateDashboard() {
               </section>
             ) : (
               /* ========================================================================= */
-              /* [현재 매물 모드 (Demo)] 직방/다방 스타일 B2B 제휴 매물 카드 그리드        */
+              /* 현재 공개 승인된 B2B 제휴 매물 카드 그리드 */
               /* ========================================================================= */
               <section className="bg-white rounded-xl sm:rounded-xl border border-[#E5E8EB] p-4 sm:p-7 shadow-xs space-y-5 sm:space-y-6 animate-in fade-in duration-300 w-full max-w-full box-border min-w-0">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-3 border-b border-[#F2F4F6]">
@@ -3848,11 +3860,11 @@ export default function TossStyleRealEstateDashboard() {
                         <span>B2B 제휴 검증 매물</span>
                       </span>
                       <h3 className="text-lg font-black text-[#191F28] tracking-tight">
-                        {currentRegionLabel} 제휴 공인중개사 실시간 매물 ({filteredRealListings.length}건)
+                        {currentRegionLabel} 공개 제휴 매물 ({listingTotalCount}건)
                       </h3>
                     </div>
                     <p className="text-xs text-[#8B95A1] font-medium mt-1">
-                      공인중개사 네트워크를 통해 실시간 등록된 현장 검증 호가 매물 데이터입니다.
+                      승인된 제휴 매물만 표시합니다. 과거 실거래 내역은 현재 매물로 표시하지 않습니다.
                     </p>
                   </div>
 
@@ -3917,17 +3929,32 @@ export default function TossStyleRealEstateDashboard() {
                 </div>
 
                 {/* 직방/다방 스타일 매물 카드 그리드 (반응형 3열) */}
-                {filteredRealListings.length === 0 ? (
+                {listingsLoading ? (
+                  <div className="py-16 text-center space-y-3 bg-white rounded-xl border border-[#E5E8EB]">
+                    <div className="mx-auto w-6 h-6 border-2 border-[#0f172a] border-t-transparent rounded-full animate-spin" />
+                    <p className="text-xs text-[#64748B]">공개된 제휴 매물을 불러오는 중입니다.</p>
+                  </div>
+                ) : listingsError ? (
+                  <div className="py-12 px-5 text-center bg-red-50/50 rounded-xl border border-red-200 space-y-3">
+                    <p className="text-sm font-bold text-slate-900">매물 정보를 불러오지 못했습니다</p>
+                    <p className="text-xs text-slate-600">{listingsError}</p>
+                    <button
+                      type="button"
+                      onClick={() => setListingReloadKey((value) => value + 1)}
+                      className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-lg"
+                    >다시 시도</button>
+                  </div>
+                ) : filteredRealListings.length === 0 ? (
                   <div className="py-16 text-center space-y-3 bg-white rounded-xl border border-[#E5E8EB]">
 
                     <div className="space-y-1">
                       <h4 className="text-sm font-extrabold text-[#191F28]">
-                        {searchKeyword.trim() ? `"${searchKeyword}" 조건에 맞는 제휴 매물이 없습니다` : "조회된 제휴 매물이 없습니다"}
+                        {searchKeyword.trim() ? `"${searchKeyword}" 조건에 맞는 공개 매물이 없습니다` : "현재 공개된 제휴 매물이 없습니다"}
                       </h4>
                       <p className="text-xs text-[#8B95A1]">
                         {searchKeyword.trim()
                           ? "단지명이나 동 이름을 확인하시거나, 다른 검색어로 검색해 보세요."
-                          : "해당 조건의 실거래 데이터가 없습니다. 해당 지역의 실거래 검증 매물이 아직 없거나 필터 조건에 부합하는 매물이 없습니다."}
+                          : "중개사가 등록하고 운영자가 공개 승인한 매물이 아직 없습니다. 실거래 내역은 현재 매물로 바꾸어 보여주지 않습니다."}
                       </p>
                     </div>
                     {(searchKeyword.trim() || listingPropertyFilter !== "all" || listingTradeFilter !== "all") && (
@@ -4015,6 +4042,11 @@ export default function TossStyleRealEstateDashboard() {
                             <div className="text-[11px] text-[#8B95A1] truncate max-w-[150px]">
                               <div className="font-extrabold text-[#191F28] truncate">중개사: {item.agency_name}</div>
                               <div className="text-[10px] text-[#8B95A1]">{item.agent_name}</div>
+                              <div className="text-[10px] text-[#8B95A1]">
+                                {item.last_verified_at
+                                  ? `최근 확인 ${new Date(item.last_verified_at).toLocaleDateString("ko-KR")}`
+                                  : "확인 일자 미등록"}
+                              </div>
                             </div>
 
                             <div className="flex items-center gap-1.5 shrink-0">
