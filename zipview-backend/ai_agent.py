@@ -653,7 +653,7 @@ async def parse_conditions_with_openai(
             "target_dongs": final_target_dongs,
             "hotspot_coord": final_hotspot_coord,
             "target_view": final_view,
-            "landmark_info": landmark_info if landmark_info else None
+            "landmark_info": landmark_info if landmark_info.get("code") else None
         }
     except Exception as e:
         provider_label = "Gemini" if use_gemini else "OpenAI"
@@ -1063,7 +1063,11 @@ async def run_ai_consultant(
             dong = session_data["last_dong_name"]
 
     # ---------------- 2-1단계: 랜드마크/행사명 공간 추론 및 스마트 되묻기 (Active Clarification) ----------------
-    if not is_followup and conditions.get("landmark_info"):
+    if (
+        not is_followup
+        and isinstance(conditions.get("landmark_info"), dict)
+        and conditions["landmark_info"].get("code")
+    ):
         lm = conditions["landmark_info"]
         # 사용자가 행정구역명을 프롬프트에 직접 작성하지 않고 랜드마크/행사명만 말한 경우
         # (예: '남강축제', '에버랜드' 등 -> 강남구 폴백 방지 및 스마트 되묻기 실행)

@@ -154,3 +154,17 @@ async def test_gemini_failure_is_visible_in_rule_based_fallback(monkeypatch):
     assert generate.await_count == 1
     assert "Gemini 응답을 사용할 수 없어" in reply
     assert "테스트 아파트" in reply
+
+
+@pytest.mark.asyncio
+async def test_unresolved_llm_landmark_is_discarded_without_region_code(monkeypatch):
+    monkeypatch.setattr(ai_agent, "GEMINI_API_KEY", "test-key")
+    generate = AsyncMock(return_value=json.dumps({"landmark_name": "미등록 테스트 장소"}))
+    monkeypatch.setattr(ai_agent, "_generate_gemini_text", generate)
+
+    result = await ai_agent.parse_conditions_with_openai(
+        "연동 확인",
+        model_choice="gemini",
+    )
+
+    assert result["landmark_info"] is None
