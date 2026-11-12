@@ -30,7 +30,7 @@ from models import ApartmentTrade, infer_rooms_and_bathrooms
 load_dotenv()
 
 # 국토교통부 일반 인증키
-MOLIT_API_KEY = os.getenv("MOLIT_API_KEY", "0b448718755cbe9eee0ccf3b56b4efdae27a12d22db359e927a7e8aa58ea9334")
+MOLIT_API_KEY = os.getenv("MOLIT_API_KEY", "")
 
 # ==================== 국토교통부 4대 주택유형 8종 Open API 엔드포인트 ====================
 # 1. 아파트
@@ -92,6 +92,9 @@ async def request_molit_xml_async(
     """
     # 공공데이터포털 serviceKey 인코딩/디코딩 호환 URL 직접 구성
     key_to_use = MOLIT_API_KEY.strip()
+    if not key_to_use:
+        print("[MOLIT API] MOLIT_API_KEY가 설정되지 않아 수집 요청을 건너뜁니다.")
+        return ""
     url = f"{endpoint}?serviceKey={key_to_use}&LAWD_CD={lawd_cd}&DEAL_YMD={deal_ymd}&numOfRows=1000&pageNo=1"
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) ZipViewRealEstateETL/3.0"

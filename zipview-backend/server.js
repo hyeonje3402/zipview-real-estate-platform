@@ -26,8 +26,7 @@ loadEnv();
 
 const PORT = process.env.PORT || 3000;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || "";
-const MOLIT_API_KEY =
-  process.env.MOLIT_API_KEY || "0b448718755cbe9eee0ccf3b56b4efdae27a12d22db359e927a7e8aa58ea9334";
+const MOLIT_API_KEY = process.env.MOLIT_API_KEY || "";
 const MOLIT_ENDPOINT =
   process.env.MOLIT_ENDPOINT || "https://apis.data.go.kr/1613000/RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade";
 const MOLIT_ENDPOINT_TRADE =

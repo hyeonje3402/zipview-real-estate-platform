@@ -90,12 +90,24 @@ FastAPI는 실거래 조회 시 캐시와 PostgreSQL을 확인하고, 필요한 
 | --- | --- | --- |
 | CI | GitHub Actions | `main` 대상 push/PR 때 백엔드 Pytest와 프론트엔드 빌드·Playwright E2E 실행 |
 | 프론트엔드 빌드 | Node.js, Vercel | `vercel.json`이 `npm run build`와 `dist`를 지정하고 SPA 경로 재작성을 설정 |
-| 프론트엔드 배포 | Vercel | Vercel 배포용 설정과 도메인이 코드에 있음. Git 연동 자동 배포 여부는 Vercel 프로젝트 설정에서 확인 |
-| 백엔드 호스팅 | Render | 백엔드 CORS 허용 목록에 Render 도메인이 있음. 배포 명령·자동 배포 설정은 저장소에 포함되어 있지 않음 |
+| 프론트엔드 배포 | Vercel | `vercel.json`에 빌드·정적 파일 설정 포함. Git 연동 자동 배포 여부는 Vercel 프로젝트 설정에서 확인 |
+| 백엔드 호스팅 | Render | `render.yaml`에 무료 웹 서비스 빌드·실행·상태 확인 설정 포함 |
 | 데이터베이스 | Supabase PostgreSQL | 비동기 PostgreSQL 연결 및 Supabase 인덱스 SQL 사용 |
 | 외부 데이터·AI | 국토교통부 Open API, OpenAI, Gemini | 키는 환경 변수로 관리 |
 
-CI 워크플로는 `.github/workflows/test.yml`입니다. 현재 저장소의 GitHub Actions는 테스트와 빌드를 수행하며, 배포 단계는 포함하지 않습니다. Vercel과 Render의 실제 자동 배포 연결 및 환경 변수는 각 서비스 대시보드에서 별도로 관리해야 합니다.
+CI 워크플로는 `.github/workflows/test.yml`입니다. GitHub Actions는 테스트와 빌드를 수행합니다. 배포는 Vercel과 Render가 저장소 변경을 감지하는 자동 배포를 사용하도록 각 서비스에서 저장소를 한 번 연결해야 합니다. 실제 서비스 환경 변수는 서비스 대시보드에서 설정하며 Git에 올리지 않습니다.
+
+### 무료 도메인으로 배포하기
+
+현재 프런트엔드 주소는 `https://zip-view-rose.vercel.app`, 백엔드 주소는 `https://zipview-real-estate-platform.onrender.com`을 기준으로 설정되어 있습니다. 두 주소는 호스팅 제공자가 프로젝트에 연결해 준 기본 도메인이며, 별도 도메인을 구매하지 않아도 사용할 수 있습니다.
+
+1. GitHub에서 이 저장소를 Vercel에 연결하고 Root Directory를 저장소 루트, Build Command를 `npm run build`, Output Directory를 `dist`로 설정합니다. 설정은 `vercel.json`에도 포함되어 있습니다.
+2. Render에서 저장소의 `render.yaml`로 Blueprint를 생성합니다. Render 웹 서비스의 Root Directory는 `zipview-backend`입니다.
+3. Render 환경 변수에 `DATABASE_URL`, `MOLIT_API_KEY`를 등록합니다. `DATABASE_URL`은 Supabase Session Pooler URI를 `postgresql+asyncpg://` 형식으로 맞춥니다. OpenAI/Gemini 상담을 사용하려면 해당 키도 각각 선택적으로 등록합니다.
+4. Render의 `ALLOWED_ORIGINS`에 프런트엔드 도메인을 등록합니다. 현재 기본값은 Vercel 도메인입니다. 별도 도메인을 연결할 경우 `https://`를 포함한 전체 주소를 여기에 추가합니다.
+5. 각 서비스의 자동 배포가 켜져 있는지 확인하고, 배포 후 `https://zipview-real-estate-platform.onrender.com/`에서 백엔드 상태를 확인합니다. 첫 요청은 무료 Render 인스턴스가 깨어나느라 지연될 수 있습니다.
+
+Vercel과 Render 계정의 저장소 연결 및 비밀 환경 변수 등록은 대시보드에서 한 번 완료해야 합니다. `.env`는 로컬 개발용이며 배포 환경으로 자동 전송되지 않습니다. Supabase 비밀번호나 API 키를 GitHub에 커밋하지 마세요.
 
 ### 코드 변경부터 서비스 반영까지
 

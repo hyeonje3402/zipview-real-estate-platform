@@ -2,6 +2,7 @@ import os
 import sys
 import asyncio
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Optional, List, Dict, Any, Set
 from collections import defaultdict
 import math
@@ -52,20 +53,10 @@ app = FastAPI(
 # 1. CORS 미들웨어 설정 (프로덕션 보안 및 Vercel 도메인 완벽 매핑)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://zip-view-rose.vercel.app",
-        "https://zipview-real-estate-platform.onrender.com",
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-        "http://localhost:8000",
-        "http://127.0.0.1:8000",
-        "http://localhost:8001",
-        "http://127.0.0.1:8001"
-    ],
+    allow_origins=[origin.strip().rstrip("/") for origin in os.getenv(
+        "ALLOWED_ORIGINS",
+        "https://zip-view-rose.vercel.app,https://zipview-real-estate-platform.onrender.com,http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:8000,http://127.0.0.1:8000,http://localhost:8001,http://127.0.0.1:8001"
+    ).split(",") if origin.strip()],
     allow_origin_regex=r"^https:\/\/.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
@@ -73,7 +64,6 @@ app.add_middleware(
     expose_headers=["*"],
     max_age=3600
 )
-
 
 def format_korean_money(amount_manwon: Optional[int]) -> str:
     """만원 단위 정수를 한국어 'X억 Y만원' 포맷으로 변환"""
@@ -89,8 +79,18 @@ def format_korean_money(amount_manwon: Optional[int]) -> str:
         return f"{rem:,}만원"
 
 
-def get_last_36_months(base_y: int = 2024, base_m: int = 10) -> List[str]:
-    """최근 36개월 (202111 ~ 202410) YYYYMM 목록 생성"""
+def get_last_36_months(base_y: Optional[int] = None, base_m: Optional[int] = None) -> List[str]:
+    """최근 완료된 계약월을 기준으로 36개월 YYYYMM 목록을 생성한다.
+
+    기준월을 전달하면 해당 월까지 포함하며, 생략하면 KST 기준 지난달을 사용한다.
+    """
+    if base_y is None or base_m is None:
+        now_kst = datetime.now(ZoneInfo("Asia/Seoul"))
+        base_y, base_m = now_kst.year, now_kst.month - 1
+        if base_m == 0:
+            base_y -= 1
+            base_m = 12
+
     target_ymds = []
     for i in range(35, -1, -1):
         cur_m = base_m - i
@@ -244,9 +244,9 @@ async def execute_sync_for_region_chunked(
 async def execute_sync_for_region(regional_code: str, deal_ymd: Optional[str] = None) -> dict:
     """구버전 엔드포인트 호환 래퍼"""
     if deal_ymd == "last36":
-        target_ymds = get_last_36_months(2024, 10)
+        target_ymds = get_last_36_months()
     elif not deal_ymd or deal_ymd == "last6":
-        target_ymds = ["202405", "202406", "202407", "202408", "202409", "202410"]
+        target_ymds = get_last_36_months()[-6:]
     elif "," in deal_ymd:
         target_ymds = [y.strip() for y in deal_ymd.split(",") if y.strip()]
     else:
@@ -273,7 +273,7 @@ def read_root():
 @app.get("/api/sync/{regional_code}")
 async def sync_realtime_data(
     regional_code: str,
-    deal_ymd: Optional[str] = Query("202410", description="계약년월 (YYYYMM)"),
+    deal_ymd: Optional[str] = Query(None, description="계약년월 (YYYYMM), 생략하면 최근 6개월을 동기화합니다."),
     background_tasks: BackgroundTasks = None
 ):
     """프론트엔드 실시간 동기화 요청 처리 (전국 252개 표준 LAWD_CD 자동 매핑 및 병렬 청크 실행)"""
@@ -387,8 +387,8 @@ async def get_trades(
     existing_pairs = existing_yms_res.all()
     existing_ym_set = {f"{y:04d}{m:02d}" for y, m in existing_pairs if y and m}
 
-    # 최근 36개월 기준 목록 생성 (최신월 우선 역순 정렬: 202410 ~ 202111)
-    all_36_months = get_last_36_months(2024, 10)
+    # 최근 완료된 계약월 기준 36개월 범위에서 DB 누락 월을 확인한다.
+    all_36_months = get_last_36_months()
     missing_months = [ym for ym in all_36_months if ym not in existing_ym_set]
     missing_months.sort(reverse=True)  # 최신 데이터 우선 동기화
 
