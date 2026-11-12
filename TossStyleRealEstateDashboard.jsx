@@ -2438,7 +2438,7 @@ export default function TossStyleRealEstateDashboard() {
         regionLabel: currentRegionLabel,
         prompt: userText,
         query: userText,
-        model_choice: "gpt",
+        model_choice: "gemini",
         session_id: chatSessionIdRef.current,
         history: chatMessages.slice(-6).map((m) => ({
           role: m.sender === "user" ? "user" : "assistant",

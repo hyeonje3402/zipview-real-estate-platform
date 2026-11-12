@@ -31,6 +31,47 @@ load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+
+
+async def _generate_gemini_text(
+    prompt: str,
+    *,
+    temperature: float = 0.2,
+    response_mime_type: Optional[str] = None,
+    timeout: float = 12.0,
+) -> str:
+    """Call the Gemini Developer API without exposing API keys to the browser."""
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not configured")
+
+    import httpx
+
+    generation_config: Dict[str, Any] = {
+        "temperature": temperature,
+        "maxOutputTokens": 2048,
+    }
+    if response_mime_type:
+        generation_config["responseMimeType"] = response_mime_type
+
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        response = await client.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+            headers={"x-goog-api-key": GEMINI_API_KEY},
+            json={
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                "generationConfig": generation_config,
+            },
+        )
+        response.raise_for_status()
+        payload = response.json()
+
+    candidates = payload.get("candidates") or []
+    parts = (candidates[0].get("content") or {}).get("parts") or [] if candidates else []
+    text = "".join(part.get("text", "") for part in parts if isinstance(part, dict)).strip()
+    if not text:
+        raise ValueError("Gemini returned an empty response")
+    return text
 
 # 다중 턴 세션 컨텍스트 캐시 (1시간 TTL, 최대 2048개 동시 세션 메모리 보존)
 SESSION_CONTEXT_CACHE: TTLCache = TTLCache(maxsize=2048, ttl=3600)
@@ -436,18 +477,18 @@ def extract_conditions_nlp(
 async def parse_conditions_with_openai(
     prompt: str,
     current_lawd_cd: Optional[str] = None,
-    session_context: Optional[Dict[str, Any]] = None
+    session_context: Optional[Dict[str, Any]] = None,
+    model_choice: str = "gpt",
 ) -> Dict[str, Any]:
-    """OpenAI API를 통한 지능형 엔티티 추출(JSON) 및 NLP 규칙 파서 이중 교차 검증"""
+    """선택한 LLM으로 조건을 추출하고, 규칙 파서 결과와 교차 검증한다."""
     nlp_cond = extract_conditions_nlp(prompt, current_lawd_cd, session_context=session_context)
 
-    if not OPENAI_API_KEY:
+    provider = (model_choice or "gpt").lower()
+    use_gemini = provider in ("gemini", "google")
+    if (use_gemini and not GEMINI_API_KEY) or (not use_gemini and not OPENAI_API_KEY):
         return nlp_cond
 
     try:
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI(api_key=OPENAI_API_KEY, timeout=5.0)
-
         context_hint = ""
         if session_context:
             last_apt = session_context.get("last_apt_name")
@@ -488,18 +529,27 @@ async def parse_conditions_with_openai(
             "반드시 유효한 JSON 문자열만 출력해."
         )
 
-        resp = await client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": f"질문: {prompt}"}
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.0,
-            timeout=8.0
-        )
-
-        content = resp.choices[0].message.content
+        if use_gemini:
+            content = await _generate_gemini_text(
+                f"{system_msg}\n\n질문: {prompt}",
+                temperature=0.0,
+                response_mime_type="application/json",
+                timeout=8.0,
+            )
+        else:
+            from openai import AsyncOpenAI
+            client = AsyncOpenAI(api_key=OPENAI_API_KEY, timeout=5.0)
+            resp = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": system_msg},
+                    {"role": "user", "content": f"질문: {prompt}"}
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.0,
+                timeout=8.0
+            )
+            content = resp.choices[0].message.content
         data = json.loads(content)
 
         region_code = nlp_cond.get("regional_code")
@@ -557,7 +607,8 @@ async def parse_conditions_with_openai(
             "landmark_info": landmark_info if landmark_info else None
         }
     except Exception as e:
-        print(f"⚠️ [OpenAI Parser 폴백]: {e}")
+        provider_label = "Gemini" if use_gemini else "OpenAI"
+        print(f"⚠️ [{provider_label} Parser fallback]: {e}")
         return nlp_cond
 
 
@@ -657,6 +708,27 @@ async def _format_briefing_response(
     dong_val = conditions.get("dong_name") or ""
     dong_title = f" {dong_val}" if (dong_val and dong_val not in region_name) else ""
     full_target_name = f"{region_name}{dong_title}".strip()
+
+    if GEMINI_API_KEY and model_choice.lower() in ["gemini", "google"]:
+        try:
+            target_dong_str = f"법정동: {conditions.get('dong_name')}" if conditions.get("dong_name") else "전체 동"
+            target_apt_str = f", 단지명={conditions.get('apt_name')}" if conditions.get("apt_name") else ""
+            gemini_prompt = (
+                "너는 대한민국 국토교통부 실거래 데이터 기반 부동산 상담사야. "
+                "아래 실제 DB 조회 결과에 들어 있는 정보만 근거로 간결하게 답해. "
+                "자료에 없는 매물이나 가격은 만들어내지 말고, 금액은 만원 단위를 중복 없이 표기해.\n\n"
+                f"사용자 질문: {prompt}\n"
+                f"분석 지역: {full_target_name}, {target_dong_str}{target_apt_str}, "
+                f"거래 유형: {conditions.get('trade_type') or '전체'}\n"
+                f"실제 DB 검색 결과 ({len(records)}건):\n{listings_text}\n\n"
+                "첫 문장에 분석 지역과 조회 조건을 밝혀주고, 거래 결과의 범위와 주의점을 설명해. "
+                "투자 수익을 보장하거나 법률·세무 판단을 단정하지 마."
+            )
+            raw_text = await _generate_gemini_text(gemini_prompt, temperature=0.2, timeout=12.0)
+            clean_text = re.sub(r"(?:만\s*원|만원)(?:\s*(?:만\s*원|만원))+", "만원", raw_text)
+            return re.sub(r"억\s*만원+", "억", clean_text)
+        except Exception as llm_err:
+            print(f"⚠️ [Gemini Completion fallback]: {llm_err}")
 
     if OPENAI_API_KEY and model_choice.lower() in ["gpt", "openai"]:
         try:
@@ -884,7 +956,12 @@ async def run_ai_consultant(
         }
 
     # ---------------- 2단계: 신규 질의 자연어 조건 파싱 & 대명사/이전 맥락 복원 ----------------
-    conditions = await parse_conditions_with_openai(prompt, current_lawd_cd, session_context=session_data)
+    conditions = await parse_conditions_with_openai(
+        prompt,
+        current_lawd_cd,
+        session_context=session_data,
+        model_choice=model_choice,
+    )
     dong = conditions.get("dong_name")
     extracted_reg = conditions.get("region_name")
 

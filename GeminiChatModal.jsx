@@ -20,7 +20,7 @@ export default function GeminiChatModal(props) {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [modelChoice, setModelChoice] = useState("gpt");
+  const [modelChoice, setModelChoice] = useState("gemini");
   const [pendingDisambiguation, setPendingDisambiguation] = useState(null);
   const messagesEndRef = useRef(null);
   const chatSessionIdRef = useRef(`zipview-user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
@@ -203,8 +203,8 @@ export default function GeminiChatModal(props) {
               cursor: "pointer"
             }}
           >
-            <option value="gpt">GPT-4o</option>
-            <option value="gemini">Gemini 1.5</option>
+            <option value="gemini">Gemini 3.8 Flash</option>
+            <option value="gpt">GPT-4o mini (API 사용료 발생 가능)</option>
           </select>
           <button
             onClick={onClose}

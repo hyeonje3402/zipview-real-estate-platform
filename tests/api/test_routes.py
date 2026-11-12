@@ -21,7 +21,7 @@ def clean_cache_and_mock_external():
     ai_agent.SESSION_CONTEXT_CACHE.clear()
 
     # 외부 국토부 API 및 LLM 네트워크 호출을 hermetic하게 모킹
-    async def fake_parse_conditions(prompt, current_lawd_cd=None, session_context=None):
+    async def fake_parse_conditions(prompt, current_lawd_cd=None, session_context=None, model_choice="gpt"):
         return ai_agent.extract_conditions_nlp(prompt, current_lawd_cd=current_lawd_cd, session_context=session_context)
 
     async def fake_briefing(*args, **kwargs):

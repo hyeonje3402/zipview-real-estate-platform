@@ -12,5 +12,9 @@ services:
         sync: false
       - key: MOLIT_API_KEY
         sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.8-flash
       - key: ALLOWED_ORIGINS
         value: https://zip-view-rose.vercel.app

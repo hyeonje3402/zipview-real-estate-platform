@@ -732,7 +732,7 @@ class ChatRequest(BaseModel):
     lawdCd: Optional[str] = None
     regional_code: Optional[str] = None
     regionLabel: Optional[str] = None
-    model_choice: Optional[str] = "gpt"
+    model_choice: Optional[str] = "gemini"
     history: Optional[List[Dict[str, Any]]] = None      # 클라이언트 대화 히스토리 (Multi-turn Memory)
     context: Optional[Dict[str, Any]] = None            # 다중 턴 질의 컨텍스트 (Disambiguation 상태)
     selected_option: Optional[Dict[str, Any]] = None    # 선택지 직접 선택 객체
