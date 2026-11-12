@@ -75,7 +75,7 @@ export default function GeminiChatModal(props) {
       const apiBase = (typeof window !== "undefined" && window.ZIPVIEW_API_URL)
         ? window.ZIPVIEW_API_URL
         : "https://zipview-real-estate-platform.onrender.com";
-      const res = await axios.post(`${apiBase}/api/chat`, payload, { timeout: 35000 });
+      const res = await axios.post(`${apiBase}/api/chat`, payload, { timeout: 60000 });
 
       const status = res.data?.status;
       const disambiguation = res.data?.disambiguation;

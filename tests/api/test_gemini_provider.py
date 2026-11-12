@@ -93,3 +93,34 @@ async def test_gemini_choice_uses_db_grounded_briefing(monkeypatch):
     assert reply == "Gemini가 만든 DB 근거 브리핑"
     assert generate.await_count == 1
     assert "테스트 아파트" in generate.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_gemini_failure_is_visible_in_rule_based_fallback(monkeypatch):
+    monkeypatch.setattr(ai_agent, "GEMINI_API_KEY", "test-key")
+    generate = AsyncMock(side_effect=TimeoutError())
+    monkeypatch.setattr(ai_agent, "_generate_gemini_text", generate)
+    trade = SimpleNamespace(
+        trade_type="매매",
+        deposit=0,
+        monthly_rent=0,
+        deal_amount=120000,
+        floor=10,
+        exclu_use_ar=84.9,
+        deal_date="2026-09-01",
+        dong="대치동",
+        apt_name="테스트 아파트",
+        property_type="아파트",
+    )
+
+    reply = await ai_agent._format_briefing_response(
+        prompt="강남구 매매가 알려줘",
+        region_name="서울특별시 강남구",
+        conditions={"trade_type": "매매"},
+        records=[trade],
+        model_choice="gemini",
+    )
+
+    assert generate.await_count == 1
+    assert "Gemini 응답을 사용할 수 없어" in reply
+    assert "테스트 아파트" in reply

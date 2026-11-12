@@ -534,7 +534,7 @@ async def parse_conditions_with_openai(
                 f"{system_msg}\n\n질문: {prompt}",
                 temperature=0.0,
                 response_mime_type="application/json",
-                timeout=8.0,
+                timeout=20.0,
             )
         else:
             from openai import AsyncOpenAI
@@ -608,7 +608,8 @@ async def parse_conditions_with_openai(
         }
     except Exception as e:
         provider_label = "Gemini" if use_gemini else "OpenAI"
-        print(f"⚠️ [{provider_label} Parser fallback]: {e}")
+        reason = str(e) or "request failed without a response body"
+        print(f"⚠️ [{provider_label} Parser fallback] {type(e).__name__}: {reason}")
         return nlp_cond
 
 
@@ -708,8 +709,10 @@ async def _format_briefing_response(
     dong_val = conditions.get("dong_name") or ""
     dong_title = f" {dong_val}" if (dong_val and dong_val not in region_name) else ""
     full_target_name = f"{region_name}{dong_title}".strip()
+    gemini_selected = model_choice.lower() in ["gemini", "google"]
+    gemini_fallback = gemini_selected and not GEMINI_API_KEY
 
-    if GEMINI_API_KEY and model_choice.lower() in ["gemini", "google"]:
+    if GEMINI_API_KEY and gemini_selected:
         try:
             target_dong_str = f"법정동: {conditions.get('dong_name')}" if conditions.get("dong_name") else "전체 동"
             target_apt_str = f", 단지명={conditions.get('apt_name')}" if conditions.get("apt_name") else ""
@@ -724,11 +727,13 @@ async def _format_briefing_response(
                 "첫 문장에 분석 지역과 조회 조건을 밝혀주고, 거래 결과의 범위와 주의점을 설명해. "
                 "투자 수익을 보장하거나 법률·세무 판단을 단정하지 마."
             )
-            raw_text = await _generate_gemini_text(gemini_prompt, temperature=0.2, timeout=12.0)
+            raw_text = await _generate_gemini_text(gemini_prompt, temperature=0.2, timeout=20.0)
             clean_text = re.sub(r"(?:만\s*원|만원)(?:\s*(?:만\s*원|만원))+", "만원", raw_text)
             return re.sub(r"억\s*만원+", "억", clean_text)
         except Exception as llm_err:
-            print(f"⚠️ [Gemini Completion fallback]: {llm_err}")
+            reason = str(llm_err) or "request failed without a response body"
+            print(f"⚠️ [Gemini Completion fallback] {type(llm_err).__name__}: {reason}")
+            gemini_fallback = True
 
     if OPENAI_API_KEY and model_choice.lower() in ["gpt", "openai"]:
         try:
@@ -774,7 +779,7 @@ async def _format_briefing_response(
             print(f"⚠️ [OpenAI Completion Err]: {llm_err}")
 
     header_title = f"**요청하신 [{full_target_name}]의 거래 내역을 새로 분석했습니다.**\n\n" if is_new_region_override else f"**[{full_target_name}] 조건 부합 국토교통부 실거래 매물 분석 결과**\n\n"
-    res_str = (
+    res_str = ("※ Gemini 응답을 사용할 수 없어 데이터베이스 결과를 규칙 기반으로 정리했습니다.\n\n" if gemini_fallback else "") + (
         f"{header_title}"
         f"조건에 부합하는 최근 국토교통부 실제 거래 내역 총 {len(records)}건을 데이터베이스에서 확인했습니다:\n\n"
         f"{listings_text}\n\n"

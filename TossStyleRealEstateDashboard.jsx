@@ -2451,7 +2451,7 @@ export default function TossStyleRealEstateDashboard() {
       const res = await axios.post(
         `${getApiBaseUrl()}/api/chat`,
         payload,
-        { timeout: 35000 }
+        { timeout: 60000 }
       );
 
       const status = res.data?.status;
